@@ -13,7 +13,6 @@ c     atmosphere with varying density scale height )
 c     - Solar radiation pressure (cannon ball)
 c     -------------------------------------------------------------
 c     Author: Harishkumar Sellamuthu
-c     Ph.D candidate, Karunya Institute of Technology and Sciences
 c     hari251086@gmail.com
 c     -------------------------------------------------------------
 c     Input file parameteres <input.dat> by line
@@ -52,7 +51,7 @@ c     -------------------------------------------------------------c
       implicit double precision (a-h, o-z)
       parameter(n = 10,jn = 2401333,cn0 = 2190)
 c     Value of pi, degree to radians and radians to degree
-      common /xy/ pi,d2r,r2d,amue,AU
+      common /xy/ pi,d2r,r2d,amue,AU,R_Earth
       dimension pek(7),x(3),xd(3),q(4),u(4),us(4),y(10),z(10)
       dimension qu(3),q_til(4),u_til(4),uu(4)
       dimension ZbyR(cn0*2),ObyR(cn0*2),c_raw(jn,6),Re(cn0)
@@ -90,10 +89,8 @@ c     Output files
       call force_models(n_force,ngeo_deg,amuS,amuM)
 
       print *, x, xd
-      print *, pek(1),pek(2),pek(3)*r2d,pek(4)*r2d,pek(5)*r2d,pek(6)*r2d
+c      print *, pek(1),pek(2),pek(3)*r2d,pek(4)*r2d,pek(5)*r2d,pek(6)*r2d
 
-
-      
       write(*,*) '=============================================='
 
       if(ngeo_deg.eq.0.or.ngeo_deg.eq.1) then
@@ -170,6 +167,7 @@ c     Output files
       call aLegP(ngeo_deg,ZbyR(1),aleg)
       call aLegP(nsun_deg,cphi_s,sleg)
       call aLegP(nmoon_deg,cphi_m,oleg)      
+c      print *,aleg(3)
 
       do i = 2,ngeo_deg
          cn_j(i) = amue*Re(i)*c_j(i)*ObyR(i+1)
@@ -227,7 +225,6 @@ c     Write first line output
       call car2oe(x,xd,pek)
       write(4,101) iE,y
       write(5,102) iE,pek
-
       
 c     Integration
       do ik = 1,nrev            !Revolutions
@@ -427,9 +424,9 @@ c            stop
             if(I_rkg-1) 60,60,70
  70         continue
             E_0 = E_0+dE_0
-            print *,x,xd
+            print *,x
 c            print *,u,us
-c            print *,Br
+            print *,Br
 c            print *,z
 c            stop
             iE = dint(E_0*r2d)
@@ -442,8 +439,8 @@ c            stop
          write(5,102) iE,pek
       end do
       write(*,*) x
-      write(*,*) xd
-      write(*,*) pek
+c      write(*,*) xd
+c      write(*,*) pek
 
 c     format specifiers (100 - 200)
  100  format(f20.8,1x,6f18.10,e20.5) !State Vector
