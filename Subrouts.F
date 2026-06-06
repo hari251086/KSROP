@@ -586,6 +586,28 @@ c     ============================================================
       end 
 c     ============================================================
       
+c     ============================================================
+      subroutine INTPOL(XT,YT,M1,X1,Y1)
+c     Linear interpolation in a sorted table XT(M1)/YT(M1)
+c     Returns Y1 at X1; stops if X1 is out of table range.
+c     ============================================================
+      implicit double precision(a-h,o-z)
+      dimension XT(M1),YT(M1)
+      if(X1.lt.XT(1).or.X1.gt.XT(M1)) then
+         write(*,*) 'INTPOL: altitude out of table range',X1
+         Y1 = 0.d0
+         return
+      end if
+      do 11 I=1,M1
+         if(X1-XT(I)) 11,13,10
+ 10      if(X1-XT(I+1)) 15,11,11
+ 15      Y1=YT(I)+(YT(I+1)-YT(I))*(X1-XT(I))/(XT(I+1)-XT(I))
+         go to 12
+ 13      Y1=YT(I)
+ 11   continue
+ 12   return
+      end
+
       Function aLegendreP(l,m,x)
 c     Computes associated Legendre Polynomial Plm(x)
 c     0<=m<=l while x lies in the range of -1 to 1
