@@ -181,11 +181,17 @@ def main():
     # --------------------------------------------------------
     rows, has_start, has_stop = read_oem('ksrop.oem')
 
+    # Test config: nrev=1, istep=360 => 1*360+1 = 361 rows
+    NREV  = 1
+    ISTEP = 360
+    EXPECTED_ROWS = NREV * ISTEP + 1
+
     # --------------------------------------------------------
     # Test 1: correct number of data rows
     # --------------------------------------------------------
-    check('ksrop.oem has 2 rows (initial + 1 revolution)',
-          len(rows) == 2,
+    check(f'ksrop.oem has {EXPECTED_ROWS} rows '
+          f'({NREV} rev x {ISTEP} steps + 1 initial)',
+          len(rows) == EXPECTED_ROWS,
           f'got {len(rows)} rows')
 
     # --------------------------------------------------------
@@ -195,11 +201,11 @@ def main():
     check('ksrop.oem contains DATA_STOP  marker', has_stop)
 
     if len(rows) < 2:
-        print('Cannot continue without 2 state rows.')
+        print('Cannot continue without at least 2 state rows.')
         sys.exit(1)
 
-    _, x0, xd0 = rows[0]
-    _, x1, xd1 = rows[1]
+    _, x0, xd0 = rows[0]    # initial state
+    _, x1, xd1 = rows[-1]   # final state (end of last revolution)
 
     # --------------------------------------------------------
     # Test 3: orbital energy conservation

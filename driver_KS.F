@@ -108,7 +108,9 @@ c     Drag parameters: ballistic coeff (kg/m2), drag on/off,
 c     Earth rotation rate (rad/s), Earth flattening, rotation factor
       read(2,*) BN, IDRAG, WE_rot, EPS_f, FR_rot
 
-      allocate(traj_jd(nrev+1), traj_x(3,nrev+1), traj_xd(3,nrev+1))
+      allocate(traj_jd(nrev*istep+1),
+     &         traj_x(3,nrev*istep+1),
+     &         traj_xd(3,nrev*istep+1))
       idump = 0
 
 c     -----------------------------------------------------------
@@ -525,19 +527,18 @@ c     -----------------------------------------------------------
             if (I_rkg .le. 1) goto 60
  70         continue
             E_0 = E_0+dE_0
-            print *,x
-            print *,Br
             iE = dint(E_0*r2d)
 
+!     Buffer state at every completed integration step
+            idump = idump + 1
+            traj_jd(idump) = djulian + T/86400.d0
+            do i = 1,3
+               traj_x(i,idump)  = x(i)
+               traj_xd(i,idump) = xd(i)
+            end do
+
          end do
 
-!     Buffer trajectory at end of each revolution
-         idump = idump + 1
-         traj_jd(idump) = djulian + T/86400.d0
-         do i = 1,3
-            traj_x(i,idump)  = x(i)
-            traj_xd(i,idump) = xd(i)
-         end do
          write(4,101) iE,y
       end do
 
