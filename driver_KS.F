@@ -74,6 +74,8 @@ c     IDRAG: integer flag (0=off, 1=on); default integer via implicit i-n
       integer IDRAG
 c     OEM/OPM epoch strings (YYYY-MM-DDTHH:MM:SS.sss = 23 chars)
       character*23 epochstr, epoch_stop
+c     Trajectory buffer: allocated once nrev is known; written after run
+      double precision, allocatable :: traj_jd(:), traj_x(:,:), traj_xd(:,:)
 
       pi=4.d0*datan(1.d0)
       d2r=pi/180.d0
@@ -104,6 +106,9 @@ c     Drag parameters: ballistic coeff (kg/m2), drag on/off,
 c     Earth rotation rate (rad/s), Earth flattening, rotation factor
       read(2,*) BN, IDRAG, WE_rot, EPS_f, FR_rot
 
+      allocate(traj_jd(nrev+1), traj_x(3,nrev+1), traj_xd(3,nrev+1))
+      idump = 0
+
 c     -----------------------------------------------------------
 c     Atmosphere table: ALT in km (built here), SCH/DEN from ATM.DAT
 c     Table covers 60 km to ~630 km. Converted to SI (m, kg/m3).
@@ -131,8 +136,6 @@ c     -----------------------------------------------------------
       call car2oe(x,xd,pek)
       call oe2car(pek,x,xd,tole)
       call cal2jd(cal,djulian)
-c     Keplerian period (s) from initial semi-major axis; used for OEM STOP_TIME
-      T_period = 2.d0*pi*dsqrt(pek(1)**3/amue)
       call force_models(n_force,ngeo_deg,amuS,amuM)
 
       print *, x, xd
@@ -259,28 +262,9 @@ c     Keplerian period (s) from initial semi-major axis; used for OEM STOP_TIME
       iE = dint(E)
 
       call car2oe(x,xd,pek)
-      djstop = djulian + dble(nrev)*T_period/86400.d0
       call jd2epoch(djulian, epochstr)
-      call jd2epoch(djstop,  epoch_stop)
 
-c     --- CCSDS OEM v2.0 header ---
-      write(3,'(A)')     'CCSDS_OEM_VERS = 2.0'
-      write(3,'(A,A)')   'CREATION_DATE  = ', epochstr
-      write(3,'(A)')     'ORIGINATOR     = KSROP'
-      write(3,'(A)')     ''
-      write(3,'(A)')     'META_START'
-      write(3,'(A)')     'OBJECT_NAME    = SATELLITE'
-      write(3,'(A)')     'OBJECT_ID      = UNKNOWN'
-      write(3,'(A)')     'CENTER_NAME    = EARTH'
-      write(3,'(A)')     'REF_FRAME      = EME2000'
-      write(3,'(A)')     'TIME_SYSTEM    = UTC'
-      write(3,'(A,A)')   'START_TIME     = ', epochstr
-      write(3,'(A,A)')   'STOP_TIME      = ', epoch_stop
-      write(3,'(A)')     'META_STOP'
-      write(3,'(A)')     ''
-      write(3,'(A)')     'DATA_START'
-
-c     --- CCSDS OPM v2.0 (initial epoch Keplerian elements) ---
+c     --- CCSDS OPM v2.0 (initial epoch) — written immediately ---
       write(5,'(A)')     'CCSDS_OPM_VERS = 2.0'
       write(5,'(A,A)')   'CREATION_DATE  = ', epochstr
       write(5,'(A)')     'ORIGINATOR     = KSROP'
@@ -310,9 +294,13 @@ c     --- CCSDS OPM v2.0 (initial epoch Keplerian elements) ---
       write(5,'(A,F16.6,A)')  'ARG_OF_PERICENTER = ', pek(5),' [deg]'
       write(5,'(A,F16.6,A)')  'MEAN_ANOMALY      = ', pek(6),' [deg]'
 
-c     --- OEM first data point ---
-      call jd2epoch(djulian + T/86400.d0, epochstr)
-      write(3,103) epochstr, x(1),x(2),x(3), xd(1),xd(2),xd(3)
+c     --- Buffer initial state point (OEM written after run) ---
+      idump = idump + 1
+      traj_jd(idump) = djulian + T/86400.d0
+      do i = 1,3
+         traj_x(i,idump)  = x(i)
+         traj_xd(i,idump) = xd(i)
+      end do
       write(4,101) iE,y
 
 c     Integration
@@ -541,12 +529,43 @@ c     -----------------------------------------------------------
 
          end do
 
-!     Dump trajectory at end of each revolution
-         call jd2epoch(djulian + T/86400.d0, epochstr)
-         write(3,103) epochstr, x(1),x(2),x(3), xd(1),xd(2),xd(3)
+!     Buffer trajectory at end of each revolution
+         idump = idump + 1
+         traj_jd(idump) = djulian + T/86400.d0
+         do i = 1,3
+            traj_x(i,idump)  = x(i)
+            traj_xd(i,idump) = xd(i)
+         end do
          write(4,101) iE,y
       end do
+
+c     --- Write CCSDS OEM v2.0 after run completes ---
+c     STOP_TIME is now the exact final epoch, not a Keplerian estimate.
+      call jd2epoch(traj_jd(1),     epochstr)
+      call jd2epoch(traj_jd(idump), epoch_stop)
+      write(3,'(A)')     'CCSDS_OEM_VERS = 2.0'
+      write(3,'(A,A)')   'CREATION_DATE  = ', epochstr
+      write(3,'(A)')     'ORIGINATOR     = KSROP'
+      write(3,'(A)')     ''
+      write(3,'(A)')     'META_START'
+      write(3,'(A)')     'OBJECT_NAME    = SATELLITE'
+      write(3,'(A)')     'OBJECT_ID      = UNKNOWN'
+      write(3,'(A)')     'CENTER_NAME    = EARTH'
+      write(3,'(A)')     'REF_FRAME      = EME2000'
+      write(3,'(A)')     'TIME_SYSTEM    = UTC'
+      write(3,'(A,A)')   'START_TIME     = ', epochstr
+      write(3,'(A,A)')   'STOP_TIME      = ', epoch_stop
+      write(3,'(A)')     'META_STOP'
+      write(3,'(A)')     ''
+      write(3,'(A)')     'DATA_START'
+      do i = 1, idump
+         call jd2epoch(traj_jd(i), epochstr)
+         write(3,103) epochstr,
+     &                traj_x(1,i),  traj_x(2,i),  traj_x(3,i),
+     &                traj_xd(1,i), traj_xd(2,i), traj_xd(3,i)
+      end do
       write(3,'(A)') 'DATA_STOP'
+      deallocate(traj_jd, traj_x, traj_xd)
       write(*,*) x
 
 c     format specifiers
