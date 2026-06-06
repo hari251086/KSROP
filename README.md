@@ -42,7 +42,7 @@ Orbit propagation using **Kustaanheimo–Stiefel (KS) regular elements** with a 
 
 | File | Format | Contents |
 |---|---|---|
-| `ksrop.oem` | **CCSDS OEM v2.0** | State trajectory: epoch + X Y Z Xdot Ydot Zdot at every integration step |
+| `KSROP_YYYYMMDDTHHMMSS.oem` | **CCSDS OEM v2.0** | State trajectory: epoch + X Y Z Xdot Ydot Zdot at every integration step |
 | `ksrop.opm` | **CCSDS OPM v2.0** | Initial-epoch state vector and Keplerian elements |
 | `regular.out` | Internal | KS regular elements (debug) |
 
@@ -192,11 +192,13 @@ Altitude grid: 60–200 km in 1 km steps, 200–630 km in 2 km steps. Drag is su
 
 ## Output Files
 
-### `ksrop.oem` — State trajectory (CCSDS OEM v2.0)
+### `KSROP_YYYYMMDDTHHMMSS.oem` — State trajectory (CCSDS OEM v2.0)
+
+The filename encodes the **current UTC wall-clock time** at which the file is written (e.g. `KSROP_20260606T193024.oem`). Each run produces a uniquely named file; no previous output is overwritten.
 
 ```
 CCSDS_OEM_VERS = 2.0
-CREATION_DATE  = 2016-09-20T00:00:00.000
+CREATION_DATE  = 2026-06-06T19:30:24.000   ! UTC wall-clock time of writing
 ORIGINATOR     = KSROP
 
 META_START
@@ -204,8 +206,8 @@ OBJECT_NAME    = SATELLITE
 CENTER_NAME    = EARTH
 REF_FRAME      = EME2000
 TIME_SYSTEM    = UTC
-START_TIME     = 2016-09-20T00:00:00.000
-STOP_TIME      = 2016-09-20T...
+START_TIME     = 2016-09-20T00:00:00.000   ! orbital epoch of first data point
+STOP_TIME      = 2016-09-20T...            ! orbital epoch of last data point
 META_STOP
 
 DATA_START
@@ -214,7 +216,16 @@ DATA_START
 DATA_STOP
 ```
 
-**`nrev × istep + 1`** data lines — one per completed RKG integration step plus the initial state. The entire file is held in memory during the run and written atomically after propagation completes, so `STOP_TIME` reflects the exact final propagated epoch. Position in km (F16.6), velocity in km/s (F14.9).
+**Time fields:**
+
+| Field | Source |
+|---|---|
+| `CREATION_DATE` | Current UTC wall-clock (`utc_now_epoch`) |
+| `START_TIME` | Orbital epoch of the first buffered state |
+| `STOP_TIME` | Orbital epoch of the last buffered state (exact, not estimated) |
+| Data line epochs | Orbital epoch at each completed integration step |
+
+**`nrev × istep + 1`** data lines — one per completed RKG step plus the initial state. The entire trajectory is held in memory during the run and written atomically after propagation completes. Position in km (F16.6), velocity in km/s (F14.9).
 
 For the production config (10 rev × 360 steps/rev) this produces **3,601 data lines**.
 
@@ -338,6 +349,7 @@ Times integrator, step-size sensitivity, drag overhead, and EGM2008 file-read co
 | `read_opm(iunit,x,xd,cal)` | CCSDS OPM v2.0 parser — extracts epoch and state vector |
 | `parse_epoch(estr,cal)` | Parse `YYYY-MM-DDTHH:MM:SS.sss` → cal(6) |
 | `jd2epoch(djd,epochstr)` | Julian date → CCSDS epoch string |
+| `utc_now_epoch(epochstr,compact)` | Current UTC wall-clock → CCSDS epoch string and compact filename token |
 | `cal2jd(cal,djulian)` | Calendar date → Julian date |
 
 ### Vector utilities
@@ -381,3 +393,4 @@ Times integrator, step-size sensitivity, drag overhead, and EGM2008 file-read co
 | 2025 | CCSDS OPM v2.0 input (`input.opm`); `input.DAT` reduced to simulation parameters |
 | 2025 | OEM trajectory buffered in memory during run; written atomically after completion; `STOP_TIME` is exact final epoch |
 | 2025 | OEM output at every integration step (`nrev × istep + 1` data points) instead of per revolution |
+| 2025 | OEM filename `KSROP_YYYYMMDDTHHMMSS.oem` and `CREATION_DATE` use current UTC wall-clock (`utc_now_epoch`); `START_TIME`/`STOP_TIME` remain orbital epochs |
