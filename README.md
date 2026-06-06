@@ -20,49 +20,148 @@ Orbit propagation using **Kustaanheimo–Stiefel (KS) regular elements** with a 
 
 ## Files
 
+### Source
+
 | File | Description |
 |---|---|
-| `driver_KS.F` | Main program — reads inputs, initialises KS elements, runs integration loop |
-| `Subrouts.F` | Subroutines — coordinate transforms, integrator, force models, utility functions |
-| `Legendre.F` | Associated Legendre polynomial evaluation (`aLegP`) |
-| `const_new.dat` | Physical constants and geopotential degree settings |
-| `input.DAT` | Initial conditions and simulation parameters |
-| `ATM.DAT` | Tabulated atmospheric density and scale height (60–630 km, 291 entries) |
-| `EGM2008_to2190_TideFree` | EGM2008 geopotential coefficients (required when `ngeo_deg > 1`) |
+| `driver_KS.F` | Main program — reads OPM input, initialises KS elements, runs integration loop |
+| `Subrouts.F` | Subroutines — coordinate transforms, integrator, OPM I/O, force models, utilities |
+| `Legendre.F` | Zonal Legendre polynomial evaluation (`aLegP`, `p_polynomial_value`) |
 
-### Output files (generated at runtime)
+### Input
 
-| File | Contents |
+| File | Description |
 |---|---|
-| `state.out` | Cartesian state vector (position km, velocity km/s) per revolution |
-| `regular.out` | KS regular elements |
-| `kepler.out` | Keplerian orbital elements |
+| `input.opm` | **CCSDS OPM v2.0** — initial state: epoch, position, velocity |
+| `input.DAT` | Simulation parameters: revolutions, steps, force flags, drag coefficients |
+| `const_new.dat` | Physical constants and geopotential degree settings |
+| `ATM.DAT` | Tabulated atmospheric density and scale height (60–630 km, 291 entries) |
+| `EGM2008_to2190_TideFree` | EGM2008 geopotential coefficients (~231 MB, required when `ngeo_deg ≥ 2`) |
+
+### Output (generated at runtime)
+
+| File | Format | Contents |
+|---|---|---|
+| `ksrop.oem` | **CCSDS OEM v2.0** | State trajectory: epoch + X Y Z Xdot Ydot Zdot at each revolution |
+| `ksrop.opm` | **CCSDS OPM v2.0** | Initial-epoch state vector and Keplerian elements |
+| `regular.out` | Internal | KS regular elements (debug) |
+
+### Tests and tools
+
+| File | Description |
+|---|---|
+| `test_subrouts.F` | Fortran unit tests — 20 tests covering core subroutines |
+| `test_driver.py` | Python integration test — 9 physics checks on two-body propagation |
+| `benchmark.py` | Performance profiler — timing across force model configurations |
+| `Makefile` | Unix/Linux build targets: `all`, `tests`, `run`, `test`, `clean` |
+| `build.bat` | Windows build script for Intel Fortran |
 
 ---
 
 ## Building
 
-Requires an Intel Fortran compiler (`ifort`) or compatible (e.g. `gfortran`).
+Requires Intel Fortran (`ifort`) or GNU Fortran (`gfortran`).
 
-```bash
-# Intel Fortran
-ifort driver_KS.F Subrouts.F Legendre.F -o ksrop
+### Windows (Intel Fortran)
 
-# GNU Fortran
-gfortran driver_KS.F Subrouts.F Legendre.F -o ksrop
+```bat
+build.bat           :: build driver_KS.exe
+build.bat tests     :: build test_subrouts.exe
+build.bat test      :: build + run all tests
+build.bat clean     :: remove build artefacts
 ```
 
-Run:
+### Unix / Linux / macOS
 
 ```bash
-./ksrop
+make            # build driver_KS
+make tests      # build test_subrouts
+make test       # build + run all tests (unit + integration)
+make clean      # remove build artefacts
+```
+
+### Manual
+
+```bash
+# Propagator
+ifort driver_KS.F Subrouts.F Legendre.F -o driver_KS.exe
+
+# Unit tests
+ifort test_subrouts.F Subrouts.F Legendre.F -o test_subrouts.exe
+```
+
+---
+
+## Running
+
+```bash
+./driver_KS.exe        # Windows: driver_KS.exe
+python test_driver.py driver_KS.exe   # integration test
+python benchmark.py   driver_KS.exe   # performance profile
 ```
 
 ---
 
 ## Input Files
 
-### `const_new.dat`
+### `input.opm` — Initial state (CCSDS OPM v2.0)
+
+Contains the orbital initial conditions. The driver reads `EPOCH`, `X`, `Y`, `Z`, `X_DOT`, `Y_DOT`, `Z_DOT` from the `STATE_VECTOR` block; all other keywords are ignored.
+
+```
+CCSDS_OPM_VERS = 2.0
+CREATION_DATE  = 2016-09-20T00:00:00.000
+ORIGINATOR     = KSROP
+
+META_START
+OBJECT_NAME    = SATELLITE
+OBJECT_ID      = UNKNOWN
+CENTER_NAME    = EARTH
+REF_FRAME      = EME2000
+TIME_SYSTEM    = UTC
+META_STOP
+
+STATE_VECTOR
+EPOCH          = 2016-09-20T00:00:00.000
+X              =        0.000000 [km]
+Y              =    -5888.972700 [km]
+Z              =    -3400.000000 [km]
+X_DOT          =        9.500000 [km/s]
+Y_DOT          =        0.000000 [km/s]
+Z_DOT          =        0.000000 [km/s]
+```
+
+> The output `ksrop.opm` uses the same format, so it can be fed directly back as `input.opm` for a subsequent propagation (chained runs).
+
+### `input.DAT` — Simulation parameters
+
+Three lines only (orbital initial conditions have moved to `input.opm`):
+
+```
+nrev  istep  tole          ! Revolutions, steps/revolution, integrator tolerance
+n_geo  n_sun  n_moon       ! Force model flags (non-zero = on, 0 = off)
+BN  IDRAG  WE_rot  EPS_f  FR_rot   ! Drag parameters
+```
+
+**Example:**
+
+```
+10  360  1d-15
+10  0  0
+50.0  0  7.2921150d-5  3.35281066d-3  1.0
+```
+
+**Drag parameter line:**
+
+| Parameter | Example | Description |
+|---|---|---|
+| `BN` | `50.0` | Ballistic coefficient CdA/m (kg/m²) |
+| `IDRAG` | `1` | Drag: 1 = on, 0 = off |
+| `WE_rot` | `7.2921150d-5` | Earth rotation rate (rad/s) |
+| `EPS_f` | `3.35281066d-3` | Earth flattening (1/298.257) |
+| `FR_rot` | `1.0` | Atmospheric co-rotation factor |
+
+### `const_new.dat` — Physical constants
 
 ```
 mu  R_Earth  AU  mu_Sun  mu_Moon
@@ -76,113 +175,191 @@ ngeo_deg  nsun_deg  nmoon_deg
 | `AU` | 1.495978707×10⁸ | km |
 | `mu_Sun` | 1.32712440018×10¹¹ | km³/s² |
 | `mu_Moon` | 4.902801076×10³ | km³/s² |
-| `ngeo_deg` | 2–2190 | Geopotential degree (0 or 1 = point mass) |
-| `nsun_deg` | 0–2190 | Solar gravity degree |
-| `nmoon_deg` | 0–2190 | Lunar gravity degree |
+| `ngeo_deg` | 0–2190 | Geopotential degree (0 or 1 = point mass) |
+| `nsun_deg` | 0–2190 | Solar gravity Legendre degree |
+| `nmoon_deg` | 0–2190 | Lunar gravity Legendre degree |
 
-### `input.DAT`
+### `ATM.DAT` — Atmosphere table
 
-Six lines, read in order:
+Two-block table in `8F10.3` / `8E10.3` format:
+
+- **Block 1:** Density scale heights H (km) for 291 altitude levels
+- **Block 2:** Atmospheric densities ρ for the same 291 levels
+
+Altitude grid: 60–200 km in 1 km steps, 200–630 km in 2 km steps. Drag is suppressed automatically above 500 km.
+
+---
+
+## Output Files
+
+### `ksrop.oem` — State trajectory (CCSDS OEM v2.0)
 
 ```
-x1  x2  x3                              ! Initial position (km, geocentric inertial)
-xd1  xd2  xd3                           ! Initial velocity (km/s, geocentric inertial)
-nrev  istep  tole                        ! Revolutions, steps/rev, integrator tolerance
-yyyy  mm  dd  hh  mm  ss                 ! Epoch (calendar date and time)
-n_geo  n_sun  n_moon                     ! Force model flags (1=on, 0=off)
-BN  IDRAG  WE_rot  EPS_f  FR_rot        ! Drag parameters (see below)
+CCSDS_OEM_VERS = 2.0
+CREATION_DATE  = 2016-09-20T00:00:00.000
+ORIGINATOR     = KSROP
+
+META_START
+OBJECT_NAME    = SATELLITE
+CENTER_NAME    = EARTH
+REF_FRAME      = EME2000
+TIME_SYSTEM    = UTC
+START_TIME     = 2016-09-20T00:00:00.000
+STOP_TIME      = 2016-09-20T...
+META_STOP
+
+DATA_START
+2016-09-20T00:00:00.000        0.000000   -5888.972700   -3400.000000     9.500000000     0.000000000     0.000000000
+...
+DATA_STOP
 ```
 
-**Example (`input.DAT`):**
+One data line per completed revolution. Position in km (F16.6), velocity in km/s (F14.9).
 
-```
-0.0  -5888.9727  -3400.0
-9.5  0.0  0.0
-1  360  1d-15
-2016  09  20  0  0  0
-2  1  1
-50.0  1  7.2921150d-5  3.35281066d-3  1.0
-```
+### `ksrop.opm` — Initial Keplerian elements (CCSDS OPM v2.0)
 
-**Drag parameter line:**
-
-| Parameter | Example | Description |
-|---|---|---|
-| `BN` | `50.0` | Ballistic coefficient CdA/m (kg/m²) |
-| `IDRAG` | `1` | Drag switch: 1 = on, 0 = off |
-| `WE_rot` | `7.2921150d-5` | Earth rotation rate (rad/s) |
-| `EPS_f` | `3.35281066d-3` | Earth flattening (1/298.257) |
-| `FR_rot` | `1.0` | Atmospheric co-rotation factor |
-
-### `ATM.DAT`
-
-Two-block table read in `8F10.3` / `8E10.3` format:
-
-- **Block 1:** Density scale heights H (km) for 291 altitude levels  
-- **Block 2:** Atmospheric densities ρ (kg/m³ after ×10¹⁰ scaling) for the same 291 levels  
-
-Altitude grid: 60–200 km in 1 km steps, 200–630 km in 2 km steps.  
-Drag is suppressed automatically when the satellite altitude exceeds 500 km.
+Written once at the start of each run with the initial epoch state vector and Keplerian orbital elements (a, e, i, RAAN, AOP, M).
 
 ---
 
 ## Force Model Flags
 
-The three values on line 5 of `input.DAT` (and `ngeo_deg` in `const_new.dat`) control which perturbations are active:
+`n_force` in `input.DAT` and `ngeo_deg` in `const_new.dat` control which perturbations are active:
 
-```
-n_force(1)  — Geopotential (0 = point mass, 1 = active; degree set by ngeo_deg)
-n_force(2)  — Solar gravity (0 = off, 1 = on; degree set by nsun_deg)
-n_force(3)  — Lunar gravity (0 = off, 1 = on; degree set by nmoon_deg)
-IDRAG       — Atmospheric drag (0 = off, 1 = on; line 6 of input.DAT)
-```
+| Flag | Effect |
+|---|---|
+| `n_force(1) = 0` | Geopotential off (point mass) |
+| `n_force(1) ≠ 0` | Geopotential on — degree set by `ngeo_deg` in `const_new.dat` |
+| `n_force(2) = 0` | Solar gravity off |
+| `n_force(2) ≠ 0` | Solar gravity on — degree set by `nsun_deg` |
+| `n_force(3) = 0` | Lunar gravity off |
+| `n_force(3) ≠ 0` | Lunar gravity on — degree set by `nmoon_deg` |
+| `IDRAG = 0` | Atmospheric drag off |
+| `IDRAG = 1` | Atmospheric drag on |
 
 ---
 
 ## Method
 
-The propagator uses the **KS regularisation** to remove the 1/r singularity of the two-body problem. The 3D equations of motion are lifted to a 4D harmonic oscillator in KS space, then integrated with the **Runge–Kutta–Gill** scheme using the generalised eccentric anomaly E as the independent variable.
+The propagator uses **KS regularisation** to remove the 1/r singularity. The 3D equations of motion are lifted to a 4D harmonic oscillator in KS space and integrated with **Runge–Kutta–Gill 4th order** using the generalised eccentric anomaly E as the independent variable.
 
-Perturbing forces are projected into KS space via the **L(u)** matrix transformation and added to the KS element equations:
+Perturbing forces are transformed to KS space via the **L(u)** matrix and added to the KS element ODEs:
 
-- **z(j+1), z(j+5)** — KS state element rates (conservative + drag force)
-- **z(1)** — Time element rate (geopotential + third-body + drag contributions)
-- **z(10)** — Energy element rate (drag dissipation: dω/ds = −½(u̇·qdrag)/ω)
+| Element | Rate equation |
+|---|---|
+| `z(j+1)`, `z(j+5)` | State elements — conservative (geo + third-body) + drag |
+| `z(1)` | Time element — geopotential + third-body + drag contributions |
+| `z(10)` | Energy element — drag dissipation: dω/ds = −½(u̇·q_drag)/ω |
 
-The step size scales with the frequency ratio Γ = ω/ω_Kep to maintain accuracy across different eccentricities.
+The step size is scaled by the frequency ratio Γ = ω/ω_Kep to maintain accuracy across eccentricities.
+
+---
+
+## Performance
+
+Benchmarked on the production orbit (a ≈ 14,770 km, e ≈ 0.8):
+
+| Configuration | Throughput | Wall time (10 rev, 360 steps/rev) |
+|---|---|---|
+| Two-body (no perturbations) | ~140,000 steps/s | ~31 ms |
+| J2 geopotential (ngeo=2) | ~62,000 steps/s | ~57 ms |
+| Degree-50 geopotential (ngeo=50) | ~55,000 steps/s | ~65 ms |
+| With atmospheric drag (IDRAG=1) | ~108,000 steps/s | ~34 ms |
+
+**EGM2008 file read:** Streaming `geo_coeff` reads only O(n²) lines for degree n — J2 reads 3 lines instead of 2,401,333. File-read cost for any degree is now <1 ms (was 2,600 ms before optimisation).
+
+---
+
+## Tests
+
+### Unit tests — `test_subrouts.F`
+
+```bash
+ifort test_subrouts.F Subrouts.F Legendre.F -o test_subrouts.exe
+./test_subrouts.exe
+```
+
+20 tests: `dotp3`, `dotp4`, `vmn`, `cross`, `INTPOL` (×2), `aLegP` P2/P3/P4, `car2ks`→`ks2car` roundtrip (×6), `car2oe` a/e/i.
+
+### Integration test — `test_driver.py`
+
+```bash
+python test_driver.py driver_KS.exe
+```
+
+9 checks on a 1-revolution two-body propagation: energy conservation, angular momentum, orbit closure, KS bilinear Br, semi-major axis vs vis-viva.
+
+### Performance profiling — `benchmark.py`
+
+```bash
+python benchmark.py driver_KS.exe
+```
+
+Times integrator, step-size sensitivity, drag overhead, and EGM2008 file-read cost across multiple configurations.
 
 ---
 
 ## Subroutines Reference
 
-| Subroutine / Function | Description |
+### Coordinate transforms
+
+| Subroutine | Description |
 |---|---|
-| `car2ks(x,xd,u,us,w)` | Cartesian → KS coordinates |
-| `ks2car(u,us,x,xd,w)` | KS → Cartesian coordinates |
+| `car2ks(x,xd,u,us,w)` | Cartesian → KS |
+| `ks2car(u,us,x,xd,w)` | KS → Cartesian |
 | `ks2ksr(y,u,us,E,cse,sie)` | KS regular elements → u, us |
-| `car2oe(x,xd,pek)` | Cartesian → Keplerian orbital elements |
-| `oe2car(pek,x,xd)` | Keplerian → Cartesian (solves Kepler equation) |
-| `geo_coeff(n,c_j)` | Read EGM2008 Jn coefficients from file |
-| `aLegP(n,x,P)` | Zonal Legendre polynomials P2…Pn |
+| `car2oe(x,xd,pek)` | Cartesian → Keplerian elements |
+| `oe2car(pek,x,xd,tol)` | Keplerian → Cartesian (Kepler equation solver) |
+| `u2uu(u,uu)` | KS index swap |
+| `u2qu(u,qu,j)` | KS rearrangement for luni-solar terms |
+
+### Force models and coefficients
+
+| Subroutine | Description |
+|---|---|
+| `geo_coeff(n,c_j)` | Stream EGM2008 zonal harmonics up to degree n (reads O(n²) lines) |
+| `force_models(n_for,ngeo,s,m)` | Apply force model on/off flags |
+| `INTPOL(XT,YT,M1,X1,Y1)` | Linear interpolation in sorted atmosphere table |
+
+### Ephemeris
+
+| Subroutine | Description |
+|---|---|
 | `solarnpv(dj,s)` | Sun position vector (geocentric inertial, km) |
 | `lunarpv(dj,tm)` | Moon position vector (geocentric inertial, km) |
-| `INTPOL(XT,YT,M1,X1,Y1)` | Linear interpolation in sorted table |
+| `aLegP(n,x,P)` | Zonal Legendre polynomials (computed to degree 49) |
+
+### I/O and time
+
+| Subroutine | Description |
+|---|---|
+| `read_opm(iunit,x,xd,cal)` | CCSDS OPM v2.0 parser — extracts epoch and state vector |
+| `parse_epoch(estr,cal)` | Parse `YYYY-MM-DDTHH:MM:SS.sss` → cal(6) |
+| `jd2epoch(djd,epochstr)` | Julian date → CCSDS epoch string |
 | `cal2jd(cal,djulian)` | Calendar date → Julian date |
-| `force_models(n_for,ngeo,s,m)` | Apply force model on/off flags |
-| `rkgil(n,y,f,x,h,nt)` | Runge–Kutta–Gill 4th-order integrator step |
-| `u2uu(u,uu)` | KS variable index swap (u→uu) |
-| `u2qu(u,qu,j)` | KS variable rearrangement for luni-solar terms |
+
+### Vector utilities
+
+| Function | Description |
+|---|---|
 | `dotp3(x,y)` | 3-vector dot product |
 | `dotp4(x,y)` | 4-vector dot product |
 | `vmn(x)` | 3-vector magnitude |
 | `cross(x,y,z)` | 3-vector cross product |
 
+### Integrator
+
+| Function | Description |
+|---|---|
+| `rkgil(n,y,f,x,h,nt)` | Runge–Kutta–Gill 4th-order step (4-stage, fixed step) |
+
 ---
 
 ## Known Issues
 
-- `car2oe` may produce NaN outputs for near-circular or near-equatorial orbits (special cases partially handled but not fully validated).
-- EGM2008 coefficient file (`EGM2008_to2190_TideFree`) is large (~500 MB) and not included in the repository; set `ngeo_deg = 2` to use J2 only without the file.
+- `car2oe` may produce NaN for near-circular or near-equatorial orbits (special cases partially handled).
+- `aLegP` is internally hardcoded to evaluate polynomials up to degree 49; results for `ngeo_deg ≥ 50` are incorrect beyond that degree.
+- EGM2008 file (~231 MB) is not included in the repository; set `ngeo_deg = 0` in `const_new.dat` to run without it (point-mass gravity).
 - Solar radiation pressure is not yet implemented.
 
 ---
@@ -192,7 +369,11 @@ The step size scales with the frequency ratio Γ = ω/ω_Kep to maintain accurac
 | Date | Change |
 |---|---|
 | 2018-06-15 | Initial program, J2 only |
-| 2018-06-16 | Revolution-by-revolution trajectory dump; nth-degree Legendre polynomial |
-| 2018-09-13 | nth-degree geopotential up to 2190×0 (EGM2008 Jn) |
+| 2018-06-16 | Revolution-by-revolution output; nth-degree Legendre polynomial |
+| 2018-09-13 | nth-degree geopotential up to 2190 (EGM2008 Jn) |
 | 2025 | Luni-solar third-body perturbations |
-| 2025 | Atmospheric drag (oblate exponential model, ATM.DAT); fixed time-element bug |
+| 2025 | Atmospheric drag (oblate exponential model, ATM.DAT); fixed time-element `Tau_term` bug |
+| 2025 | Unit tests (20), integration test (9), benchmark script |
+| 2025 | Performance optimisation: streaming `geo_coeff` (2600 ms → <1 ms for J2); aLegP guards; removed 115 MB static array; 3× integrator speedup |
+| 2025 | CCSDS OEM v2.0 output (`ksrop.oem`); CCSDS OPM v2.0 output (`ksrop.opm`) |
+| 2025 | CCSDS OPM v2.0 input (`input.opm`); `input.DAT` reduced to simulation parameters |
