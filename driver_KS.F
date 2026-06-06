@@ -75,7 +75,9 @@ c     IDRAG: integer flag (0=off, 1=on); default integer via implicit i-n
 c     OEM/OPM epoch strings (YYYY-MM-DDTHH:MM:SS.sss = 23 chars)
       character*23 epochstr, epoch_stop
 c     Trajectory buffer: allocated once nrev is known; written after run
-      double precision, allocatable :: traj_jd(:), traj_x(:,:), traj_xd(:,:)
+      double precision, allocatable :: traj_jd(:)
+      double precision, allocatable :: traj_x(:,:)
+      double precision, allocatable :: traj_xd(:,:)
 
       pi=4.d0*datan(1.d0)
       d2r=pi/180.d0

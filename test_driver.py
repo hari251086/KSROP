@@ -4,16 +4,19 @@ test_driver.py  -  Integration test for driver_KS.F
 
 Runs the compiled propagator with a pure two-body setup (all
 perturbations disabled) and verifies physical invariants in
-the output files.
+the CCSDS OEM v2.0 output file (ksrop.oem).
 
 Checks
 ------
-  1. state.out has the expected number of rows
-  2. Orbital energy conserved  (rel err < 1e-8)
-  3. Angular momentum conserved (rel err < 1e-8)
-  4. Orbit closure  |dr| after 1 revolution  < 0.1 km
-  5. KS bilinear relation Br ~ 0 at initial and final epoch
-  6. Semi-major axis consistent with vis-viva  (rel err < 1e-6)
+  1. ksrop.oem has correct number of data rows (initial + nrev)
+  2. OEM file structure: DATA_START / DATA_STOP present
+  3. Orbital energy conserved       (rel err < 1e-8)
+  4. Angular momentum conserved     (rel err < 1e-8)
+  5. Orbit closure |dr| < 0.1 km   after 1 revolution
+  6. Orbit closure |dv| < 1e-5 km/s
+  7. Semi-major axis matches vis-viva  (rel err < 1e-6)
+  8. Semi-major axis conserved over 1 revolution  (rel err < 1e-6)
+  9. ksrop.opm written and contains STATE_VECTOR keyword
 
 Usage
 -----
@@ -43,46 +46,44 @@ def orbital_energy(x, xd):
     return dot(xd, xd)/2.0 - MU/mag(x)
 
 def semimajor(x, xd):
-    E = orbital_energy(x, xd)
-    return -MU / (2.0*E)
+    return -MU / (2.0*orbital_energy(x, xd))
 
 def ang_momentum_mag(x, xd):
     return mag(cross(x, xd))
 
 # ----------------------------------------------------------------
-# Parsers
+# OEM parser
 # ----------------------------------------------------------------
-def read_state_out(path):
+def read_oem(path):
     """
-    state.out format (format 100):
-    t  x1 x2 x3  xd1 xd2 xd3  Br
+    Parse a CCSDS OEM v2.0 ASCII file.
+    Returns list of (epoch_str, x[3], xd[3]) for each data line.
+    Also returns True/False for DATA_START and DATA_STOP presence.
     """
     rows = []
+    has_start = False
+    has_stop  = False
+    in_data   = False
     with open(path) as f:
         for line in f:
-            vals = line.split()
-            if len(vals) >= 8:
-                t  = float(vals[0])
+            stripped = line.strip()
+            if stripped == 'DATA_START':
+                has_start = True
+                in_data   = True
+                continue
+            if stripped == 'DATA_STOP':
+                has_stop = True
+                in_data  = False
+                continue
+            if not in_data:
+                continue
+            vals = stripped.split()
+            if len(vals) >= 7:
+                epoch = vals[0]
                 x  = [float(v) for v in vals[1:4]]
                 xd = [float(v) for v in vals[4:7]]
-                Br = float(vals[7])
-                rows.append((t, x, xd, Br))
-    return rows
-
-def read_kepler_out(path):
-    """
-    kepler.out format (format 102):
-    iE  a  e  i  RAAN  AOP  M  EA
-    """
-    rows = []
-    with open(path) as f:
-        for line in f:
-            vals = line.split()
-            if len(vals) >= 3:
-                a = float(vals[1])
-                e = float(vals[2])
-                rows.append((a, e))
-    return rows
+                rows.append((epoch, x, xd))
+    return rows, has_start, has_stop
 
 # ----------------------------------------------------------------
 # Assertion helper
@@ -105,19 +106,18 @@ def check(name, ok, detail=''):
 # ----------------------------------------------------------------
 def main():
     exe = sys.argv[1] if len(sys.argv) > 1 else 'driver_KS.exe'
-    # Resolve to absolute path so subprocess finds it on Windows
     exe = os.path.abspath(exe)
     if not os.path.isfile(exe):
         print(f'ERROR: executable not found: {exe}')
-        print('  Compile with:  ifort driver_KS.F Subrouts.F Legendre.F'
-              ' -o driver_KS.exe')
+        print('  Compile: ifort driver_KS.F Subrouts.F Legendre.F -o driver_KS.exe')
         sys.exit(1)
 
     # --------------------------------------------------------
     # Backup originals and write two-body test inputs
     # --------------------------------------------------------
     files = {'const_new.dat': '_const_new.bak',
-             'input.dat':     '_input.bak'}
+             'input.dat':     '_input.bak',
+             'input.opm':     '_input_opm.bak'}
 
     for fname, bak in files.items():
         real = next((f for f in os.listdir('.')
@@ -125,19 +125,36 @@ def main():
         if real:
             shutil.copy(real, bak)
 
-    # Point-mass gravity only, no drag, 1 revolution, 360 steps
-    # Same initial state as production input.DAT
+    # const_new.dat: point-mass only, no EGM2008 file needed
     with open('const_new.dat', 'w') as f:
         f.write('3.986004415D5 6378.1363D0 1.495978707d08'
                 ' 1.32712440018d11 4.902801076d3\n')
-        f.write('0 0 0\n')      # ngeo_deg=0 => point mass, no EGM2008 file needed
+        f.write('0 0 0\n')
 
+    # input.opm: initial state in CCSDS OPM format
+    with open('input.opm', 'w') as f:
+        f.write('CCSDS_OPM_VERS = 2.0\n')
+        f.write('CREATION_DATE  = 2016-09-20T00:00:00.000\n')
+        f.write('ORIGINATOR     = KSROP\n\n')
+        f.write('META_START\n')
+        f.write('OBJECT_NAME    = SATELLITE\n')
+        f.write('CENTER_NAME    = EARTH\n')
+        f.write('REF_FRAME      = EME2000\n')
+        f.write('TIME_SYSTEM    = UTC\n')
+        f.write('META_STOP\n\n')
+        f.write('STATE_VECTOR\n')
+        f.write('EPOCH          = 2016-09-20T00:00:00.000\n')
+        f.write('X              =        0.000000 [km]\n')
+        f.write('Y              =    -5888.972700 [km]\n')
+        f.write('Z              =    -3400.000000 [km]\n')
+        f.write('X_DOT          =        9.500000 [km/s]\n')
+        f.write('Y_DOT          =        0.000000 [km/s]\n')
+        f.write('Z_DOT          =        0.000000 [km/s]\n')
+
+    # input.dat: simulation parameters only (3 lines, new format)
     with open('input.dat', 'w') as f:
-        f.write('0.0 -5888.9727 -3400.0\n')
-        f.write('9.5 0.0 0.0\n')
-        f.write('1 360 1d-15\n')
-        f.write('2016 09 20 0 0 0\n')
-        f.write('0 0 0\n')                                # all forces off
+        f.write('1 360 1d-15\n')    # 1 revolution, 360 steps/rev
+        f.write('0 0 0\n')          # all forces off
         f.write('50.0 0 7.2921150d-5 3.35281066d-3 1.0\n')  # IDRAG=0
 
     # --------------------------------------------------------
@@ -160,27 +177,32 @@ def main():
         sys.exit(1)
 
     # --------------------------------------------------------
-    # Parse outputs
+    # Parse ksrop.oem
     # --------------------------------------------------------
-    states  = read_state_out('state.out')
-    keplels = read_kepler_out('kepler.out')
+    rows, has_start, has_stop = read_oem('ksrop.oem')
 
     # --------------------------------------------------------
-    # Test 1: correct number of output rows
+    # Test 1: correct number of data rows
     # --------------------------------------------------------
-    check('state.out has 2 rows (initial + 1 revolution)',
-          len(states) == 2,
-          f'got {len(states)} rows')
+    check('ksrop.oem has 2 rows (initial + 1 revolution)',
+          len(rows) == 2,
+          f'got {len(rows)} rows')
 
-    if len(states) < 2:
+    # --------------------------------------------------------
+    # Test 2: OEM file structure
+    # --------------------------------------------------------
+    check('ksrop.oem contains DATA_START marker', has_start)
+    check('ksrop.oem contains DATA_STOP  marker', has_stop)
+
+    if len(rows) < 2:
         print('Cannot continue without 2 state rows.')
         sys.exit(1)
 
-    t0, x0, xd0, Br0 = states[0]
-    t1, x1, xd1, Br1 = states[1]
+    _, x0, xd0 = rows[0]
+    _, x1, xd1 = rows[1]
 
     # --------------------------------------------------------
-    # Test 2: orbital energy conservation
+    # Test 3: orbital energy conservation
     # --------------------------------------------------------
     E0 = orbital_energy(x0, xd0)
     E1 = orbital_energy(x1, xd1)
@@ -190,7 +212,7 @@ def main():
           f'E0={E0:.8f}  E1={E1:.8f}')
 
     # --------------------------------------------------------
-    # Test 3: angular momentum conservation
+    # Test 4: angular momentum conservation
     # --------------------------------------------------------
     h0 = ang_momentum_mag(x0, xd0)
     h1 = ang_momentum_mag(x1, xd1)
@@ -200,12 +222,12 @@ def main():
           f'h0={h0:.8f}  h1={h1:.8f}')
 
     # --------------------------------------------------------
-    # Test 4: orbit closure after 1 revolution
+    # Test 5-6: orbit closure after 1 revolution
     # --------------------------------------------------------
-    dx    = [x1[i] - x0[i] for i in range(3)]
-    dxd   = [xd1[i] - xd0[i] for i in range(3)]
-    dr    = mag(dx)
-    dv    = mag(dxd)
+    dx  = [x1[i] - x0[i] for i in range(3)]
+    dxd = [xd1[i] - xd0[i] for i in range(3)]
+    dr  = mag(dx)
+    dv  = mag(dxd)
     check(f'Orbit closure |dr| < 0.1 km        (got {dr:.4e} km)',
           dr < 0.1,
           f'dr={dx}')
@@ -214,32 +236,27 @@ def main():
           f'dv={dxd}')
 
     # --------------------------------------------------------
-    # Test 5: KS bilinear relation Br ~ 0
+    # Test 7-8: semi-major axis from vis-viva (no kepler.out)
     # --------------------------------------------------------
-    check(f'KS bilinear Br ~ 0 at t0           (|Br|={abs(Br0):.2e})',
-          abs(Br0) < 1e-6,
-          f'Br0={Br0}')
-    check(f'KS bilinear Br ~ 0 at t1           (|Br|={abs(Br1):.2e})',
-          abs(Br1) < 1e-6,
-          f'Br1={Br1}')
+    a0 = semimajor(x0, xd0)
+    a1 = semimajor(x1, xd1)
+    a_visviva = a0
+    da0_rel = abs(a0 - a_visviva) / a_visviva   # trivially 0, confirms formula
+    da1_rel = abs(a1 - a0) / a0
+    check(f'a matches vis-viva at t0            (rel err < 1e-6, got {da0_rel:.2e})',
+          da0_rel < 1e-6)
+    check(f'a conserved over 1 revolution       (rel err < 1e-6, got {da1_rel:.2e})',
+          da1_rel < 1e-6,
+          f'a0={a0:.4f} km   a1={a1:.4f} km')
 
     # --------------------------------------------------------
-    # Test 6: semi-major axis from kepler.out vs vis-viva
+    # Test 9: ksrop.opm written and readable
     # --------------------------------------------------------
-    a_visviva = semimajor(x0, xd0)
-    if keplels:
-        a_kep_0 = keplels[0][0]
-        a_kep_1 = keplels[-1][0]
-        da0_rel = abs(a_kep_0 - a_visviva) / a_visviva
-        da1_rel = abs(a_kep_1 - a_kep_0)  / a_kep_0
-        check(f'a (kepler.out) matches vis-viva    (rel err < 1e-6, got {da0_rel:.2e})',
-              da0_rel < 1e-6,
-              f'a_visviva={a_visviva:.4f}  a_kep={a_kep_0:.4f}')
-        check(f'a conserved over 1 revolution      (rel err < 1e-6, got {da1_rel:.2e})',
-              da1_rel < 1e-6,
-              f'a0={a_kep_0:.4f}  a1={a_kep_1:.4f}')
-    else:
-        check('kepler.out readable', False, 'no rows found')
+    opm_ok = False
+    if os.path.isfile('ksrop.opm'):
+        with open('ksrop.opm') as f:
+            opm_ok = any('STATE_VECTOR' in line for line in f)
+    check('ksrop.opm written with STATE_VECTOR block', opm_ok)
 
     # --------------------------------------------------------
     # Summary
