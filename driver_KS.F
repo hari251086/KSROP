@@ -73,7 +73,10 @@ c     Drag: atmosphere tables and KS drag perturbation vectors
 c     IDRAG: integer flag (0=off, 1=on); default integer via implicit i-n
       integer IDRAG
 c     OEM/OPM epoch strings (YYYY-MM-DDTHH:MM:SS.sss = 23 chars)
-      character*23 epochstr, epoch_stop
+      character*23 epochstr, epoch_stop, oem_start
+c     OEM filename: KSROP_YYYYMMDDTHHMMSS.oem  (25 chars)
+      character*25 oem_fname
+      character*15 compact_epoch
 c     Trajectory buffer: allocated once nrev is known; written after run
       double precision, allocatable :: traj_jd(:)
       double precision, allocatable :: traj_x(:,:)
@@ -89,8 +92,7 @@ c     Input Files
       open (unit = 6, file = 'ATM.DAT')        !Atmosphere density table
       open (unit = 8, file = 'input.opm')      !CCSDS OPM - Initial state
 
-c     Output files
-      open (unit = 3, file = 'ksrop.oem')   !CCSDS OEM - State trajectory
+c     Output files (unit 3 opened later with timestamped filename)
       open (unit = 4, file = 'regular.out') !Internal  - KS elements
       open (unit = 5, file = 'ksrop.opm')   !CCSDS OPM - Initial Keplerian
 
@@ -543,9 +545,15 @@ c     -----------------------------------------------------------
       end do
 
 c     --- Write CCSDS OEM v2.0 after run completes ---
-c     STOP_TIME is now the exact final epoch, not a Keplerian estimate.
-      call jd2epoch(traj_jd(1),     epochstr)
+c     CREATION_DATE and filename use current UTC wall-clock time.
+c     START_TIME / STOP_TIME use the actual propagated orbital epochs.
+      call utc_now_epoch(epochstr, compact_epoch)
+      oem_fname = 'KSROP_'//compact_epoch//'.oem'
+      open (unit = 3, file = oem_fname)
+
+      call jd2epoch(traj_jd(1),     oem_start)
       call jd2epoch(traj_jd(idump), epoch_stop)
+
       write(3,'(A)')     'CCSDS_OEM_VERS = 2.0'
       write(3,'(A,A)')   'CREATION_DATE  = ', epochstr
       write(3,'(A)')     'ORIGINATOR     = KSROP'
@@ -556,7 +564,7 @@ c     STOP_TIME is now the exact final epoch, not a Keplerian estimate.
       write(3,'(A)')     'CENTER_NAME    = EARTH'
       write(3,'(A)')     'REF_FRAME      = EME2000'
       write(3,'(A)')     'TIME_SYSTEM    = UTC'
-      write(3,'(A,A)')   'START_TIME     = ', epochstr
+      write(3,'(A,A)')   'START_TIME     = ', oem_start
       write(3,'(A,A)')   'STOP_TIME      = ', epoch_stop
       write(3,'(A)')     'META_STOP'
       write(3,'(A)')     ''
@@ -568,6 +576,8 @@ c     STOP_TIME is now the exact final epoch, not a Keplerian estimate.
      &                traj_xd(1,i), traj_xd(2,i), traj_xd(3,i)
       end do
       write(3,'(A)') 'DATA_STOP'
+      close(3)
+      write(*,'(A,A)') 'OEM written: ', oem_fname
       deallocate(traj_jd, traj_x, traj_xd)
       write(*,*) x
 

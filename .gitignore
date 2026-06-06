@@ -40,7 +40,7 @@
 state.out
 regular.out
 kepler.out
-ksrop.oem
+KSROP_*.oem
 ksrop.opm
 
 # ------- Test infrastructure -------

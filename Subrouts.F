@@ -873,6 +873,61 @@ c        Match keyword (check _DOT variants before single-letter X/Y/Z)
       end
 
 c     ============================================================
+      subroutine utc_now_epoch(epochstr, compact)
+c     Return current UTC wall-clock time via Fortran DATE_AND_TIME.
+c     epochstr (23) = YYYY-MM-DDTHH:MM:SS.mmm  (CCSDS epoch string)
+c     compact  (15) = YYYYMMDDTHHMMSS           (filename-safe)
+c     ============================================================
+      implicit double precision (a-h, o-z)
+      character*23 epochstr
+      character*15 compact
+      character*8  datstr
+      character*10 timstr
+      character*5  zonstr
+      integer vals(8), utc_min, uyr, umon, uday, uh, umi, usc, ums
+
+      call date_and_time(datstr, timstr, zonstr, vals)
+c     vals: (1)year (2)month (3)day (4)UTC_offset_minutes
+c           (5)hour (6)minute (7)second (8)millisecond
+
+c     Convert local time to UTC by subtracting the offset
+      utc_min = vals(5)*60 + vals(6) - vals(4)
+      uday = vals(3)
+      umon = vals(2)
+      uyr  = vals(1)
+
+      if (utc_min .lt. 0) then
+         utc_min = utc_min + 1440
+         uday = uday - 1
+         if (uday .eq. 0) then
+            umon = umon - 1
+            if (umon .eq. 0) then
+               umon = 12
+               uyr  = uyr - 1
+            end if
+            uday = 31
+         end if
+      else if (utc_min .ge. 1440) then
+         utc_min = utc_min - 1440
+         uday = uday + 1
+      end if
+
+      uh  = utc_min / 60
+      umi = utc_min - uh*60
+      usc = vals(7)
+      ums = vals(8)
+
+      write(epochstr,
+     &      '(I4.4,A1,I2.2,A1,I2.2,A1,I2.2,A1,I2.2,A1,I2.2,A1,I3.3)')
+     &      uyr,'-',umon,'-',uday,'T',uh,':',umi,':',usc,'.',ums
+
+      write(compact,'(I4.4,2I2.2,A1,3I2.2)')
+     &      uyr,umon,uday,'T',uh,umi,usc
+
+      return
+      end
+
+c     ============================================================
       subroutine jd2epoch(djd, epochstr)
 c     Convert Julian date to CCSDS epoch string: YYYY-MM-DDTHH:MM:SS.sss
 c     Meeus algorithm for JD -> calendar date.

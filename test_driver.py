@@ -24,7 +24,7 @@ Usage
   executable: compiled driver binary (default: driver_KS.exe)
 """
 
-import subprocess, os, shutil, math, sys
+import subprocess, os, shutil, math, sys, glob
 
 MU = 3.986004415e5      # km3/s2  (matches const_new.dat)
 
@@ -177,9 +177,14 @@ def main():
         sys.exit(1)
 
     # --------------------------------------------------------
-    # Parse ksrop.oem
+    # Locate and parse the timestamped OEM file
     # --------------------------------------------------------
-    rows, has_start, has_stop = read_oem('ksrop.oem')
+    oem_files = sorted(glob.glob('KSROP_*.oem'))
+    if not oem_files:
+        print('ERROR: no KSROP_*.oem file found after run')
+        sys.exit(1)
+    oem_path = oem_files[-1]   # most recent if multiple exist
+    rows, has_start, has_stop = read_oem(oem_path)
 
     # Test config: nrev=1, istep=360 => 1*360+1 = 361 rows
     NREV  = 1
@@ -197,8 +202,8 @@ def main():
     # --------------------------------------------------------
     # Test 2: OEM file structure
     # --------------------------------------------------------
-    check('ksrop.oem contains DATA_START marker', has_start)
-    check('ksrop.oem contains DATA_STOP  marker', has_stop)
+    check(f'{oem_path} contains DATA_START marker', has_start)
+    check(f'{oem_path} contains DATA_STOP  marker', has_stop)
 
     if len(rows) < 2:
         print('Cannot continue without at least 2 state rows.')
