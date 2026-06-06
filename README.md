@@ -42,7 +42,7 @@ Orbit propagation using **Kustaanheimo–Stiefel (KS) regular elements** with a 
 
 | File | Format | Contents |
 |---|---|---|
-| `ksrop.oem` | **CCSDS OEM v2.0** | State trajectory: epoch + X Y Z Xdot Ydot Zdot at each revolution |
+| `ksrop.oem` | **CCSDS OEM v2.0** | State trajectory: epoch + X Y Z Xdot Ydot Zdot at every integration step |
 | `ksrop.opm` | **CCSDS OPM v2.0** | Initial-epoch state vector and Keplerian elements |
 | `regular.out` | Internal | KS regular elements (debug) |
 
@@ -51,7 +51,7 @@ Orbit propagation using **Kustaanheimo–Stiefel (KS) regular elements** with a 
 | File | Description |
 |---|---|
 | `test_subrouts.F` | Fortran unit tests — 20 tests covering core subroutines |
-| `test_driver.py` | Python integration test — 9 physics checks on two-body propagation |
+| `test_driver.py` | Python integration test — 10 checks on two-body propagation |
 | `benchmark.py` | Performance profiler — timing across force model configurations |
 | `Makefile` | Unix/Linux build targets: `all`, `tests`, `run`, `test`, `clean` |
 | `build.bat` | Windows build script for Intel Fortran |
@@ -214,7 +214,9 @@ DATA_START
 DATA_STOP
 ```
 
-One data line per completed revolution. Position in km (F16.6), velocity in km/s (F14.9).
+**`nrev × istep + 1`** data lines — one per completed RKG integration step plus the initial state. The entire file is held in memory during the run and written atomically after propagation completes, so `STOP_TIME` reflects the exact final propagated epoch. Position in km (F16.6), velocity in km/s (F14.9).
+
+For the production config (10 rev × 360 steps/rev) this produces **3,601 data lines**.
 
 ### `ksrop.opm` — Initial Keplerian elements (CCSDS OPM v2.0)
 
@@ -287,7 +289,7 @@ ifort test_subrouts.F Subrouts.F Legendre.F -o test_subrouts.exe
 python test_driver.py driver_KS.exe
 ```
 
-9 checks on a 1-revolution two-body propagation: energy conservation, angular momentum, orbit closure, KS bilinear Br, semi-major axis vs vis-viva.
+10 checks on a 1-revolution two-body propagation: OEM row count (361 = 1×360+1), DATA_START/DATA_STOP structure, energy conservation, angular momentum conservation, orbit closure (position and velocity), semi-major axis vs vis-viva, semi-major axis conserved, OPM output present.
 
 ### Performance profiling — `benchmark.py`
 
@@ -377,3 +379,5 @@ Times integrator, step-size sensitivity, drag overhead, and EGM2008 file-read co
 | 2025 | Performance optimisation: streaming `geo_coeff` (2600 ms → <1 ms for J2); aLegP guards; removed 115 MB static array; 3× integrator speedup |
 | 2025 | CCSDS OEM v2.0 output (`ksrop.oem`); CCSDS OPM v2.0 output (`ksrop.opm`) |
 | 2025 | CCSDS OPM v2.0 input (`input.opm`); `input.DAT` reduced to simulation parameters |
+| 2025 | OEM trajectory buffered in memory during run; written atomically after completion; `STOP_TIME` is exact final epoch |
+| 2025 | OEM output at every integration step (`nrev × istep + 1` data points) instead of per revolution |
