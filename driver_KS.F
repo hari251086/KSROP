@@ -72,6 +72,8 @@ c     Drag: atmosphere tables and KS drag perturbation vectors
       dimension qdrag(4),p_drag(3)
 c     IDRAG: integer flag (0=off, 1=on); default integer via implicit i-n
       integer IDRAG
+c     OEM/OPM epoch strings (YYYY-MM-DDTHH:MM:SS.sss = 23 chars)
+      character*23 epochstr, epoch_stop
 
       pi=4.d0*datan(1.d0)
       d2r=pi/180.d0
@@ -83,9 +85,9 @@ c     Input Files
       open (unit = 6, file = 'ATM.DAT')        !Atmosphere density table
 
 c     Output files
-      open (unit = 3, file = 'state.out')   !Output - State Vector
-      open (unit = 4, file = 'regular.out') !Output - KS
-      open (unit = 5, file = 'kepler.out')  !Output - Kepler
+      open (unit = 3, file = 'ksrop.oem')   !CCSDS OEM - State trajectory
+      open (unit = 4, file = 'regular.out') !Internal  - KS elements
+      open (unit = 5, file = 'ksrop.opm')   !CCSDS OPM - Initial Keplerian
 
       read(1,*) amue,R_Earth,AU,amuS,amuM
       read(1,*) ngeo_deg,nsun_deg,nmoon_deg
@@ -126,6 +128,8 @@ c     -----------------------------------------------------------
       call car2oe(x,xd,pek)
       call oe2car(pek,x,xd,tole)
       call cal2jd(cal,djulian)
+c     Keplerian period (s) from initial semi-major axis; used for OEM STOP_TIME
+      T_period = 2.d0*pi*dsqrt(pek(1)**3/amue)
       call force_models(n_force,ngeo_deg,amuS,amuM)
 
       print *, x, xd
@@ -251,11 +255,62 @@ c     -----------------------------------------------------------
       cse = dcos(E/2.d0)
       iE = dint(E)
 
-c     Write first line output
-      write(3,100) t,x,xd,Br
       call car2oe(x,xd,pek)
+      djstop = djulian + dble(nrev)*T_period/86400.d0
+      call jd2epoch(djulian, epochstr)
+      call jd2epoch(djstop,  epoch_stop)
+
+c     --- CCSDS OEM v2.0 header ---
+      write(3,'(A)')     'CCSDS_OEM_VERS = 2.0'
+      write(3,'(A,A)')   'CREATION_DATE  = ', epochstr
+      write(3,'(A)')     'ORIGINATOR     = KSROP'
+      write(3,'(A)')     ''
+      write(3,'(A)')     'META_START'
+      write(3,'(A)')     'OBJECT_NAME    = SATELLITE'
+      write(3,'(A)')     'OBJECT_ID      = UNKNOWN'
+      write(3,'(A)')     'CENTER_NAME    = EARTH'
+      write(3,'(A)')     'REF_FRAME      = EME2000'
+      write(3,'(A)')     'TIME_SYSTEM    = UTC'
+      write(3,'(A,A)')   'START_TIME     = ', epochstr
+      write(3,'(A,A)')   'STOP_TIME      = ', epoch_stop
+      write(3,'(A)')     'META_STOP'
+      write(3,'(A)')     ''
+      write(3,'(A)')     'DATA_START'
+
+c     --- CCSDS OPM v2.0 (initial epoch Keplerian elements) ---
+      write(5,'(A)')     'CCSDS_OPM_VERS = 2.0'
+      write(5,'(A,A)')   'CREATION_DATE  = ', epochstr
+      write(5,'(A)')     'ORIGINATOR     = KSROP'
+      write(5,'(A)')     ''
+      write(5,'(A)')     'META_START'
+      write(5,'(A)')     'OBJECT_NAME    = SATELLITE'
+      write(5,'(A)')     'OBJECT_ID      = UNKNOWN'
+      write(5,'(A)')     'CENTER_NAME    = EARTH'
+      write(5,'(A)')     'REF_FRAME      = EME2000'
+      write(5,'(A)')     'TIME_SYSTEM    = UTC'
+      write(5,'(A)')     'META_STOP'
+      write(5,'(A)')     ''
+      write(5,'(A)')     'STATE_VECTOR'
+      write(5,'(A,A)')   'EPOCH          = ', epochstr
+      write(5,'(A,F16.6,A)')  'X              = ', x(1),  ' [km]'
+      write(5,'(A,F16.6,A)')  'Y              = ', x(2),  ' [km]'
+      write(5,'(A,F16.6,A)')  'Z              = ', x(3),  ' [km]'
+      write(5,'(A,F16.9,A)')  'X_DOT          = ', xd(1), ' [km/s]'
+      write(5,'(A,F16.9,A)')  'Y_DOT          = ', xd(2), ' [km/s]'
+      write(5,'(A,F16.9,A)')  'Z_DOT          = ', xd(3), ' [km/s]'
+      write(5,'(A)')     ''
+      write(5,'(A)')     'KEPLERIAN_ELEMENTS'
+      write(5,'(A,F16.6,A)')  'SEMI_MAJOR_AXIS   = ', pek(1),' [km]'
+      write(5,'(A,F16.9)')    'ECCENTRICITY      = ', pek(2)
+      write(5,'(A,F16.6,A)')  'INCLINATION       = ', pek(3),' [deg]'
+      write(5,'(A,F16.6,A)')  'RA_OF_ASC_NODE    = ', pek(4),' [deg]'
+      write(5,'(A,F16.6,A)')  'ARG_OF_PERICENTER = ', pek(5),' [deg]'
+      write(5,'(A,F16.6,A)')  'MEAN_ANOMALY      = ', pek(6),' [deg]'
+
+c     --- OEM first data point ---
+      call jd2epoch(djulian + T/86400.d0, epochstr)
+      write(3,103) epochstr, x(1),x(2),x(3), xd(1),xd(2),xd(3)
       write(4,101) iE,y
-      write(5,102) iE,pek
 
 c     Integration
       do ik = 1,nrev            !Revolutions
@@ -483,19 +538,19 @@ c     -----------------------------------------------------------
 
          end do
 
-!     Dumping Trajectory by revolution
-         write(3,100) t,x,xd,Br
+!     Dump trajectory at end of each revolution
+         call jd2epoch(djulian + T/86400.d0, epochstr)
+         write(3,103) epochstr, x(1),x(2),x(3), xd(1),xd(2),xd(3)
          write(4,101) iE,y
-         write(5,102) iE,pek
       end do
+      write(3,'(A)') 'DATA_STOP'
       write(*,*) x
 
-c     format specifiers (100 - 200)
- 100  format(f20.8,1x,6f18.10,e20.5)    !State Vector
- 101  format(10f20.9)                    !KS-regular elements
- 102  format(i10.3,f18.10,f14.10,3f20.8,2f18.10) !Keplerian Elements
- 110  format(8f10.3)                     !ATM.DAT scale height
- 111  format(8e10.3)                     !ATM.DAT density
+c     format specifiers
+ 101  format(10f20.9)           !KS-regular elements (regular.out)
+ 103  format(A23,3(1x,F16.6),3(1x,F14.9))  !OEM data line
+ 110  format(8f10.3)            !ATM.DAT scale height
+ 111  format(8e10.3)            !ATM.DAT density
 
  99   do i = 1,6
          close(i)

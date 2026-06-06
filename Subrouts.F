@@ -788,3 +788,57 @@ c     z coordinate
 
       return
       end
+
+c     ============================================================
+      subroutine jd2epoch(djd, epochstr)
+c     Convert Julian date to CCSDS epoch string: YYYY-MM-DDTHH:MM:SS.sss
+c     Meeus algorithm for JD -> calendar date.
+c     ============================================================
+      implicit double precision (a-h, o-z)
+      character*23 epochstr
+      integer iyr, imon, iday, ih, imin, isec, ims
+      integer jd_int, ja, jb, jc, jd2, je, alpha, total_ms
+
+      djd5   = djd + 0.5d0
+      jd_int = int(djd5)
+      frac   = djd5 - dble(jd_int)
+
+      if (jd_int .lt. 2299161) then
+         ja = jd_int
+      else
+         alpha = int((dble(jd_int) - 1867216.25d0) / 36524.25d0)
+         ja    = jd_int + 1 + alpha - alpha/4
+      end if
+
+      jb   = ja + 1524
+      jc   = int((dble(jb) - 122.1d0) / 365.25d0)
+      jd2  = int(365.25d0 * dble(jc))
+      je   = int(dble(jb - jd2) / 30.6001d0)
+
+      iday = jb - jd2 - int(30.6001d0 * dble(je))
+      if (je .lt. 14) then
+         imon = je - 1
+      else
+         imon = je - 13
+      end if
+      if (imon .gt. 2) then
+         iyr = jc - 4716
+      else
+         iyr = jc - 4715
+      end if
+
+c     Decompose fractional day to H:M:S.mmm using integer milliseconds
+      total_ms = min(nint(frac * 86400000.d0), 86399999)
+      ih       = total_ms / 3600000
+      total_ms = total_ms - ih * 3600000
+      imin     = total_ms / 60000
+      total_ms = total_ms - imin * 60000
+      isec     = total_ms / 1000
+      ims      = total_ms - isec * 1000
+
+      write(epochstr,
+     &      '(I4.4,A1,I2.2,A1,I2.2,A1,I2.2,A1,I2.2,A1,I2.2,A1,I3.3)')
+     &      iyr,'-',imon,'-',iday,'T',ih,':',imin,':',isec,'.',ims
+
+      return
+      end

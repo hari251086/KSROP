@@ -40,6 +40,8 @@
 state.out
 regular.out
 kepler.out
+ksrop.oem
+ksrop.opm
 
 # ------- Test infrastructure -------
 # Backup files written by test_driver.py
