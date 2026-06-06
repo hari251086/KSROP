@@ -790,6 +790,89 @@ c     z coordinate
       end
 
 c     ============================================================
+      subroutine parse_epoch(estr, cal)
+c     Parse CCSDS epoch string YYYY-MM-DDTHH:MM:SS.sss into cal(6)
+c     cal = [year, month, day, hour, minute, second]
+c     ============================================================
+      implicit double precision (a-h, o-z)
+      character*(*) estr
+      dimension cal(6)
+      integer iyr, imon, iday, ih, imin
+
+      read(estr(1:4),   '(I4)') iyr
+      read(estr(6:7),   '(I2)') imon
+      read(estr(9:10),  '(I2)') iday
+      read(estr(12:13), '(I2)') ih
+      read(estr(15:16), '(I2)') imin
+      read(estr(18:),   *     ) sec_val
+
+      cal(1) = dble(iyr)
+      cal(2) = dble(imon)
+      cal(3) = dble(iday)
+      cal(4) = dble(ih)
+      cal(5) = dble(imin)
+      cal(6) = sec_val
+
+      return
+      end
+
+c     ============================================================
+      subroutine read_opm(iunit, x, xd, cal)
+c     Parse a CCSDS OPM v2.0 ASCII file.
+c     Scans every line for the seven STATE_VECTOR keywords and
+c     extracts: EPOCH, X, Y, Z, X_DOT, Y_DOT, Z_DOT.
+c     Lines without '=' and all other keywords are silently skipped.
+c     Unit conversion brackets [km] / [km/s] are stripped before read.
+c     ============================================================
+      implicit double precision (a-h, o-z)
+      dimension x(3), xd(3), cal(6)
+      character*200 line
+      character*80  valstr
+      integer       nfound, ieq, ibr
+
+      nfound = 0
+
+ 10   continue
+         if (nfound .ge. 7) goto 99
+         read(iunit, '(A)', end=99) line
+         line   = adjustl(line)
+         ieq    = index(line, '=')
+         if (ieq .eq. 0) goto 10
+
+c        Extract value substring (strip leading blanks and unit bracket)
+         valstr = adjustl(line(ieq+1:))
+         ibr    = index(valstr, '[')
+         if (ibr .gt. 1) valstr = valstr(1:ibr-1)
+
+c        Match keyword (check _DOT variants before single-letter X/Y/Z)
+         if     (line(1:5) .eq. 'EPOCH') then
+            call parse_epoch(adjustl(valstr), cal)
+            nfound = nfound + 1
+         else if (line(1:5) .eq. 'X_DOT') then
+            read(valstr, *) xd(1)
+            nfound = nfound + 1
+         else if (line(1:5) .eq. 'Y_DOT') then
+            read(valstr, *) xd(2)
+            nfound = nfound + 1
+         else if (line(1:5) .eq. 'Z_DOT') then
+            read(valstr, *) xd(3)
+            nfound = nfound + 1
+         else if (line(1:1).eq.'X' .and. line(2:2).ne.'_') then
+            read(valstr, *) x(1)
+            nfound = nfound + 1
+         else if (line(1:1).eq.'Y' .and. line(2:2).ne.'_') then
+            read(valstr, *) x(2)
+            nfound = nfound + 1
+         else if (line(1:1).eq.'Z' .and. line(2:2).ne.'_') then
+            read(valstr, *) x(3)
+            nfound = nfound + 1
+         end if
+      goto 10
+
+ 99   return
+      end
+
+c     ============================================================
       subroutine jd2epoch(djd, epochstr)
 c     Convert Julian date to CCSDS epoch string: YYYY-MM-DDTHH:MM:SS.sss
 c     Meeus algorithm for JD -> calendar date.

@@ -81,8 +81,9 @@ c     OEM/OPM epoch strings (YYYY-MM-DDTHH:MM:SS.sss = 23 chars)
 
 c     Input Files
       open (unit = 1, file = 'const_new.dat') !Constants
-      open (unit = 2, file = 'input.dat')      !Input state vector
+      open (unit = 2, file = 'input.dat')      !Simulation parameters
       open (unit = 6, file = 'ATM.DAT')        !Atmosphere density table
+      open (unit = 8, file = 'input.opm')      !CCSDS OPM - Initial state
 
 c     Output files
       open (unit = 3, file = 'ksrop.oem')   !CCSDS OEM - State trajectory
@@ -92,10 +93,12 @@ c     Output files
       read(1,*) amue,R_Earth,AU,amuS,amuM
       read(1,*) ngeo_deg,nsun_deg,nmoon_deg
 
-      read(2,*,end=99) x(1),x(2),x(3)              ! Position (km)
-      read(2,*) xd(1),xd(2),xd(3)                  ! Velocity (km/s)
-      read(2,*) nrev,istep,tole  !Revolutions, steps, tolerance
-      read(2,*) cal(1),cal(2),cal(3),cal(4),cal(5),cal(6) !yyyy mm dd hh mm ss
+c     Read initial state (position, velocity, epoch) from OPM file
+      call read_opm(8, x, xd, cal)
+      close(8)
+
+c     Read simulation parameters from input.dat
+      read(2,*,end=99) nrev,istep,tole !Revolutions, steps, tolerance
       read(2,*) n_force(1), n_force(2), n_force(3)
 c     Drag parameters: ballistic coeff (kg/m2), drag on/off,
 c     Earth rotation rate (rad/s), Earth flattening, rotation factor

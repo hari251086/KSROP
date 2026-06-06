@@ -1,0 +1,20 @@
+CCSDS_OPM_VERS = 2.0
+CREATION_DATE  = 2016-09-20T00:00:00.000
+ORIGINATOR     = KSROP
+
+META_START
+OBJECT_NAME    = SATELLITE
+OBJECT_ID      = UNKNOWN
+CENTER_NAME    = EARTH
+REF_FRAME      = EME2000
+TIME_SYSTEM    = UTC
+META_STOP
+
+STATE_VECTOR
+EPOCH          = 2016-09-20T00:00:00.000
+X              =        0.000000 [km]
+Y              =    -5888.972700 [km]
+Z              =    -3400.000000 [km]
+X_DOT          =        9.500000 [km/s]
+Y_DOT          =        0.000000 [km/s]
+Z_DOT          =        0.000000 [km/s]
