@@ -385,12 +385,13 @@ Times integrator, step-size sensitivity, drag overhead, and EGM2008 file-read co
 | 2018-06-15 | Initial program, J2 only |
 | 2018-06-16 | Revolution-by-revolution output; nth-degree Legendre polynomial |
 | 2018-09-13 | nth-degree geopotential up to 2190 (EGM2008 Jn) |
-| 2025 | Luni-solar third-body perturbations |
-| 2025 | Atmospheric drag (oblate exponential model, ATM.DAT); fixed time-element `Tau_term` bug |
-| 2025 | Unit tests (20), integration test (9), benchmark script |
-| 2025 | Performance optimisation: streaming `geo_coeff` (2600 ms → <1 ms for J2); aLegP guards; removed 115 MB static array; 3× integrator speedup |
-| 2025 | CCSDS OEM v2.0 output (`ksrop.oem`); CCSDS OPM v2.0 output (`ksrop.opm`) |
-| 2025 | CCSDS OPM v2.0 input (`input.opm`); `input.DAT` reduced to simulation parameters |
-| 2025 | OEM trajectory buffered in memory during run; written atomically after completion; `STOP_TIME` is exact final epoch |
-| 2025 | OEM output at every integration step (`nrev × istep + 1` data points) instead of per revolution |
-| 2025 | OEM filename `KSROP_YYYYMMDDTHHMMSS.oem` and `CREATION_DATE` use current UTC wall-clock (`utc_now_epoch`); `START_TIME`/`STOP_TIME` remain orbital epochs |
+| 2021-07-21 | Legendre polynomial subroutine (`aLegP`) added |
+| 2026-06-06 | Luni-solar third-body perturbations |
+| 2026-06-06 | Atmospheric drag (oblate exponential model, ATM.DAT); fixed time-element `Tau_term` bug |
+| 2026-06-06 | Unit tests (20), integration test (10), benchmark script |
+| 2026-06-06 | Performance optimisation: streaming `geo_coeff` (2600 ms → <1 ms for J2); aLegP guards; removed 115 MB static array; 3× integrator speedup |
+| 2026-06-06 | CCSDS OEM v2.0 output; CCSDS OPM v2.0 output (`ksrop.opm`) |
+| 2026-06-06 | CCSDS OPM v2.0 input (`input.opm`); `input.DAT` reduced to simulation parameters only |
+| 2026-06-06 | OEM trajectory buffered in memory; written atomically after run; `STOP_TIME` is exact final epoch |
+| 2026-06-06 | OEM output at every integration step (`nrev × istep + 1` data points) |
+| 2026-06-06 | OEM filename `KSROP_YYYYMMDDTHHMMSS.oem` and `CREATION_DATE` use current UTC wall-clock |
