@@ -115,24 +115,22 @@ def main():
     # --------------------------------------------------------
     # Backup originals and write two-body test inputs
     # --------------------------------------------------------
-    files = {'const_new.dat': '_const_new.bak',
-             'input.dat':     '_input.bak',
-             'input.opm':     '_input_opm.bak'}
+    files = {'input/const_new.dat': '_const_new.bak',
+             'input/input.dat':     '_input.bak',
+             'input/input.opm':     '_input_opm.bak'}
 
     for fname, bak in files.items():
-        real = next((f for f in os.listdir('.')
-                     if f.lower() == fname.lower()), None)
-        if real:
-            shutil.copy(real, bak)
+        if os.path.isfile(fname):
+            shutil.copy(fname, bak)
 
-    # const_new.dat: point-mass only, no EGM2008 file needed
-    with open('const_new.dat', 'w') as f:
+    # input/const_new.dat: point-mass only, no EGM2008 file needed
+    with open('input/const_new.dat', 'w') as f:
         f.write('3.986004415D5 6378.1363D0 1.495978707d08'
                 ' 1.32712440018d11 4.902801076d3\n')
         f.write('0 0 0\n')
 
-    # input.opm: initial state in CCSDS OPM format
-    with open('input.opm', 'w') as f:
+    # input/input.opm: initial state in CCSDS OPM format
+    with open('input/input.opm', 'w') as f:
         f.write('CCSDS_OPM_VERS = 2.0\n')
         f.write('CREATION_DATE  = 2016-09-20T00:00:00.000\n')
         f.write('ORIGINATOR     = KSROP\n\n')
@@ -151,11 +149,11 @@ def main():
         f.write('Y_DOT          =        0.000000 [km/s]\n')
         f.write('Z_DOT          =        0.000000 [km/s]\n')
 
-    # input.dat: simulation parameters only (3 lines, new format)
-    with open('input.dat', 'w') as f:
-        f.write('1 360 1d-15\n')    # 1 revolution, 360 steps/rev
-        f.write('0 0 0\n')          # all forces off
-        f.write('50.0 0 7.2921150d-5 3.35281066d-3 1.0\n')  # IDRAG=0
+    # input/input.dat: simulation parameters only (3 lines)
+    with open('input/input.dat', 'w') as f:
+        f.write('1 360 1d-15\n')
+        f.write('0 0 0\n')
+        f.write('50.0 0 7.2921150d-5 3.35281066d-3 1.0\n')
 
     # --------------------------------------------------------
     # Run the driver
@@ -179,7 +177,7 @@ def main():
     # --------------------------------------------------------
     # Locate and parse the timestamped OEM file
     # --------------------------------------------------------
-    oem_files = sorted(glob.glob('KSROP_*.oem'))
+    oem_files = sorted(glob.glob('output/KSROP_*.oem'))
     if not oem_files:
         print('ERROR: no KSROP_*.oem file found after run')
         sys.exit(1)
@@ -264,8 +262,8 @@ def main():
     # Test 9: ksrop.opm written and readable
     # --------------------------------------------------------
     opm_ok = False
-    if os.path.isfile('ksrop.opm'):
-        with open('ksrop.opm') as f:
+    if os.path.isfile('output/ksrop.opm'):
+        with open('output/ksrop.opm') as f:
             opm_ok = any('STATE_VECTOR' in line for line in f)
     check('ksrop.opm written with STATE_VECTOR block', opm_ok)
 

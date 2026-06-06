@@ -659,7 +659,7 @@ c     ============================================================
       dimension c_j(n)
       integer ideg, iord
 
-      open (unit = 7, file = 'EGM2008_to2190_TideFree')
+      open (unit = 7, file = 'input/EGM2008_to2190_TideFree')
 
       j = 2
  20   continue

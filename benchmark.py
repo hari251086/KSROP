@@ -13,21 +13,42 @@ import subprocess, os, shutil, time, sys
 
 EXE = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else 'driver_KS.exe')
 
-CONST_FILE = 'const_new.dat'
-INPUT_FILE = 'input.dat'
-BAK_CONST  = '_bm_const.bak'
-BAK_INPUT  = '_bm_input.bak'
+CONST_FILE   = 'input/const_new.dat'
+INPUT_FILE   = 'input/input.dat'
+OPM_FILE     = 'input/input.opm'
+BAK_CONST    = '_bm_const.bak'
+BAK_INPUT    = '_bm_input.bak'
+BAK_OPM      = '_bm_opm.bak'
 
-X0   = '0.0 -5888.9727 -3400.0'
-XD0  = '9.5 0.0 0.0'
-CAL  = '2016 09 20 0 0 0'
 DRAG_OFF = '50.0 0 7.2921150d-5 3.35281066d-3 1.0'
 DRAG_ON  = '50.0 1 7.2921150d-5 3.35281066d-3 1.0'
 
-HAS_EGM = os.path.isfile('EGM2008_to2190_TideFree')
+HAS_EGM = os.path.isfile('input/EGM2008_to2190_TideFree')
+
+# Fixed initial state used across all benchmark configurations
+OPM_CONTENT = """\
+CCSDS_OPM_VERS = 2.0
+CREATION_DATE  = 2016-09-20T00:00:00.000
+ORIGINATOR     = KSROP
+
+META_START
+OBJECT_NAME    = SATELLITE
+CENTER_NAME    = EARTH
+REF_FRAME      = EME2000
+TIME_SYSTEM    = UTC
+META_STOP
+
+STATE_VECTOR
+EPOCH          = 2016-09-20T00:00:00.000
+X              =        0.000000 [km]
+Y              =    -5888.972700 [km]
+Z              =    -3400.000000 [km]
+X_DOT          =        9.500000 [km/s]
+Y_DOT          =        0.000000 [km/s]
+Z_DOT          =        0.000000 [km/s]
+"""
 
 N_REPEAT = 3     # runs per config (median taken)
-# Fewer repeats for slow EGM8 configs
 N_REPEAT_GEO = 2
 
 # ----------------------------------------------------------------
@@ -41,11 +62,10 @@ def write_inputs(ngeo=0, nsun=0, nmoon=0,
             '1.32712440018d11 4.902801076d3\n'
             f'{ngeo} {nsun} {nmoon}\n'
         )
+    with open(OPM_FILE, 'w') as f:
+        f.write(OPM_CONTENT)
     with open(INPUT_FILE, 'w') as f:
-        f.write(
-            f'{X0}\n{XD0}\n{nrev} {istep} 1d-15\n{CAL}\n'
-            f'{nf1} {nf2} {nf3}\n{drag_line}\n'
-        )
+        f.write(f'{nrev} {istep} 1d-15\n{nf1} {nf2} {nf3}\n{drag_line}\n')
 
 def run_once():
     t0 = time.perf_counter()
@@ -85,11 +105,11 @@ def main():
         sys.exit(1)
 
     # backup originals
-    for src, bak in [(CONST_FILE, BAK_CONST), (INPUT_FILE, BAK_INPUT)]:
-        real = next((f for f in os.listdir('.')
-                     if f.lower() == src.lower()), None)
-        if real:
-            shutil.copy(real, bak)
+    for src, bak in [(CONST_FILE, BAK_CONST),
+                     (INPUT_FILE, BAK_INPUT),
+                     (OPM_FILE,   BAK_OPM)]:
+        if os.path.isfile(src):
+            shutil.copy(src, bak)
 
     print('=' * 82)
     print(f'  KSROP Performance Benchmark        (median of {N_REPEAT} runs)')
@@ -195,7 +215,7 @@ def main():
                   f'for 3 600 steps  '
                   f'({(intg_50-intg_base)/intg_base*100:+.1f}%)')
     else:
-        print('\n[4]  Geopotential — SKIPPED (EGM2008_to2190_TideFree not found)')
+        print('\n[4]  Geopotential — SKIPPED (input/EGM2008_to2190_TideFree not found)')
 
     # ==============================================================
     # 5. Scaling analysis
@@ -225,7 +245,9 @@ def main():
     print('=' * 82)
 
     # restore
-    for src, bak in [(CONST_FILE, BAK_CONST), (INPUT_FILE, BAK_INPUT)]:
+    for src, bak in [(CONST_FILE, BAK_CONST),
+                     (INPUT_FILE, BAK_INPUT),
+                     (OPM_FILE,   BAK_OPM)]:
         if os.path.isfile(bak):
             shutil.copy(bak, src)
             os.remove(bak)

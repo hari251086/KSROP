@@ -74,8 +74,8 @@ c     IDRAG: integer flag (0=off, 1=on); default integer via implicit i-n
       integer IDRAG
 c     OEM/OPM epoch strings (YYYY-MM-DDTHH:MM:SS.sss = 23 chars)
       character*23 epochstr, epoch_stop, oem_start
-c     OEM filename: KSROP_YYYYMMDDTHHMMSS.oem  (25 chars)
-      character*25 oem_fname
+c     OEM filename: output/KSROP_YYYYMMDDTHHMMSS.oem  (32 chars)
+      character*32 oem_fname
       character*15 compact_epoch
 c     Trajectory buffer: allocated once nrev is known; written after run
       double precision, allocatable :: traj_jd(:)
@@ -87,14 +87,14 @@ c     Trajectory buffer: allocated once nrev is known; written after run
       r2d=180.d0/pi
 
 c     Input Files
-      open (unit = 1, file = 'const_new.dat') !Constants
-      open (unit = 2, file = 'input.dat')      !Simulation parameters
-      open (unit = 6, file = 'ATM.DAT')        !Atmosphere density table
-      open (unit = 8, file = 'input.opm')      !CCSDS OPM - Initial state
+      open (unit = 1, file = 'input/const_new.dat') !Constants
+      open (unit = 2, file = 'input/input.dat')      !Simulation parameters
+      open (unit = 6, file = 'input/ATM.DAT')        !Atmosphere density
+      open (unit = 8, file = 'input/input.opm')      !CCSDS OPM initial state
 
 c     Output files (unit 3 opened later with timestamped filename)
-      open (unit = 4, file = 'regular.out') !Internal  - KS elements
-      open (unit = 5, file = 'ksrop.opm')   !CCSDS OPM - Initial Keplerian
+      open (unit = 4, file = 'output/regular.out') !KS elements (debug)
+      open (unit = 5, file = 'output/ksrop.opm')   !CCSDS OPM initial Keplerian
 
       read(1,*) amue,R_Earth,AU,amuS,amuM
       read(1,*) ngeo_deg,nsun_deg,nmoon_deg
@@ -548,7 +548,7 @@ c     --- Write CCSDS OEM v2.0 after run completes ---
 c     CREATION_DATE and filename use current UTC wall-clock time.
 c     START_TIME / STOP_TIME use the actual propagated orbital epochs.
       call utc_now_epoch(epochstr, compact_epoch)
-      oem_fname = 'KSROP_'//compact_epoch//'.oem'
+      oem_fname = 'output/KSROP_'//compact_epoch//'.oem'
       open (unit = 3, file = oem_fname)
 
       call jd2epoch(traj_jd(1),     oem_start)
