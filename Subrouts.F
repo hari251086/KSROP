@@ -643,49 +643,36 @@ c     ============================================================
 c     ----------------------------------------
 c     Force models, Constant, Coefficients
 c     ----------------------------------------
-c     ============================================================      
-      subroutine geo_coeff(n,c_j)
-c     Computes Jn values from Data file (Cn0 values)
-      implicit double precision (a-h,o-z)
-      dimension c_j(n),c_raw(2401333,6),cn_0(n,6)
-c     n = degree of the geopotential
-c     c_j = j_n value
-c     Number of lines in EGM2008:  2401333 
 c     ============================================================
+      subroutine geo_coeff(n,c_j)
+c     Reads zonal harmonic coefficients Jn from EGM2008_to2190_TideFree.
+c     Streams row-by-row and stops as soon as the n-1 required zonal
+c     (m=0) terms for degrees 2..n have been collected.
+c
+c     Performance: reads only O(n^2) lines instead of all 2 401 333.
+c     For n=2 (J2 only): 3 lines.  For n=10: 63 lines.  For n=100: 5148.
+c
+c     EGM2008 file format per line:
+c       degree  order  Cnm  Snm  sigma_Cnm  sigma_Snm
+c     ============================================================
+      implicit double precision (a-h,o-z)
+      dimension c_j(n)
+      integer ideg, iord
 
-c     Data Files
-      open (unit = 1, file = 'EGM2008_to2190_TideFree') !EGM2008 - cnm snm coefficients
-
-      do i = 1,2401333
-
-         read(1,*) c_raw(i,:)
-
-      end do
+      open (unit = 7, file = 'EGM2008_to2190_TideFree')
 
       j = 2
-
-      do i = 1,2401333
-
-         if(c_raw(i,2).eq.0) then
-            cn_0(j,3)=c_raw(i,3)
+ 20   continue
+         if (j .gt. n) goto 10
+         read(7,*,end=10) ideg, iord, cnm, sval, sg1, sg2
+         if (iord .eq. 0) then
+            c_j(j) = -dsqrt(2.d0*dble(ideg)+1.d0)*cnm
             j = j + 1
          end if
-
-         if(j.gt.n) go to 10
-
-      end do
-
+      goto 20
  10   continue
 
-      do i = 2,n
-
-         c_j(i)=-dsqrt(2.d0*i+1.d0)*cn_0(i,3)
-
-      end do
-
-      close(1)
-
- 100  format(f30.20)
+      close(7)
       return
       end
 

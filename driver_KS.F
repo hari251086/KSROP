@@ -55,15 +55,15 @@ c     geo_coeff,car2ks,ks2car,aLegP,car2oe,ks2ksr,INTPOL
 c     -------------------------------------------------------------c
 
       implicit double precision (a-h, o-z)
-      parameter(n = 10, jn = 2401333, cn0 = 2190)
+      parameter(n = 10, cn0 = 2190)
       parameter(ndim_atm = 291)
 c     Value of pi, degree to radians and radians to degree
       common /xy/ pi,d2r,r2d,amue,AU,R_Earth
       dimension pek(7),x(3),xd(3),q(4),u(4),us(4),y(10),z(10)
       dimension qu(3),q_til(4),u_til(4),uu(4)
-      dimension ZbyR(cn0*2),ObyR(cn0*2),c_raw(jn,6),Re(cn0)
-      dimension cn_j(cn0),c_j(cn0),cn_0(cn0,6),V_p(cn0),aleg(cn0)
-      dimension tau_sum(cn0),sleg(cn0),oleg(cn0),R(n*2)
+      dimension ZbyR(cn0*2),ObyR(cn0*2),Re(cn0)
+      dimension cn_j(cn0),c_j(cn0),V_p(cn0),aleg(cn0)
+      dimension sleg(cn0),oleg(cn0),R(n*2)
       dimension cal(6),ts(3),tm(3),opt(3),n_force(3)
       dimension RbyRs(cn0),RbyRm(cn0),cn_m(cn0),cn_s(cn0),Rm(n*2)
       dimension qsun(4),qmoon(4),slambda(cn0),olambda(cn0),Rs(n*2)
@@ -124,7 +124,7 @@ c     -----------------------------------------------------------
       end do
 
       call car2oe(x,xd,pek)
-      call oe2car(pek,x,xd)
+      call oe2car(pek,x,xd,tole)
       call cal2jd(cal,djulian)
       call force_models(n_force,ngeo_deg,amuS,amuM)
 
@@ -290,22 +290,17 @@ c     L(u) transformation: qdrag = L(u) * p_drag  (KS perturbation)
             qdrag(4) =  u(4)*p_drag(1)-u(3)*p_drag(2)+u(2)*p_drag(3)
 
             Tau_geo = 0.d0
-!     Adding geo-potential to time element
             do i = 2,ngeo_deg
-               tau_sum(i) = -(i-1)*c_j(i)*Re(i)*aleg(i+1)*ObyR(i)
-               Tau_geo = Tau_geo+tau_sum(i)
+               Tau_geo = Tau_geo-(i-1)*c_j(i)*Re(i)*aleg(i+1)*ObyR(i)
             end do
 
-!     Adding third-body potential to time element
             Tau_3body1 = 0.d0
             do i = 2,nsun_deg
-               tau_sum(i) = (i+2)*sleg(i+1)*RbyRs(i)*RbyRs(1)*amuS
-               Tau_3body1 = Tau_3body1+tau_sum(i)
+               Tau_3body1=Tau_3body1+(i+2)*sleg(i+1)*RbyRs(i)*RbyRs(1)*amuS
             end do
             Tau_3body2 = 0.d0
             do i = 2,nmoon_deg
-               tau_sum(i) = (i+2)*oleg(i+1)*RbyRm(i)*RbyRm(1)*amuM
-               Tau_3body2 = Tau_3body2+tau_sum(i)
+               Tau_3body2=Tau_3body2+(i+2)*oleg(i+1)*RbyRm(i)*RbyRm(1)*amuM
             end do
 
 c     -----------------------------------------------------------
@@ -324,18 +319,9 @@ c     -----------------------------------------------------------
      &             + R(1)*dotp4(u,qdrag))/(8.d0*w*w*w)
      &             - z(10)*(2.d0/(w*w))*dotp4(u,us)
 
-            do i = 1,ngeo_deg
-               aleg(i)=0.d0
-            end do
-            call aLegP(ngeo_deg,ZbyR(1),aleg)
-            do i = 1,nsun_deg
-               sleg(i)=0.d0
-            end do
-            call aLegP(nsun_deg,cphi_s,sleg)
-            do i = 1,nmoon_deg
-               oleg(i)=0.d0
-            end do
-            call aLegP(nmoon_deg,cphi_m,oleg)
+            if (ngeo_deg  .gt. 1) call aLegP(ngeo_deg, ZbyR(1), aleg)
+            if (nsun_deg  .gt. 1) call aLegP(nsun_deg, cphi_s,  sleg)
+            if (nmoon_deg .gt. 1) call aLegP(nmoon_deg,cphi_m,  oleg)
 
             do j = 1,4
                q(j) = 0.d0
@@ -429,12 +415,14 @@ c     -----------------------------------------------------------
             do i = 2,ngeo_deg
                cn_j(i) = amue*Re(i)*c_j(i)*ObyR(i+1)
             end do
-            V_pot = 0.d0
-            call aLegP(ngeo_deg,ZbyR(1),aleg)
-            do i = 2,ngeo_deg
-               V_p(i) = cn_j(i)*aleg(i+1)
-               V_pot = V_pot+V_p(i)
-            end do
+            if (ngeo_deg .gt. 1) then
+               call aLegP(ngeo_deg,ZbyR(1),aleg)
+               V_pot = 0.d0
+               do i = 2,ngeo_deg
+                  V_p(i) = cn_j(i)*aleg(i+1)
+                  V_pot = V_pot+V_p(i)
+               end do
+            end if
 
             FracJd = T/86400.d0
             djulian1 = djulian + FracJd
@@ -468,23 +456,25 @@ c     -----------------------------------------------------------
             cphi_s2 = cphi_s  * cphi_s
             cphi_m2 = cphi_m  * cphi_m
 
-            call aLegP(nsun_deg,cphi_s,sleg)
-            call aLegP(nmoon_deg,cphi_m,oleg)
-
-            do i = 2,nsun_deg
-               cn_s(i) = first_s * RbyRs(i)
-               V_p(i) = cn_s(i) * sleg(i+1)
-               V_pot = V_pot + V_p(i)
-            end do
-
-            do i = 2,nmoon_deg
-               cn_m(i) = first_m * RbyRm(i)
-               V_p(i) = cn_m(i) * oleg(i+1)
-               V_pot = V_pot + V_p(i)
-            end do
+            if (nsun_deg  .gt. 1) then
+               call aLegP(nsun_deg,cphi_s,sleg)
+               do i = 2,nsun_deg
+                  cn_s(i) = first_s * RbyRs(i)
+                  V_p(i)  = cn_s(i) * sleg(i+1)
+                  V_pot   = V_pot + V_p(i)
+               end do
+            end if
+            if (nmoon_deg .gt. 1) then
+               call aLegP(nmoon_deg,cphi_m,oleg)
+               do i = 2,nmoon_deg
+                  cn_m(i) = first_m * RbyRm(i)
+                  V_p(i)  = cn_m(i) * oleg(i+1)
+                  V_pot   = V_pot + V_p(i)
+               end do
+            end if
 
             Br = y(5)*y(6)-y(4)*y(7)+y(3)*y(8)-y(2)*y(9)
-            if(I_rkg-1) 60,60,70
+            if (I_rkg .le. 1) goto 60
  70         continue
             E_0 = E_0+dE_0
             print *,x
