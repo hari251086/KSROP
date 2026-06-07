@@ -33,6 +33,8 @@ c     --- declarations ---
       dimension x2b(3), xd2b(3), cov2b(6,6)
       character*23 creation_str, tca_str
       integer npass, nfail
+c     'm' is implicitly INTEGER (outside a-h, o-z) -- declare explicitly
+      double precision miss_dist, miss_dist2
 
 c     --- initialise common block (must match const_new.dat) ---
       pi      = 4.d0 * datan(1.d0)

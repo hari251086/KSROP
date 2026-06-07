@@ -1077,6 +1077,10 @@ c     ============================================================
       character*200 line
       character*80  key, valstr
       integer       ieq, ibr, iobj, i, j
+c     'm' falls outside the (a-h, o-z) implicit-double ranges above
+c     (it is implicitly INTEGER by default), so miss_dist must be
+c     declared explicitly to avoid a type mismatch with callers/assert.
+      double precision miss_dist
 
       pc        = -1.0d0
       miss_dist = -1.0d0
@@ -1239,6 +1243,8 @@ c     ============================================================
       character*(*) name1, name2
       dimension x1(3), xd1(3), cov1(6,6)
       dimension x2(3), xd2(3), cov2(6,6)
+c     'm' is implicitly INTEGER (outside a-h, o-z) -- declare explicitly
+      double precision miss_dist
 
       write(iunit,'(A)')   'CCSDS_CDM_VERS = 1.0'
       write(iunit,'(A,A)') 'CREATION_DATE  = ', creation_str
