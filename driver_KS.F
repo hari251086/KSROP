@@ -621,10 +621,49 @@ c     step -- mirrors KSJLSDNP2.F's "EAR=EA; ...; EA=EAR+DE"
                traj_xd(i,idump) = xd(i)
             end do
 
+c     -----------------------------------------------------------
+c     Re-entry / divergence check: stop the run early, truncate
+c     the trajectory buffer at the most useful final point, and
+c     report why the propagation ended.
+c
+c     - Non-finite state (NaN): the integrator has diverged --
+c       typically an unresolvable, near-singular low-perigee pass
+c       during steep orbital decay (fixed per-revolution angular
+c       stepping cannot resolve it). The state just buffered
+c       above is garbage, so it is discarded (idump = idump - 1)
+c       and the last valid epoch is reported instead.
+c     - Altitude < 80 km: genuine re-entry. The state just
+c       buffered above is finite and becomes the final OEM entry.
+c
+c     Either branch jumps (goto 90) past the remaining steps and
+c     revolutions straight to the OEM write/cleanup section.
+c     -----------------------------------------------------------
+            h_alt = R(1) - R_Earth
+            if (h_alt .ne. h_alt) then
+               idump = idump - 1
+               call jd2epoch(traj_jd(idump), epochstr)
+               write(*,'(A,A,A)')
+     &            'Integration diverged (non-finite state); ',
+     &            'last valid epoch was ', epochstr
+               write(*,'(A)') 'Propagation stopped; last valid '//
+     &            'state saved as the last OEM data point.'
+               goto 90
+            else if (h_alt .lt. 80.d0) then
+               call jd2epoch(traj_jd(idump), epochstr)
+               write(*,'(A,F10.3,A,A)')
+     &            'Re-entry occurred: altitude = ', h_alt,
+     &            ' km (< 80 km) at epoch ', epochstr
+               write(*,'(A)') 'Propagation stopped; final state '//
+     &            'saved as the last OEM data point.'
+               goto 90
+            end if
+
          end do
 
          write(4,101) iE,y
       end do
+
+  90  continue
 
 c     --- Write CCSDS OEM v2.0 after run completes ---
 c     CREATION_DATE and filename use current UTC wall-clock time.
