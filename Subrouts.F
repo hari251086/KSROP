@@ -816,6 +816,54 @@ c        Match keyword (check _DOT variants before single-letter X/Y/Z)
       end
 
 c     ============================================================
+      subroutine write_opm(iunit, epochstr, x, xd, pek)
+c     Write a CCSDS OPM v2.0 ASCII file.
+c     Emits the header/metadata, the STATE_VECTOR block (EPOCH, X, Y,
+c     Z, X_DOT, Y_DOT, Z_DOT) and a KEPLERIAN_ELEMENTS block derived
+c     from the osculating elements pek (from car2oe).
+c     ============================================================
+      implicit double precision (a-h, o-z)
+      character*23 epochstr
+      dimension x(3), xd(3), pek(7)
+
+      write(iunit,'(A)')     'CCSDS_OPM_VERS = 2.0'
+      write(iunit,'(A,A)')   'CREATION_DATE  = ', epochstr
+      write(iunit,'(A)')     'ORIGINATOR     = KSROP'
+      write(iunit,'(A)')     ''
+      write(iunit,'(A)')     'META_START'
+      write(iunit,'(A)')     'OBJECT_NAME    = SATELLITE'
+      write(iunit,'(A)')     'OBJECT_ID      = UNKNOWN'
+      write(iunit,'(A)')     'CENTER_NAME    = EARTH'
+      write(iunit,'(A)')     'REF_FRAME      = EME2000'
+      write(iunit,'(A)')     'TIME_SYSTEM    = UTC'
+      write(iunit,'(A)')     'META_STOP'
+      write(iunit,'(A)')     ''
+      write(iunit,'(A)')     'STATE_VECTOR'
+      write(iunit,'(A,A)')   'EPOCH          = ', epochstr
+      write(iunit,'(A,F16.6,A)')  'X              = ', x(1),  ' [km]'
+      write(iunit,'(A,F16.6,A)')  'Y              = ', x(2),  ' [km]'
+      write(iunit,'(A,F16.6,A)')  'Z              = ', x(3),  ' [km]'
+      write(iunit,'(A,F16.9,A)')  'X_DOT          = ', xd(1), ' [km/s]'
+      write(iunit,'(A,F16.9,A)')  'Y_DOT          = ', xd(2), ' [km/s]'
+      write(iunit,'(A,F16.9,A)')  'Z_DOT          = ', xd(3), ' [km/s]'
+      write(iunit,'(A)')     ''
+      write(iunit,'(A)')     'KEPLERIAN_ELEMENTS'
+      write(iunit,'(A,F16.6,A)')  'SEMI_MAJOR_AXIS   = ', pek(1),
+     &                            ' [km]'
+      write(iunit,'(A,F16.9)')    'ECCENTRICITY      = ', pek(2)
+      write(iunit,'(A,F16.6,A)')  'INCLINATION       = ', pek(3),
+     &                            ' [deg]'
+      write(iunit,'(A,F16.6,A)')  'RA_OF_ASC_NODE    = ', pek(4),
+     &                            ' [deg]'
+      write(iunit,'(A,F16.6,A)')  'ARG_OF_PERICENTER = ', pek(5),
+     &                            ' [deg]'
+      write(iunit,'(A,F16.6,A)')  'MEAN_ANOMALY      = ', pek(6),
+     &                            ' [deg]'
+
+      return
+      end
+
+c     ============================================================
       subroutine utc_now_epoch(epochstr, compact)
 c     Return current UTC wall-clock time via Fortran DATE_AND_TIME.
 c     epochstr (23) = YYYY-MM-DDTHH:MM:SS.mmm  (CCSDS epoch string)
@@ -920,6 +968,90 @@ c     Decompose fractional day to H:M:S.mmm using integer milliseconds
       write(epochstr,
      &      '(I4.4,A1,I2.2,A1,I2.2,A1,I2.2,A1,I2.2,A1,I2.2,A1,I3.3)')
      &      iyr,'-',imon,'-',iday,'T',ih,':',imin,':',isec,'.',ims
+
+      return
+      end
+
+c     ============================================================
+      subroutine read_oem(iunit, maxpts, traj_jd, traj_x, traj_xd,
+     &                    npts)
+c     Parse a CCSDS OEM v2.0 ASCII file.
+c     Reads the ephemeris block between DATA_START and DATA_STOP:
+c     each data line holds an epoch string (cols 1-23) followed by
+c     the position and velocity components X,Y,Z,X_DOT,Y_DOT,Z_DOT.
+c     Epochs are converted to Julian dates via parse_epoch/cal2jd.
+c     Returns at most maxpts points; npts is the number actually read.
+c     ============================================================
+      implicit double precision (a-h, o-z)
+      dimension traj_jd(maxpts), traj_x(3,maxpts), traj_xd(3,maxpts)
+      dimension cal(6)
+      character*200 line
+      logical       in_data
+
+      npts = 0
+      in_data = .false.
+
+ 10   continue
+         read(iunit, '(A)', end=99) line
+         line = adjustl(line)
+
+         if (.not. in_data) then
+            if (line(1:10) .eq. 'DATA_START') in_data = .true.
+            goto 10
+         end if
+
+         if (line(1:9) .eq. 'DATA_STOP') goto 99
+         if (len_trim(line) .eq. 0 .or. npts .ge. maxpts) goto 10
+
+         npts = npts + 1
+         call parse_epoch(line(1:23), cal)
+         call cal2jd(cal, traj_jd(npts))
+         read(line(24:), *) traj_x(1,npts),  traj_x(2,npts),
+     &                      traj_x(3,npts),
+     &                      traj_xd(1,npts), traj_xd(2,npts),
+     &                      traj_xd(3,npts)
+      goto 10
+
+ 99   return
+      end
+
+c     ============================================================
+      subroutine write_oem(iunit, creation_str, start_str, stop_str,
+     &                     traj_jd, traj_x, traj_xd, npts)
+c     Write a CCSDS OEM v2.0 ASCII file.
+c     Emits the header/metadata (CREATION_DATE, START_TIME, STOP_TIME)
+c     and the DATA_START/DATA_STOP ephemeris block: one line per
+c     buffered point with epoch (from traj_jd via jd2epoch) and the
+c     position/velocity components traj_x, traj_xd.
+c     ============================================================
+      implicit double precision (a-h, o-z)
+      character*23 creation_str, start_str, stop_str, epochstr
+      dimension traj_jd(npts), traj_x(3,npts), traj_xd(3,npts)
+
+      write(iunit,'(A)')     'CCSDS_OEM_VERS = 2.0'
+      write(iunit,'(A,A)')   'CREATION_DATE  = ', creation_str
+      write(iunit,'(A)')     'ORIGINATOR     = KSROP'
+      write(iunit,'(A)')     ''
+      write(iunit,'(A)')     'META_START'
+      write(iunit,'(A)')     'OBJECT_NAME    = SATELLITE'
+      write(iunit,'(A)')     'OBJECT_ID      = UNKNOWN'
+      write(iunit,'(A)')     'CENTER_NAME    = EARTH'
+      write(iunit,'(A)')     'REF_FRAME      = EME2000'
+      write(iunit,'(A)')     'TIME_SYSTEM    = UTC'
+      write(iunit,'(A,A)')   'START_TIME     = ', start_str
+      write(iunit,'(A,A)')   'STOP_TIME      = ', stop_str
+      write(iunit,'(A)')     'META_STOP'
+      write(iunit,'(A)')     ''
+      write(iunit,'(A)')     'DATA_START'
+      do i = 1, npts
+         call jd2epoch(traj_jd(i), epochstr)
+         write(iunit,103) epochstr,
+     &                traj_x(1,i),  traj_x(2,i),  traj_x(3,i),
+     &                traj_xd(1,i), traj_xd(2,i), traj_xd(3,i)
+      end do
+      write(iunit,'(A)') 'DATA_STOP'
+
+ 103  format(A23,3(1x,F16.6),3(1x,F14.9))  !OEM data line
 
       return
       end

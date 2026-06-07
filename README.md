@@ -358,6 +358,9 @@ Times integrator, step-size sensitivity, drag overhead, and EGM2008 file-read co
 | Subroutine | Description |
 |---|---|
 | `read_opm(iunit,x,xd,cal)` | CCSDS OPM v2.0 parser — extracts epoch and state vector |
+| `write_opm(iunit,epochstr,x,xd,pek)` | CCSDS OPM v2.0 writer — emits header, state vector and Keplerian elements |
+| `read_oem(iunit,maxpts,traj_jd,traj_x,traj_xd,npts)` | CCSDS OEM v2.0 parser — reads the `DATA_START`/`DATA_STOP` ephemeris block into Julian-date/position/velocity buffers |
+| `write_oem(iunit,creation_str,start_str,stop_str,traj_jd,traj_x,traj_xd,npts)` | CCSDS OEM v2.0 writer — emits header and `DATA_START`/`DATA_STOP` ephemeris block |
 | `parse_epoch(estr,cal)` | Parse `YYYY-MM-DDTHH:MM:SS.sss` → cal(6) |
 | `jd2epoch(djd,epochstr)` | Julian date → CCSDS epoch string |
 | `utc_now_epoch(epochstr,compact)` | Current UTC wall-clock → CCSDS epoch string and compact filename token |
@@ -411,3 +414,4 @@ Times integrator, step-size sensitivity, drag overhead, and EGM2008 file-read co
 | 2026-06-07 | Code-structure cleanup: removed dead subroutines `car2sph`, `sph2ks`, `car2ksnew` (~165 lines) and consolidated the 4×-duplicated sun/moon auxiliary computation into a shared `third_body_aux` subroutine, fixing a latent first-step sign-convention inconsistency in the luni-solar perturbation terms along the way (~300 fewer lines overall) |
 | 2026-06-07 | Fixed `cal2jd`: the time-of-day fields were read from the wrong `cal` indices, offsetting every output epoch/timestamp by ~84 days from the true input epoch (propagation itself — which runs on elapsed seconds — was unaffected; only the date *labels* were wrong) |
 | 2026-06-07 | Fixed a UTF-8 byte-order-mark in the tracked `input/input.DAT` that made `driver_KS.exe` crash immediately (`list-directed I/O syntax error`) on a fresh checkout |
+| 2026-06-07 | Moved CCSDS OPM/OEM file I/O out of `driver_KS.F` and into `Subrouts.F` as reusable subroutines: added `write_opm`, `read_oem`, `write_oem` alongside the existing `read_opm`; `driver_KS.F` now calls these instead of writing the records inline |

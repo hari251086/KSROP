@@ -266,34 +266,7 @@ c     -----------------------------------------------------------
       call jd2epoch(djulian, epochstr)
 
 c     --- CCSDS OPM v2.0 (initial epoch) — written immediately ---
-      write(5,'(A)')     'CCSDS_OPM_VERS = 2.0'
-      write(5,'(A,A)')   'CREATION_DATE  = ', epochstr
-      write(5,'(A)')     'ORIGINATOR     = KSROP'
-      write(5,'(A)')     ''
-      write(5,'(A)')     'META_START'
-      write(5,'(A)')     'OBJECT_NAME    = SATELLITE'
-      write(5,'(A)')     'OBJECT_ID      = UNKNOWN'
-      write(5,'(A)')     'CENTER_NAME    = EARTH'
-      write(5,'(A)')     'REF_FRAME      = EME2000'
-      write(5,'(A)')     'TIME_SYSTEM    = UTC'
-      write(5,'(A)')     'META_STOP'
-      write(5,'(A)')     ''
-      write(5,'(A)')     'STATE_VECTOR'
-      write(5,'(A,A)')   'EPOCH          = ', epochstr
-      write(5,'(A,F16.6,A)')  'X              = ', x(1),  ' [km]'
-      write(5,'(A,F16.6,A)')  'Y              = ', x(2),  ' [km]'
-      write(5,'(A,F16.6,A)')  'Z              = ', x(3),  ' [km]'
-      write(5,'(A,F16.9,A)')  'X_DOT          = ', xd(1), ' [km/s]'
-      write(5,'(A,F16.9,A)')  'Y_DOT          = ', xd(2), ' [km/s]'
-      write(5,'(A,F16.9,A)')  'Z_DOT          = ', xd(3), ' [km/s]'
-      write(5,'(A)')     ''
-      write(5,'(A)')     'KEPLERIAN_ELEMENTS'
-      write(5,'(A,F16.6,A)')  'SEMI_MAJOR_AXIS   = ', pek(1),' [km]'
-      write(5,'(A,F16.9)')    'ECCENTRICITY      = ', pek(2)
-      write(5,'(A,F16.6,A)')  'INCLINATION       = ', pek(3),' [deg]'
-      write(5,'(A,F16.6,A)')  'RA_OF_ASC_NODE    = ', pek(4),' [deg]'
-      write(5,'(A,F16.6,A)')  'ARG_OF_PERICENTER = ', pek(5),' [deg]'
-      write(5,'(A,F16.6,A)')  'MEAN_ANOMALY      = ', pek(6),' [deg]'
+      call write_opm(5, epochstr, x, xd, pek)
 
 c     --- Buffer initial state point (OEM written after run) ---
       idump = idump + 1
@@ -602,28 +575,8 @@ c     START_TIME / STOP_TIME use the actual propagated orbital epochs.
       call jd2epoch(traj_jd(1),     oem_start)
       call jd2epoch(traj_jd(idump), epoch_stop)
 
-      write(3,'(A)')     'CCSDS_OEM_VERS = 2.0'
-      write(3,'(A,A)')   'CREATION_DATE  = ', epochstr
-      write(3,'(A)')     'ORIGINATOR     = KSROP'
-      write(3,'(A)')     ''
-      write(3,'(A)')     'META_START'
-      write(3,'(A)')     'OBJECT_NAME    = SATELLITE'
-      write(3,'(A)')     'OBJECT_ID      = UNKNOWN'
-      write(3,'(A)')     'CENTER_NAME    = EARTH'
-      write(3,'(A)')     'REF_FRAME      = EME2000'
-      write(3,'(A)')     'TIME_SYSTEM    = UTC'
-      write(3,'(A,A)')   'START_TIME     = ', oem_start
-      write(3,'(A,A)')   'STOP_TIME      = ', epoch_stop
-      write(3,'(A)')     'META_STOP'
-      write(3,'(A)')     ''
-      write(3,'(A)')     'DATA_START'
-      do i = 1, idump
-         call jd2epoch(traj_jd(i), epochstr)
-         write(3,103) epochstr,
-     &                traj_x(1,i),  traj_x(2,i),  traj_x(3,i),
-     &                traj_xd(1,i), traj_xd(2,i), traj_xd(3,i)
-      end do
-      write(3,'(A)') 'DATA_STOP'
+      call write_oem(3, epochstr, oem_start, epoch_stop,
+     &               traj_jd, traj_x, traj_xd, idump)
       close(3)
       write(*,'(A,A)') 'OEM written: ', oem_fname
       deallocate(traj_jd, traj_x, traj_xd)
@@ -631,7 +584,6 @@ c     START_TIME / STOP_TIME use the actual propagated orbital epochs.
 
 c     format specifiers
  101  format(10f20.9)           !KS-regular elements (regular.out)
- 103  format(A23,3(1x,F16.6),3(1x,F14.9))  !OEM data line
  110  format(8f10.3)            !ATM.DAT scale height
  111  format(8e10.3)            !ATM.DAT density
 

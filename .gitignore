@@ -36,6 +36,9 @@
 # Linker dependency files
 *.d
 
+# ------- Large geopotential data (intentionally not tracked) -------
+input/EGM2008_to2190_TideFree
+
 # ------- Runtime output files (written to output/) -------
 output/KSROP_*.oem
 output/ksrop.opm
