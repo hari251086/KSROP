@@ -225,9 +225,20 @@ DATA_STOP
 | `STOP_TIME` | Orbital epoch of the last buffered state (exact, not estimated) |
 | Data line epochs | Orbital epoch at each completed integration step |
 
-**`nrev × istep + 1`** data lines — one per completed RKG step plus the initial state. The entire trajectory is held in memory during the run and written atomically after propagation completes. Position in km (F16.6), velocity in km/s (F14.9).
+**`nrev × istep + 1`** data lines — one per completed RKG step plus the initial state — *unless the run stops early* (see **Early Termination** below), in which case the OEM is truncated at the last useful state. The entire trajectory is held in memory during the run and written atomically after propagation completes (or stops). Position in km (F16.6), velocity in km/s (F14.9).
 
 For the production config (10 rev × 360 steps/rev) this produces **3,601 data lines**.
+
+### Early Termination — re-entry and divergence detection
+
+After every integration step, the propagator checks the freshly-computed altitude (`h_alt = R(1) - R_Earth`) and stops early — truncating the OEM and skipping the remaining steps/revolutions — under either of these conditions:
+
+| Condition | Trigger | Final OEM entry | Console message |
+|---|---|---|---|
+| **Re-entry** | `h_alt < 80 km` | The just-computed (finite) low-altitude state | `Re-entry occurred: altitude = <h_alt> km (< 80 km) at epoch <epoch>` |
+| **Divergence** | `h_alt` is non-finite (NaN), via the `x .ne. x` test | The last *valid* (finite) state — the NaN point is discarded | `Integration diverged (non-finite state); last valid epoch was <epoch>` |
+
+Both cases print a follow-up line (`Propagation stopped; ...`) and proceed straight to writing the OEM, so the file always ends with a finite, physically meaningful state — never with NaN garbage. Divergence typically occurs during a steep orbital decay where the fixed per-revolution eccentric-anomaly stepping cannot resolve an unresolvably fast low-perigee pass.
 
 ### `ksrop.opm` — Initial Keplerian elements (CCSDS OPM v2.0)
 
@@ -396,3 +407,4 @@ Times integrator, step-size sensitivity, drag overhead, and EGM2008 file-read co
 | 2026-06-06 | OEM output at every integration step (`nrev × istep + 1` data points) |
 | 2026-06-06 | OEM filename `KSROP_YYYYMMDDTHHMMSS.oem` and `CREATION_DATE` use current UTC wall-clock |
 | 2026-06-07 | Atmospheric drag model replaced with an oblate, co-rotating exponential atmosphere referenced to perigee conditions (ported from `KSJLSDNP2.F`'s physical model and logic) |
+| 2026-06-07 | Early-termination check added: propagation stops and truncates the OEM at the last useful state on re-entry (`altitude < 80 km`) or numerical divergence (non-finite state, `x .ne. x` NaN test) |
