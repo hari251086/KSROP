@@ -338,7 +338,31 @@ c     ============================================================
       return
       end
 
-c     ============================================================      
+c     ============================================================
+      subroutine third_body_aux(deg, x, tb, R1, amu_tb,
+     &                          Rtb1, RbyRtb, first_tb, cphi, cphi2)
+c     Distance, power-series ratios, leading coefficient, and phase
+c     cosine for one third body (sun or moon) at the satellite's
+c     current position. Shared by driver_KS's initial setup and
+c     per-step refresh so both use one consistent sign convention
+c     for first_tb.
+      implicit double precision (a-h,o-z)
+      dimension x(3), tb(3), RbyRtb(*)
+
+      Rtb1 = vmn(tb)
+      RbyRtb(1) = R1/Rtb1
+      first_tb = -amu_tb/Rtb1
+      cphi  = dotp3(x,tb)/(R1*Rtb1)
+      cphi2 = cphi*cphi
+
+      do i = 1,deg
+         RbyRtb(i+1) = RbyRtb(i)*RbyRtb(1)
+      end do
+
+      return
+      end
+
+c     ============================================================
       subroutine ks2ksr(y,u,us,E,cosE,sinE)
 c     Conversion from Cartesian to KS coordinates
 !     w: (un)perturbed angular frequency of harmonic oscillator
@@ -357,52 +381,10 @@ c     ============================================================
       return
       end
 
-c     ============================================================      
-      subroutine car2sph(x,sph)
-c     Conversion from Cartesian to Spherical coordinates
-!     sph(1): right ascension in radians
-!     sph(2): declination in radians
-!     sph(3): position magnitude
-c     ============================================================
-      implicit double precision(a - h, o - z)
-      dimension x(3),sph(3)
-
-      sph(3) = vmn(x)
-      sph(1) = atan3(x(2),x(1))
-      sph(2) = dasin(x(3)/sph(3))
-
-      return
-      end
-
-c     ============================================================      
-      subroutine sph2ks(sph,u)
-c     Conversion from Spherical to KS coordinates
-c     ============================================================
-      implicit double precision(a - h, o - z)
-      dimension sph(3),u(4)
-
-      pos_mag_root = dsqrt(sph(3))
-      
-      alby2 = sph(1)/2.d0
-      decby2 = sph(2)/2.d0
-
-!     Normalized
-      u(1) = dcos(decby2)*dcos(alby2)
-      u(2) = dcos(decby2)*dsin(alby2)
-      u(3) = dsin(decby2)*dcos(alby2)
-      u(4) = dsin(decby2)*dsin(alby2)
-
-      do i = 1,4
-         u(i) = u(i)*pos_mag_root
-      end do
-            
-      return
-      end
-
 c     ----------------------------------------
 c     Variable operations
 c     ----------------------------------------
-c     ============================================================      
+c     ============================================================
       subroutine u2uu(u,uu)
 c     u(i): KS variables
 !     uu(i): KS variables interchanged as u(i+2)
@@ -511,45 +493,6 @@ c     ===============================================
       return
       end
       
-c     ============================================================      
-      subroutine car2ksnew(x,xd,u,us,w)
-c     Conversion from Cartesian to KS coordinates
-!     w: (un)perturbed angular frequency of harmonic oscillator
-c     ============================================================
-      implicit double precision (a-h,o-z)
-      dimension u(4),us(4),x(3),xd(3)
-
-c      print *,x,xd
-      
-      pos_mag = vmn(x)
-
-      ks_mag = dsqrt(pos_mag)
-
-      ang_alpha = atan3(x(2),x(1))
-c      print *,ang_alpha
-      ang_delta = dasin(x(3)/pos_mag)
-c      print *,ang_delta
-      u(1) = dcos(ang_delta/2.d0)*dcos(ang_alpha/2.d0)
-      u(2) = dcos(ang_delta/2.d0)*dsin(ang_alpha/2.d0)
-      u(3) = dsin(ang_delta/2.d0)*dcos(ang_alpha/2.d0)
-      u(4) = dsin(ang_delta/2.d0)*dsin(ang_alpha/2.d0)
-
-      do i = 1,4
-
-         u(i) = u(i)*ks_mag
-         
-      end do
-
-      cnst=.25d0/w 
-
-      us(1)=(u(1)*xd(1)+u(2)*xd(2)+u(3)*xd(3))*cnst
-      us(2)=(-u(2)*xd(1)+u(1)*xd(2)+u(4)*xd(3))*cnst
-      us(3)=(-u(3)*xd(1)-u(4)*xd(2)+u(1)*xd(3))*cnst
-      us(4)=(u(4)*xd(1)-u(3)*xd(2)+u(2)*xd(3))*cnst
-
-      
-      return
-      end
 c     ============================================================
       subroutine cal2jd(cal,ddj)
       implicit double precision(a-h,o-z)
@@ -557,9 +500,9 @@ c     ============================================================
       iyr = cal(1)
       imon = cal(2)
       iday = cal(3)
-      ih = cal(1)
-      imin = cal(2)
-      isec = cal(3)
+      ih = cal(4)
+      imin = cal(5)
+      isec = cal(6)
       intmon1=(imon+9.0d0)/12.0d0
       intmon2=(275.0d0*imon)/9.0d0
       jyr=(7.0d0*(iyr+intmon1))/4.0d0
