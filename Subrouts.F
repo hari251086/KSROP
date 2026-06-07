@@ -1055,3 +1055,281 @@ c     ============================================================
 
       return
       end
+
+c     ============================================================
+      subroutine read_cdm(iunit, tca_cal, miss_dist, pc,
+     &                    x1, xd1, cov1, x2, xd2, cov2)
+c     Parse a CCSDS CDM (Conjunction Data Message) KVN v1.0 file.
+c     Extracts the relative-geometry summary -- TCA epoch (-> cal(6)
+c     via parse_epoch), MISS_DISTANCE and COLLISION_PROBABILITY (read
+c     as raw numeric values, no unit conversion -- same convention as
+c     read_opm; check the message's own [unit] brackets) -- and, for
+c     each OBJECT1 / OBJECT2 block, the state vector
+c     (X,Y,Z,X_DOT,Y_DOT,Z_DOT, in the block's REF_FRAME) and the
+c     lower-triangular 6x6 RTN-frame covariance (CR_R ... CNDOT_NDOT),
+c     expanded into a symmetric matrix ordered (R,T,N,RDOT,TDOT,NDOT).
+c     Lines without '=' and unrecognized keywords are silently skipped.
+c     miss_dist/pc are returned as -1 if absent from the message.
+c     ============================================================
+      implicit double precision (a-h, o-z)
+      dimension tca_cal(6), x1(3), xd1(3), cov1(6,6)
+      dimension x2(3), xd2(3), cov2(6,6)
+      character*200 line
+      character*80  key, valstr
+      integer       ieq, ibr, iobj, i, j
+
+      pc        = -1.0d0
+      miss_dist = -1.0d0
+      iobj      = 0
+      do i = 1, 6
+         do j = 1, 6
+            cov1(i,j) = 0.0d0
+            cov2(i,j) = 0.0d0
+         end do
+      end do
+
+ 10   continue
+         read(iunit, '(A)', end=99) line
+         line = adjustl(line)
+         ieq  = index(line, '=')
+         if (ieq .eq. 0) goto 10
+
+         key    = adjustl(line(1:ieq-1))
+         valstr = adjustl(line(ieq+1:))
+         ibr    = index(valstr, '[')
+         if (ibr .gt. 1) valstr = adjustl(valstr(1:ibr-1))
+
+c        Track which OBJECTn block we are in. 'OBJECT' is matched
+c        exactly so OBJECT_DESIGNATOR / OBJECT_NAME / OBJECT_ID etc
+c        (which carry free-text values, not OBJECT1/OBJECT2) are left
+c        for the default skip below.
+         if (key .eq. 'OBJECT') then
+            if (valstr(1:7) .eq. 'OBJECT1') then
+               iobj = 1
+            else if (valstr(1:7) .eq. 'OBJECT2') then
+               iobj = 2
+            end if
+         else if (key .eq. 'TCA') then
+            call parse_epoch(valstr, tca_cal)
+         else if (key .eq. 'MISS_DISTANCE') then
+            read(valstr, *) miss_dist
+         else if (key .eq. 'COLLISION_PROBABILITY') then
+            read(valstr, *) pc
+         else if (iobj .eq. 1) then
+            call cdm_object_field(key, valstr, x1, xd1, cov1)
+         else if (iobj .eq. 2) then
+            call cdm_object_field(key, valstr, x2, xd2, cov2)
+         end if
+      goto 10
+
+ 99   return
+      end
+
+c     ============================================================
+      subroutine cdm_object_field(key, valstr, x, xd, cov)
+c     Helper for read_cdm: match a single OBJECTn keyword/value pair
+c     against the state-vector and RTN-covariance keywords and store
+c     the parsed value into x, xd or the symmetric 6x6 covariance
+c     matrix cov (row/column order R, T, N, RDOT, TDOT, NDOT).
+c     Unrecognized keywords (object metadata strings, etc.) are
+c     silently ignored.
+c     ============================================================
+      implicit double precision (a-h, o-z)
+      character*(*) key, valstr
+      dimension x(3), xd(3), cov(6,6)
+      integer ir, ic
+
+      if (key .eq. 'X') then
+         read(valstr, *) x(1)
+      else if (key .eq. 'Y') then
+         read(valstr, *) x(2)
+      else if (key .eq. 'Z') then
+         read(valstr, *) x(3)
+      else if (key .eq. 'X_DOT') then
+         read(valstr, *) xd(1)
+      else if (key .eq. 'Y_DOT') then
+         read(valstr, *) xd(2)
+      else if (key .eq. 'Z_DOT') then
+         read(valstr, *) xd(3)
+      else
+         call cdm_cov_index(key, ir, ic)
+         if (ir .gt. 0) then
+            read(valstr, *) covval
+            cov(ir,ic) = covval
+            cov(ic,ir) = covval
+         end if
+      end if
+
+      return
+      end
+
+c     ============================================================
+      subroutine cdm_cov_index(key, ir, ic)
+c     Map a CDM lower-triangular RTN-covariance keyword (e.g. 'CR_R',
+c     'CNDOT_TDOT') to its (row,col) position ir,ic in a symmetric
+c     6x6 matrix ordered (R, T, N, RDOT, TDOT, NDOT). Returns ir = 0
+c     if the keyword is not a recognized covariance element (e.g.
+c     'CATALOG_NAME', 'COVARIANCE_METHOD').
+c     ============================================================
+      implicit double precision (a-h, o-z)
+      character*(*) key
+      integer ir, ic, iu, irow, icol
+      integer cdm_rtn_index
+      external cdm_rtn_index
+
+      ir = 0
+      ic = 0
+      if (key(1:1) .ne. 'C') return
+      iu = index(key, '_')
+      if (iu .le. 1) return
+
+      irow = cdm_rtn_index(key(2:iu-1))
+      icol = cdm_rtn_index(key(iu+1:len_trim(key)))
+      if (irow .eq. 0 .or. icol .eq. 0) return
+
+      ir = irow
+      ic = icol
+
+      return
+      end
+
+c     ============================================================
+      integer function cdm_rtn_index(lbl)
+c     Map an RTN-frame axis label (R, T, N, RDOT, TDOT, NDOT) to its
+c     position 1..6 in the (R,T,N,RDOT,TDOT,NDOT) ordering used for
+c     the CDM covariance matrix. Returns 0 if unrecognized.
+c     ============================================================
+      character*(*) lbl
+
+      if (lbl .eq. 'R') then
+         cdm_rtn_index = 1
+      else if (lbl .eq. 'T') then
+         cdm_rtn_index = 2
+      else if (lbl .eq. 'N') then
+         cdm_rtn_index = 3
+      else if (lbl .eq. 'RDOT') then
+         cdm_rtn_index = 4
+      else if (lbl .eq. 'TDOT') then
+         cdm_rtn_index = 5
+      else if (lbl .eq. 'NDOT') then
+         cdm_rtn_index = 6
+      else
+         cdm_rtn_index = 0
+      end if
+
+      return
+      end
+
+c     ============================================================
+      subroutine write_cdm(iunit, creation_str, tca_str,
+     &                     miss_dist, rel_speed, pc,
+     &                     name1, x1, xd1, cov1,
+     &                     name2, x2, xd2, cov2)
+c     Write a CCSDS CDM (Conjunction Data Message) v1.0 KVN file.
+c     Emits the header / relative-geometry block (CREATION_DATE, TCA,
+c     MISS_DISTANCE, RELATIVE_SPEED, COLLISION_PROBABILITY -- omitted
+c     if pc < 0) followed by one OBJECTn block per object via
+c     write_cdm_object: state vector (X,Y,Z,X_DOT,Y_DOT,Z_DOT, EME2000)
+c     and the lower-triangular 6x6 RTN covariance (CR_R ... CNDOT_NDOT)
+c     taken from the symmetric matrix cov, row/col order (R,T,N,
+c     RDOT,TDOT,NDOT).
+c     ============================================================
+      implicit double precision (a-h, o-z)
+      character*23  creation_str, tca_str
+      character*(*) name1, name2
+      dimension x1(3), xd1(3), cov1(6,6)
+      dimension x2(3), xd2(3), cov2(6,6)
+
+      write(iunit,'(A)')   'CCSDS_CDM_VERS = 1.0'
+      write(iunit,'(A,A)') 'CREATION_DATE  = ', creation_str
+      write(iunit,'(A)')   'ORIGINATOR     = KSROP'
+      write(iunit,'(A)')   ''
+      write(iunit,'(A,A)') 'TCA                   = ', tca_str
+      write(iunit,'(A,F14.6,A)') 'MISS_DISTANCE         = ',
+     &                            miss_dist, ' [km]'
+      write(iunit,'(A,F14.6,A)') 'RELATIVE_SPEED        = ',
+     &                            rel_speed, ' [km/s]'
+      if (pc .ge. 0.0d0) then
+         write(iunit,'(A,1PE14.6)') 'COLLISION_PROBABILITY = ', pc
+      end if
+      write(iunit,'(A)')   ''
+
+      call write_cdm_object(iunit, 1, name1, x1, xd1, cov1)
+      write(iunit,'(A)')   ''
+      call write_cdm_object(iunit, 2, name2, x2, xd2, cov2)
+
+      return
+      end
+
+c     ============================================================
+      subroutine write_cdm_object(iunit, iobj, name, x, xd, cov)
+c     Helper for write_cdm: emit one OBJECTn metadata, state-vector
+c     (X,Y,Z,X_DOT,Y_DOT,Z_DOT, EME2000) and lower-triangular RTN
+c     covariance (CR_R ... CNDOT_NDOT, row/col order R,T,N,RDOT,TDOT,
+c     NDOT) block, with units selected from the number of velocity
+c     ([km**2], [km**2/s] or [km**2/s**2]) axes in each element.
+c     ============================================================
+      implicit double precision (a-h, o-z)
+      character*(*) name
+      character*7   objstr
+      character*10  cdm_lbl(21)
+      character*16  unitstr
+      dimension x(3), xd(3), cov(6,6)
+      dimension irow(21), icol(21)
+      integer       iobj, irow, icol, k, nvel
+
+      data cdm_lbl /
+     &  'CR_R      ', 'CT_R      ', 'CT_T      ',
+     &  'CN_R      ', 'CN_T      ', 'CN_N      ',
+     &  'CRDOT_R   ', 'CRDOT_T   ', 'CRDOT_N   ', 'CRDOT_RDOT',
+     &  'CTDOT_R   ', 'CTDOT_T   ', 'CTDOT_N   ',
+     &  'CTDOT_RDOT', 'CTDOT_TDOT',
+     &  'CNDOT_R   ', 'CNDOT_T   ', 'CNDOT_N   ',
+     &  'CNDOT_RDOT', 'CNDOT_TDOT', 'CNDOT_NDOT' /
+      data irow / 1,2,2, 3,3,3, 4,4,4,4, 5,5,5,5,5, 6,6,6,6,6,6 /
+      data icol / 1,1,2, 1,2,3, 1,2,3,4, 1,2,3,4,5, 1,2,3,4,5,6 /
+
+      if (iobj .eq. 1) then
+         objstr = 'OBJECT1'
+      else
+         objstr = 'OBJECT2'
+      end if
+
+      write(iunit,'(A,A)')        'OBJECT               = ', objstr
+      write(iunit,'(A,A)')        'OBJECT_DESIGNATOR    = ', name
+      write(iunit,'(A)')          'CATALOG_NAME         = UNKNOWN'
+      write(iunit,'(A,A)')        'OBJECT_NAME          = ', name
+      write(iunit,'(A)')          'EPHEMERIS_NAME       = NONE'
+      write(iunit,'(A)')          'COVARIANCE_METHOD    = CALCULATED'
+      write(iunit,'(A)')          'MANEUVERABLE         = N/A'
+      write(iunit,'(A)')          'REF_FRAME            = EME2000'
+      write(iunit,'(A,F16.6,A)')  'X                    = ', x(1),
+     &                            ' [km]'
+      write(iunit,'(A,F16.6,A)')  'Y                    = ', x(2),
+     &                            ' [km]'
+      write(iunit,'(A,F16.6,A)')  'Z                    = ', x(3),
+     &                            ' [km]'
+      write(iunit,'(A,F16.9,A)')  'X_DOT                = ', xd(1),
+     &                            ' [km/s]'
+      write(iunit,'(A,F16.9,A)')  'Y_DOT                = ', xd(2),
+     &                            ' [km/s]'
+      write(iunit,'(A,F16.9,A)')  'Z_DOT                = ', xd(3),
+     &                            ' [km/s]'
+
+      do k = 1, 21
+         nvel = 0
+         if (irow(k) .gt. 3) nvel = nvel + 1
+         if (icol(k) .gt. 3) nvel = nvel + 1
+         if (nvel .eq. 0) then
+            unitstr = ' [km**2]'
+         else if (nvel .eq. 1) then
+            unitstr = ' [km**2/s]'
+         else
+            unitstr = ' [km**2/s**2]'
+         end if
+         write(iunit,'(A,A,1PE14.6,A)') cdm_lbl(k), ' = ',
+     &                cov(irow(k),icol(k)), unitstr
+      end do
+
+      return
+      end

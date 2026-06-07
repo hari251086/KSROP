@@ -361,6 +361,9 @@ Times integrator, step-size sensitivity, drag overhead, and EGM2008 file-read co
 | `write_opm(iunit,epochstr,x,xd,pek)` | CCSDS OPM v2.0 writer — emits header, state vector and Keplerian elements |
 | `read_oem(iunit,maxpts,traj_jd,traj_x,traj_xd,npts)` | CCSDS OEM v2.0 parser — reads the `DATA_START`/`DATA_STOP` ephemeris block into Julian-date/position/velocity buffers |
 | `write_oem(iunit,creation_str,start_str,stop_str,traj_jd,traj_x,traj_xd,npts)` | CCSDS OEM v2.0 writer — emits header and `DATA_START`/`DATA_STOP` ephemeris block |
+| `read_cdm(iunit,tca_cal,miss_dist,pc,x1,xd1,cov1,x2,xd2,cov2)` | CCSDS CDM v1.0 parser — extracts TCA, miss distance, collision probability, and each OBJECT1/OBJECT2 state vector + lower-triangular RTN covariance (expanded to a symmetric 6×6, ordered R,T,N,RDOT,TDOT,NDOT); raw numeric values, no unit conversion (cf. `read_opm`) |
+| `write_cdm(iunit,creation_str,tca_str,miss_dist,rel_speed,pc,name1,x1,xd1,cov1,name2,x2,xd2,cov2)` | CCSDS CDM v1.0 writer — emits header/relative-geometry block and one OBJECTn block per object (state vector + RTN covariance) via `write_cdm_object` |
+| `cdm_object_field`, `cdm_cov_index`, `cdm_rtn_index` | Internal helpers for `read_cdm`/`write_cdm`: map OBJECTn keyword/value pairs and CDM covariance keywords (`CR_R` … `CNDOT_NDOT`) to/from the symmetric 6×6 RTN matrix |
 | `parse_epoch(estr,cal)` | Parse `YYYY-MM-DDTHH:MM:SS.sss` → cal(6) |
 | `jd2epoch(djd,epochstr)` | Julian date → CCSDS epoch string |
 | `utc_now_epoch(epochstr,compact)` | Current UTC wall-clock → CCSDS epoch string and compact filename token |
@@ -415,3 +418,4 @@ Times integrator, step-size sensitivity, drag overhead, and EGM2008 file-read co
 | 2026-06-07 | Fixed `cal2jd`: the time-of-day fields were read from the wrong `cal` indices, offsetting every output epoch/timestamp by ~84 days from the true input epoch (propagation itself — which runs on elapsed seconds — was unaffected; only the date *labels* were wrong) |
 | 2026-06-07 | Fixed a UTF-8 byte-order-mark in the tracked `input/input.DAT` that made `driver_KS.exe` crash immediately (`list-directed I/O syntax error`) on a fresh checkout |
 | 2026-06-07 | Moved CCSDS OPM/OEM file I/O out of `driver_KS.F` and into `Subrouts.F` as reusable subroutines: added `write_opm`, `read_oem`, `write_oem` alongside the existing `read_opm`; `driver_KS.F` now calls these instead of writing the records inline |
+| 2026-06-07 | Added CCSDS CDM v1.0 (Conjunction Data Message) I/O to `Subrouts.F`: `read_cdm`/`write_cdm` plus internal helpers `cdm_object_field`, `cdm_cov_index`, `cdm_rtn_index`, parsing/emitting the relative-geometry summary and each OBJECT1/OBJECT2 state vector + lower-triangular RTN covariance; `test_subrouts.F` gained a read/roundtrip test against the public CCSDS 508.0-B-1 sample CDM (`input/cdm_sample.kvn`) |

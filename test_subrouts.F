@@ -10,6 +10,8 @@ c       INTPOL                            (interpolation)
 c       aLegP  P2/P3/P4                  (Legendre polynomials)
 c       car2ks -> ks2car  roundtrip       (KS transform)
 c       car2oe            elements        (orbital elements)
+c       read_cdm          public sample CDM (CCSDS 508.0-B-1 Annex)
+c       write_cdm/read_cdm  roundtrip
 c     -------------------------------------------------------
       program test_subrouts
 
@@ -25,6 +27,11 @@ c     --- declarations ---
       dimension vleg(2500)
       dimension xr(3), xdr(3), ur(4), usr(4), xout(3), xdout(3)
       dimension xoe(3), xdoe(3), pek(7)
+      dimension tca_cal(6), x1(3), xd1(3), cov1(6,6)
+      dimension x2(3), xd2(3), cov2(6,6)
+      dimension tca_cal2(6), x1b(3), xd1b(3), cov1b(6,6)
+      dimension x2b(3), xd2b(3), cov2b(6,6)
+      character*23 creation_str, tca_str
       integer npass, nfail
 
 c     --- initialise common block (must match const_new.dat) ---
@@ -201,6 +208,97 @@ c     pek(3..7) are returned in degrees by car2oe
      &            pek(2), e_test, 1.d-4, npass, nfail)
       call assert('car2oe  i = 45 deg',
      &            pek(3), ang_i, 1.d-5, npass, nfail)
+
+c     ==============================================================
+c     19-30. read_cdm  on a public sample CDM
+c     Sample is the CCSDS 508.0-B-1 (Annex/Section 4) example message,
+c     a JSPOC conjunction notice for SATELLITE A vs FENGYUN 1C DEB,
+c     stored at input/cdm_sample.kvn. Expected values below are taken
+c     directly from that public message. read_cdm stores raw numeric
+c     values without unit conversion (mirroring read_opm): state
+c     vectors are in km/km-s as published, covariances in m**2 family.
+c     ==============================================================
+      open(unit=21, file='input/cdm_sample.kvn', status='old')
+      call read_cdm(21, tca_cal, miss_dist, pc,
+     &              x1, xd1, cov1, x2, xd2, cov2)
+      close(21)
+
+      call assert('read_cdm  TCA year  = 2010',
+     &            tca_cal(1), 2010.d0, eps10, npass, nfail)
+      call assert('read_cdm  TCA day   = 13',
+     &            tca_cal(3), 13.d0, eps10, npass, nfail)
+      call assert('read_cdm  MISS_DISTANCE = 715 m',
+     &            miss_dist, 715.d0, eps10, npass, nfail)
+      call assert('read_cdm  COLLISION_PROBABILITY = 4.835E-05',
+     &            pc, 4.835d-05, 1.d-9, npass, nfail)
+
+      call assert('read_cdm  OBJECT1 X     = 2570.097065 km',
+     &            x1(1), 2570.097065d0, eps8, npass, nfail)
+      call assert('read_cdm  OBJECT1 Z_DOT = -3.526774282 km/s',
+     &            xd1(3), -3.526774282d0, eps8, npass, nfail)
+      call assert('read_cdm  OBJECT1 CT_T  = 2.533E+03 m**2',
+     &            cov1(2,2), 2.533d+03, 1.d-6, npass, nfail)
+      call assert('read_cdm  OBJECT1 CRDOT_RDOT = 5.744E-03',
+     &            cov1(4,4), 5.744d-03, 1.d-9, npass, nfail)
+      call assert('read_cdm  OBJECT1 covariance symmetric (CT_R)',
+     &            cov1(2,1), cov1(1,2), eps10, npass, nfail)
+
+      call assert('read_cdm  OBJECT2 X      = 2569.540800 km',
+     &            x2(1), 2569.540800d0, eps8, npass, nfail)
+      call assert('read_cdm  OBJECT2 Y_DOT  = -6.007247516 km/s',
+     &            xd2(2), -6.007247516d0, eps8, npass, nfail)
+      call assert('read_cdm  OBJECT2 CNDOT_NDOT = 5.178E-05',
+     &            cov2(6,6), 5.178d-05, 1.d-10, npass, nfail)
+      call assert('read_cdm  OBJECT2 covariance symmetric (CN_T)',
+     &            cov2(3,2), cov2(2,3), eps10, npass, nfail)
+
+c     ==============================================================
+c     31-40. write_cdm -> read_cdm  roundtrip
+c     Re-emit the parsed sample as a new CDM (output/cdm_roundtrip.kvn)
+c     and re-parse it; the recovered fields must match the originally
+c     parsed values. TCA/CREATION_DATE strings are supplied directly
+c     (bypassing cal2jd/jd2epoch) so this test stays isolated from the
+c     known cal2jd epoch issue tracked separately for driver_KS. Like
+c     read_opm/write_opm, neither routine converts units -- write_cdm
+c     labels fields with its fixed default brackets ([km],[km**2],...)
+c     regardless of the units the input numbers actually carry, so the
+c     roundtrip checks numeric fidelity only, not unit semantics.
+c     ==============================================================
+      creation_str = '2026-06-07T00:00:00.000'
+      tca_str      = '2010-03-13T22:37:52.618'
+
+      open(unit=22, file='output/cdm_roundtrip.kvn', status='replace')
+      call write_cdm(22, creation_str, tca_str, miss_dist,
+     &               14762.d0, pc,
+     &               'SATELLITE A',     x1, xd1, cov1,
+     &               'FENGYUN 1C DEB',  x2, xd2, cov2)
+      close(22)
+
+      open(unit=22, file='output/cdm_roundtrip.kvn', status='old')
+      call read_cdm(22, tca_cal2, miss_dist2, pc2,
+     &              x1b, xd1b, cov1b, x2b, xd2b, cov2b)
+      close(22)
+
+      call assert('roundtrip  TCA day matches',
+     &            tca_cal2(3), tca_cal(3), eps10, npass, nfail)
+      call assert('roundtrip  TCA seconds match',
+     &            tca_cal2(6), tca_cal(6), 1.d-3, npass, nfail)
+      call assert('roundtrip  MISS_DISTANCE matches',
+     &            miss_dist2, miss_dist, 1.d-6, npass, nfail)
+      call assert('roundtrip  COLLISION_PROBABILITY matches',
+     &            pc2, pc, 1.d-9, npass, nfail)
+      call assert('roundtrip  OBJECT1 X matches',
+     &            x1b(1), x1(1), eps8, npass, nfail)
+      call assert('roundtrip  OBJECT1 Z_DOT matches',
+     &            xd1b(3), xd1(3), eps8, npass, nfail)
+      call assert('roundtrip  OBJECT1 CT_T matches',
+     &            cov1b(2,2), cov1(2,2), 1.d-6, npass, nfail)
+      call assert('roundtrip  OBJECT1 CRDOT_RDOT matches',
+     &            cov1b(4,4), cov1(4,4), 1.d-9, npass, nfail)
+      call assert('roundtrip  OBJECT2 X matches',
+     &            x2b(1), x2(1), eps8, npass, nfail)
+      call assert('roundtrip  OBJECT2 CNDOT_NDOT matches',
+     &            cov2b(6,6), cov2(6,6), 1.d-10, npass, nfail)
 
 c     ==============================================================
 c     Summary
