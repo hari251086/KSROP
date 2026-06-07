@@ -13,7 +13,7 @@ Orbit propagation using **Kustaanheimo–Stiefel (KS) regular elements** with a 
 |---|---|---|
 | Earth oblateness (Jn) | Active | EGM2008 model, configurable up to degree 2190 |
 | Luni-solar gravity | Active | Sun and Moon position vectors, configurable degree |
-| Atmospheric drag | Active | Oblate exponential model, tabulated density (ATM.DAT) |
+| Atmospheric drag | Active | Oblate, co-rotating exponential atmosphere referenced to perigee conditions; tabulated density (ATM.DAT) |
 | Solar radiation pressure | Planned | Cannon-ball model (not yet implemented) |
 
 ---
@@ -395,3 +395,4 @@ Times integrator, step-size sensitivity, drag overhead, and EGM2008 file-read co
 | 2026-06-06 | OEM trajectory buffered in memory; written atomically after run; `STOP_TIME` is exact final epoch |
 | 2026-06-06 | OEM output at every integration step (`nrev × istep + 1` data points) |
 | 2026-06-06 | OEM filename `KSROP_YYYYMMDDTHHMMSS.oem` and `CREATION_DATE` use current UTC wall-clock |
+| 2026-06-07 | Atmospheric drag model replaced with an oblate, co-rotating exponential atmosphere referenced to perigee conditions (ported from `KSJLSDNP2.F`'s physical model and logic) |

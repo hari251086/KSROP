@@ -7,8 +7,10 @@ c     with numerical integrator RKG4. (Earth)
 c     Perturbations included are:
 c     - Earth's oblateness ( up to 2190th degree )
 c     - Luni-solar perturbations
-c     - Atmospheric drag ( Oblate exponential atmosphere,
-c       tabulated density model via ATM.DAT )
+c     - Atmospheric drag ( Oblate, co-rotating exponential
+c       atmosphere referenced to perigee conditions, tabulated
+c       density model via ATM.DAT -- same physical model and
+c       logic as KSJLSDNP2.F )
 c     To be added
 c     - Solar radiation pressure (cannon ball)
 c     -------------------------------------------------------------
@@ -72,6 +74,19 @@ c     Drag: atmosphere tables and KS drag perturbation vectors
       dimension qdrag(4),p_drag(3)
 c     IDRAG: integer flag (0=off, 1=on); default integer via implicit i-n
       integer IDRAG
+c     Drag model state (oblate, co-rotating exponential atmosphere
+c     referenced to perigee conditions -- same physical model and
+c     logic as KSJLSDNP2.F). The "_dg" quantities are the per-revolution
+c     reference elements/parameters (held fixed through the revolution);
+c     EA_dg (eccentric anomaly) and EC_dg (eccentricity) are refreshed
+c     once per converged integration step.
+      double precision A_dg,EC_dg,AI_dg,SOMGA_dg,EA_dg
+      double precision SI_dg,CSI_dg,SIOMGA_dg,VIPP_dg,DE_dg
+      double precision RREQ_dg,SQ_dg,HSQ_dg
+      double precision RHOPI_dg,H_dg,BETA_dg,RPO_dg,VPO_dg
+      double precision F_dg,XX_dg,XXX_dg,C_dg
+      double precision SEA_dg,CEA_dg,TER_dg,TER2_dg
+      double precision CSEF_dg,SIEF_dg,FA_dg
 c     OEM/OPM epoch strings (YYYY-MM-DDTHH:MM:SS.sss = 23 chars)
       character*23 epochstr, epoch_stop, oem_start
 c     OEM filename: output/KSROP_YYYYMMDDTHHMMSS.oem  (32 chars)
@@ -311,21 +326,81 @@ c     --- Buffer initial state point (OEM written after run) ---
 
 c     Integration
       do ik = 1,nrev            !Revolutions
+
+c     -----------------------------------------------------------
+c     Drag: per-revolution reference setup
+c     Oblate, co-rotating exponential atmosphere referenced to
+c     perigee conditions (same physical model as KSJLSDNP2.F).
+c     The reference orbital elements and atmosphere/rotation
+c     parameters below are evaluated once per revolution from the
+c     osculating elements at the start of the revolution, and held
+c     fixed through all of its integration steps.
+c     -----------------------------------------------------------
+         call car2oe(x,xd,pek)
+         A_dg     = pek(1)*1.d3       ! semi-major axis: km -> m
+         EC_dg    = pek(2)
+         AI_dg    = pek(3)*d2r        ! inclination: deg -> rad
+         SOMGA_dg = pek(5)*d2r        ! argument of perigee: deg -> rad
+         EA_dg    = pek(7)*d2r        ! eccentric anomaly: deg -> rad
+
+c     Eccentric-anomaly step that advances EA_dg to the next
+c     perigee/apogee crossing over the revolution's istep steps
+         VIPP_dg = 4.d0
+         if (EA_dg .lt. pi) VIPP_dg = 2.d0
+         DE_dg = (VIPP_dg*pi - EA_dg)/istep
+
+         SI_dg     = dsin(AI_dg)
+         CSI_dg    = dcos(AI_dg)
+         SIOMGA_dg = dsin(SOMGA_dg)
+
+c     Perigee altitude above the oblate Earth (drag is active for
+c     the revolution only when this is below 500 km)
+         RREQ_dg = R_Earth*1.d3*(1.d0 - SI_dg*SI_dg*SIOMGA_dg*SIOMGA_dg
+     &             *EPS_f)
+         SQ_dg  = A_dg*(1.d0 - EC_dg)
+         HSQ_dg = SQ_dg - RREQ_dg
+
+         if (HSQ_dg .le. 500.d3) then
+c     Reference density/scale-height at perigee, the rotating-
+c     atmosphere correction factor F_dg, and the oblateness/
+c     eccentricity exponent terms C_dg, XXX_dg used each step
+            call INTPOL(ALT_atm, DEN_atm, ndim_atm, HSQ_dg, RHOPI_dg)
+            call INTPOL(ALT_atm, SCH_atm, ndim_atm, HSQ_dg, H_dg)
+            BETA_dg = 1.d0/H_dg
+            RPO_dg  = SQ_dg
+            VPO_dg  = dsqrt(amue*1.d9*(2.d0/RPO_dg - 1.d0/A_dg))
+            F_dg    = (1.d0 - RPO_dg*WE_rot*FR_rot*CSI_dg/VPO_dg)**2
+            XX_dg   = A_dg*EC_dg
+            XXX_dg  = BETA_dg*XX_dg
+            C_dg    = EPS_f*BETA_dg*RPO_dg*SI_dg*SI_dg*0.5d0
+         end if
+
          do ki = 1,istep        !Steps
  60         continue
             call u2uu(u,uu)
 
 c     -----------------------------------------------------------
 c     Atmospheric drag perturbation
+c     Local density = perigee-reference density (RHOPI_dg) times
+c     an exponential correction (TER_dg) for the satellite's true
+c     anomaly, orbital oblateness/eccentricity (C_dg, XXX_dg), and
+c     a co-rotating-atmosphere correction (F_dg) -- same physical
+c     model and logic as KSJLSDNP2.F.
 c     Compute drag acceleration p_drag(3) in km/s^2, then
 c     transform to KS space via the L(u) matrix: qdrag(4) = L(u)*p_drag
 c     -----------------------------------------------------------
-            h_drag = (R(1) - R_Earth) * 1000.d0  ! altitude in m
-            if (IDRAG .eq. 1 .and. h_drag .lt. 500.d3) then
-               call INTPOL(ALT_atm, DEN_atm, ndim_atm, h_drag, rho_drag)
-c     DENS = -(rho/(2*BN))*|v|*1e-7 gives drag scale factor in km/s^2
-c     (unit factor matches KSJLSDNP2.F convention: rho[kg/m3],v[km/s])
-               DENS = -rho_drag * V / (BN * 2.d0) * 1.d-7
+            if (IDRAG .eq. 1 .and. HSQ_dg .le. 500.d3) then
+               SEA_dg  = dsin(EA_dg)
+               CEA_dg  = dcos(EA_dg)
+               TER_dg  = 1.d0 - EC_dg*CEA_dg
+               CSEF_dg = (CEA_dg - EC_dg)/TER_dg
+               SIEF_dg = SEA_dg*dsqrt(1.d0 - EC_dg*EC_dg)/TER_dg
+               FA_dg   = atan3(SIEF_dg,CSEF_dg)
+               TER2_dg = dcos(SOMGA_dg)**2
+     &                 - dcos(SOMGA_dg+FA_dg)**2
+               TER_dg  = dexp(-2.d0*C_dg*TER2_dg
+     &                  - XXX_dg*(1.d0-CEA_dg))
+               DENS = -F_dg*RHOPI_dg*TER_dg*V/(BN*2.d0)*1.d-7
                do i = 1,3
                   p_drag(i) = DENS * xd(i)
                end do
@@ -528,6 +603,13 @@ c     -----------------------------------------------------------
             Br = y(5)*y(6)-y(4)*y(7)+y(3)*y(8)-y(2)*y(9)
             if (I_rkg .le. 1) goto 60
  70         continue
+c     Refresh the drag-model eccentricity from the latest osculating
+c     elements (pek, just recomputed above for the converged state)
+c     and advance the eccentric anomaly by the fixed per-revolution
+c     step -- mirrors KSJLSDNP2.F's "EAR=EA; ...; EA=EAR+DE"
+            EC_dg = pek(2)
+            EA_dg = EA_dg + DE_dg
+
             E_0 = E_0+dE_0
             iE = dint(E_0*r2d)
 
