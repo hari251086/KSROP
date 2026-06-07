@@ -203,28 +203,10 @@ c     -----------------------------------------------------------
       ObyR(1) = 1.d0/R(1)
 
 !     Third-body terms
-      Rs(1) = vmn(ts)
-      Rm(1) = vmn(tm)
-      RbyRs(1) = R(1)/Rs(1)
-      RbyRm(1) = R(1)/Rm(1)
-      first_s = amuS/Rs(1)
-      first_m = amuM/Rm(1)
-      do i = 1, nsun_deg
-         RbyRs(i+1) = RbyRs(i)*RbyRs(1)
-      end do
-      do i = 1, nmoon_deg
-         RbyRm(i+1) = RbyRm(i)*RbyRm(1)
-      end do
-      ph_s = 0.d0
-      ph_m = 0.d0
-      do i = 1,3
-         ph_s = ph_s + x(i) * ts(i)
-         ph_m = ph_m + x(i) * tm(i)
-      end do
-      cphi_s = ph_s/(R(1) * Rs(1))
-      cphi_m = ph_m/(R(1) * Rm(1))
-      cphi_s2 = cphi_s  * cphi_s
-      cphi_m2 = cphi_m  * cphi_m
+      call third_body_aux(nsun_deg,  x, ts, R(1), amuS,
+     &                    Rs(1), RbyRs, first_s, cphi_s, cphi_s2)
+      call third_body_aux(nmoon_deg, x, tm, R(1), amuM,
+     &                    Rm(1), RbyRm, first_m, cphi_m, cphi_m2)
 
       do i = 1,ngeo_deg
          ObyR(i+1) = ObyR(i)*ObyR(1)
@@ -244,13 +226,13 @@ c     -----------------------------------------------------------
       end do
 
       do i = 2,nsun_deg
-         cn_s(i) = -first_s * RbyRs(i)
+         cn_s(i) = first_s * RbyRs(i)
          V_p(i) = cn_s(i) * sleg(i+1)
          V_pot = V_pot + V_p(i)
       end do
 
       do i = 2,nmoon_deg
-         cn_m(i) = -first_m * RbyRm(i)
+         cn_m(i) = first_m * RbyRm(i)
          V_p(i) = cn_m(i) * oleg(i+1)
          V_pot = V_pot + V_p(i)
       end do
@@ -275,8 +257,6 @@ c     -----------------------------------------------------------
          y(i+1) = u(i)
          y(i+5) = 2.d0*us(i)
       end do
-
-      Br = y(5)*y(6)-y(4)*y(7)+y(3)*y(8)-y(2)*y(9)
 
       sie = dsin(E/2.d0)
       cse = dcos(E/2.d0)
@@ -539,70 +519,17 @@ c     -----------------------------------------------------------
                ZbyR(i+1) = ZbyR(i)*ZbyR(1)
                ObyR(i+1) = ObyR(i)*ObyR(1)
             end do
-            do i = 2,ngeo_deg
-               cn_j(i) = amue*Re(i)*c_j(i)*ObyR(i+1)
-            end do
-            if (ngeo_deg .gt. 1) then
-               call aLegP(ngeo_deg,ZbyR(1),aleg)
-               V_pot = 0.d0
-               do i = 2,ngeo_deg
-                  V_p(i) = cn_j(i)*aleg(i+1)
-                  V_pot = V_pot+V_p(i)
-               end do
-            end if
-
             FracJd = T/86400.d0
             djulian1 = djulian + FracJd
             call solarnpv(djulian1, ts)
             call lunarpv(djulian1, tm)
 
-            Rs(1) = vmn(ts)
-            Rm(1) = vmn(tm)
-            RbyRs(1) = R(1)/Rs(1)
-            RbyRm(1) = R(1)/Rm(1)
-            first_s = -amuS/Rs(1)
-            first_m = -amuM/Rm(1)
+            call third_body_aux(nsun_deg,  x, ts, R(1), amuS,
+     &                          Rs(1), RbyRs, first_s, cphi_s, cphi_s2)
+            call third_body_aux(nmoon_deg, x, tm, R(1), amuM,
+     &                          Rm(1), RbyRm, first_m, cphi_m, cphi_m2)
 
-            do i = 1, nsun_deg
-               RbyRs(i+1) = RbyRs(i)*RbyRs(1)
-            end do
-            do i = 1, nmoon_deg
-               RbyRm(i+1) = RbyRm(i)*RbyRm(1)
-            end do
-
-            ph_s = 0.d0
-            ph_m = 0.d0
-            do i = 1,3
-               ph_s = ph_s + x(i) * ts(i)
-               ph_m = ph_m + x(i) * tm(i)
-            end do
-
-            cphi_s = ph_s/(R(1) * Rs(1))
-            cphi_m = ph_m/(R(1) * Rm(1))
-
-            cphi_s2 = cphi_s  * cphi_s
-            cphi_m2 = cphi_m  * cphi_m
-
-            if (nsun_deg  .gt. 1) then
-               call aLegP(nsun_deg,cphi_s,sleg)
-               do i = 2,nsun_deg
-                  cn_s(i) = first_s * RbyRs(i)
-                  V_p(i)  = cn_s(i) * sleg(i+1)
-                  V_pot   = V_pot + V_p(i)
-               end do
-            end if
-            if (nmoon_deg .gt. 1) then
-               call aLegP(nmoon_deg,cphi_m,oleg)
-               do i = 2,nmoon_deg
-                  cn_m(i) = first_m * RbyRm(i)
-                  V_p(i)  = cn_m(i) * oleg(i+1)
-                  V_pot   = V_pot + V_p(i)
-               end do
-            end if
-
-            Br = y(5)*y(6)-y(4)*y(7)+y(3)*y(8)-y(2)*y(9)
             if (I_rkg .le. 1) goto 60
- 70         continue
 c     Refresh the drag-model eccentricity from the latest osculating
 c     elements (pek, just recomputed above for the converged state)
 c     and advance the eccentric anomaly by the fixed per-revolution
