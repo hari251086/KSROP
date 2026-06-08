@@ -11,8 +11,7 @@ c     - Atmospheric drag ( Oblate, co-rotating exponential
 c       atmosphere referenced to perigee conditions, tabulated
 c       density model via ATM.DAT -- same physical model and
 c       logic as KSJLSDNP2.F )
-c     To be added
-c     - Solar radiation pressure (cannon ball)
+c     - Solar radiation pressure (cannon-ball model, ported from KSJLSDNP2.F)
 c     -------------------------------------------------------------
 c     Author: Harishkumar Sellamuthu
 c     hari251086@gmail.com
@@ -25,6 +24,7 @@ c     Initial date in yyyy,mm,dd,hh,mm,ss (to be included)
 c     Number of revolutions, number of steps, tolerance (10^-15 is default)
 c     Force model flags: n_force(1)=geo, n_force(2)=sun, n_force(3)=moon
 c     Drag params: BN(kg/m2), IDRAG(0/1), WE_rot(rad/s), EPS_f, FR_rot
+c     SRP params: CR(reflectivity), AM(m2/kg), IPSR(0/1), ISHAD(0=none/1=cyl/2=cone)
 c     -------------------------------------------------------------c
 c     Compiling with Intel Fortran compiler in command line:
 c     ifort <driver_File>.F <Subroutines_File>.F
@@ -87,6 +87,9 @@ c     once per converged integration step.
       double precision F_dg,XX_dg,XXX_dg,C_dg
       double precision SEA_dg,CEA_dg,TER_dg,TER2_dg
       double precision CSEF_dg,SIEF_dg,FA_dg
+c     SRP: cannonball SRP perturbation (ported from KSJLSDNP2.F)
+      dimension p_srp(3), qsrp(4), r_srp(3)
+      integer IPSR, ISHAD
 c     OEM/OPM epoch strings (YYYY-MM-DDTHH:MM:SS.sss = 23 chars)
       character*23 epochstr, epoch_stop, oem_start
 c     OEM filename: output/KSROP_YYYYMMDDTHHMMSS.oem  (32 chars)
@@ -113,6 +116,7 @@ c     Output files (unit 3 opened later with timestamped filename)
 
       read(1,*) amue,R_Earth,AU,amuS,amuM
       read(1,*) ngeo_deg,nsun_deg,nmoon_deg
+      read(1,*) PSR_srp
 
 c     Read initial state (position, velocity, epoch) from OPM file
       call read_opm(8, x, xd, cal)
@@ -124,6 +128,9 @@ c     Read simulation parameters from input.dat
 c     Drag parameters: ballistic coeff (kg/m2), drag on/off,
 c     Earth rotation rate (rad/s), Earth flattening, rotation factor
       read(2,*) BN, IDRAG, WE_rot, EPS_f, FR_rot
+c     SRP parameters: reflectivity coeff, area-to-mass (m^2/kg),
+c     SRP on/off, shadow model (0=always sunlit, 1=cylindrical, 2=conical)
+      read(2,*) CR_srp, AM_srp, IPSR, ISHAD
 
       allocate(traj_jd(nrev*istep+1),
      &         traj_x(3,nrev*istep+1),
@@ -158,6 +165,8 @@ c     -----------------------------------------------------------
       call oe2car(pek,x,xd,tole)
       call cal2jd(cal,djulian)
       call force_models(n_force,ngeo_deg,amuS,amuM)
+      if (IPSR .eq. 0) PSR_srp = 0.d0
+      SRPC_srp = CR_srp * AM_srp
 
       print *, x, xd
 
@@ -369,6 +378,36 @@ c     L(u) transformation: qdrag = L(u) * p_drag  (KS perturbation)
             qdrag(3) = -u(3)*p_drag(1)-u(4)*p_drag(2)+u(1)*p_drag(3)
             qdrag(4) =  u(4)*p_drag(1)-u(3)*p_drag(2)+u(2)*p_drag(3)
 
+c     -----------------------------------------------------------
+c     SRP: cannonball solar radiation pressure perturbation.
+c     Shadow factor ROHP: 1=sunlit, 0=eclipse.  ISHAD=0 -> no shadow
+c     model (always sunlit).  Acceleration in km/s^2 via 1e-3 scaling.
+c     -----------------------------------------------------------
+            if (PSR_srp .eq. 0.d0) then
+               do i = 1,4
+                  qsrp(i) = 0.d0
+               end do
+            else
+               if (ISHAD .eq. 1) then
+                  ROHP = shadfncyl(x(1),x(2),x(3),ts(1),ts(2),ts(3))
+               else if (ISHAD .eq. 2) then
+                  ROHP = shadfncone(x(1),x(2),x(3),ts(1),ts(2),ts(3))
+               else
+                  ROHP = 1.d0
+               end if
+               r_srp(1) = ts(1) - x(1)
+               r_srp(2) = ts(2) - x(2)
+               r_srp(3) = ts(3) - x(3)
+               xsrr = vmn(r_srp)
+               do i = 1,3
+                  p_srp(i) = -ROHP*PSR_srp*SRPC_srp*r_srp(i)/xsrr*1.d-3
+               end do
+               qsrp(1) =  u(1)*p_srp(1)+u(2)*p_srp(2)+u(3)*p_srp(3)
+               qsrp(2) = -u(2)*p_srp(1)+u(1)*p_srp(2)+u(4)*p_srp(3)
+               qsrp(3) = -u(3)*p_srp(1)-u(4)*p_srp(2)+u(1)*p_srp(3)
+               qsrp(4) =  u(4)*p_srp(1)-u(3)*p_srp(2)+u(2)*p_srp(3)
+            end if
+
             Tau_geo = 0.d0
             do i = 2,ngeo_deg
                Tau_geo = Tau_geo-(i-1)*c_j(i)*Re(i)*aleg(i+1)*ObyR(i)
@@ -384,19 +423,21 @@ c     L(u) transformation: qdrag = L(u) * p_drag  (KS perturbation)
             end do
 
 c     -----------------------------------------------------------
-c     Energy element: dissipative drag contribution
-c     dw/ds = -0.5 * (us . qdrag) / w
+c     Energy element: non-conservative drag + SRP contributions
+c     dw/ds = -0.5 * (us . (qdrag + qsrp)) / w
 c     -----------------------------------------------------------
-            z(10) = -0.5d0*(us(1)*qdrag(1)+us(2)*qdrag(2)
-     &                    + us(3)*qdrag(3)+us(4)*qdrag(4))/w
+            z(10) = -0.5d0*(us(1)*(qdrag(1)+qsrp(1))
+     &                    + us(2)*(qdrag(2)+qsrp(2))
+     &                    + us(3)*(qdrag(3)+qsrp(3))
+     &                    + us(4)*(qdrag(4)+qsrp(4)))/w
 
 c     -----------------------------------------------------------
-c     Time element: conservative + drag contributions
+c     Time element: conservative + drag + SRP contributions
 c     Tau_term replaced by Tau_geo (fixes uninitialized variable)
-c     Drag adds: R*(u.qdrag)/(8w^3) - z(10)*(2/w^2)*(u.us)
+c     Non-conservative adds: R*(u.(qdrag+qsrp))/(8w^3) - z(10)*(2/w^2)*(u.us)
 c     -----------------------------------------------------------
             z(1) = (amue + Tau_geo + Tau_3body1 + Tau_3body2
-     &             + R(1)*dotp4(u,qdrag))/(8.d0*w*w*w)
+     &             + R(1)*(dotp4(u,qdrag)+dotp4(u,qsrp)))/(8.d0*w*w*w)
      &             - z(10)*(2.d0/(w*w))*dotp4(u,us)
 
             if (ngeo_deg  .gt. 1) call aLegP(ngeo_deg, ZbyR(1), aleg)
@@ -450,22 +491,24 @@ c     -----------------------------------------------------------
                end do
 
 c     -----------------------------------------------------------
-c     State elements: add drag force (-R*qdrag) and energy correction
-c     z(j+1) = [geo + 3body - R*drag]*sin(E/2)*0.25/w^2
+c     State elements: conservative + drag + SRP forces, energy correction
+c     z(j+1) = [geo + 3body - R*(drag+srp)]*sin(E/2)*0.25/w^2
 c              + 2*z(10)*us(j)*sin(E/2)/w
-c     z(j+5) = -[geo + 3body - R*drag]*cos(E/2)*0.25/w^2
+c     z(j+5) = -[geo + 3body - R*(drag+srp)]*cos(E/2)*0.25/w^2
 c              - 2*z(10)*us(j)*cos(E/2)/w
 c     -----------------------------------------------------------
                aqt = sie * 0.25d0
                bqt = cse * 0.25d0
 
                z(j+1) = (q(j)*amue + first_s*qsun(j)
-     &              + first_m*qmoon(j) - R(1)*qdrag(j))
+     &              + first_m*qmoon(j)
+     &              - R(1)*(qdrag(j)+qsrp(j)))
      &              * aqt/(w*w)
      &              + 2.d0*z(10)*us(j)*sie/w
 
                z(j+5) = -(q(j)*amue + first_s*qsun(j)
-     &              + first_m*qmoon(j) - R(1)*qdrag(j))
+     &              + first_m*qmoon(j)
+     &              - R(1)*(qdrag(j)+qsrp(j)))
      &              * bqt/(w*w)
      &              - 2.d0*z(10)*us(j)*cse/w
 

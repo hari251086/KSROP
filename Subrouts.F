@@ -682,7 +682,67 @@ c     ============================================================
       if(n_for(1).eq.0) ngeo = 0.d0
       if(n_for(2).eq.0) s = 0.d0
       if(n_for(3).eq.0) m = 0.d0
-      
+
+      return
+      end
+
+c     ============================================================
+      function shadfncyl(x1,x2,x3,xs,ys,zs)
+c     Cylindrical shadow function.
+c     Returns ROHP: 1 = full sunlight, 0 = eclipse (smooth tanh).
+c     Ref: Hubaux et al. (2012).  All positions in km.
+c     ============================================================
+      implicit double precision(a-h,o-z)
+      common /xy/ pi,d2r,r2d,amue,AU,R_Earth
+      gam    = 1.d9
+      rs     = dsqrt(xs*xs+ys*ys+zs*zs)
+      r      = dsqrt(x1*x1+x2*x2+x3*x3)
+      cosphi = (x1*xs+x2*ys+x3*zs)/rs
+      scr    = cosphi + dsqrt(r*r - R_Earth*R_Earth)
+      shadfncyl = 0.5d0*(1.d0 + dtanh(gam*scr))
+      return
+      end
+
+c     ============================================================
+      function shadfncone(x1,x2,x3,xs,ys,zs)
+c     Conical shadow function.
+c     Returns ROHP: 1 = full sunlight, 0 = umbra, (0,1) = penumbra.
+c     Ref: D.G. Cook (2001) Masters Thesis.  All positions in km.
+c     ============================================================
+      implicit double precision(a-h,o-z)
+      common /xy/ pi,d2r,r2d,amue,AU,R_Earth
+      rds  = 696342.d0          ! solar radius (km)
+      xp   = xs - x1
+      yp   = ys - x2
+      zp   = zs - x3
+      rs   = dsqrt(xs*xs+ys*ys+zs*zs)
+      r    = dsqrt(x1*x1+x2*x2+x3*x3)
+      p    = dsqrt(xp*xp+yp*yp+zp*zp)
+      et   = dacos(-(x1*xp+x2*yp+x3*zp)/(r*p))
+      et2  = et*et
+      rhoe  = dasin(R_Earth/r)
+      rhos  = dasin(rds/p)
+      rhos2 = rhos*rhos
+      rhoe2 = rhoe*rhoe
+      rh1   = dabs(rhos2 - rhoe2)
+
+      if (et .ge. (rhos+rhoe)) then
+         shadfncone = 1.d0
+         return
+      end if
+      if (et .le. (rhoe-rhos)) then
+         shadfncone = 0.d0
+         return
+      end if
+c     penumbra
+      al = 0.5d0*(rhos+rhoe+et)
+      q  = 2.d0*dsqrt(al*(al-et)*(al-rhos)*(al-rhoe))/et
+      if (rh1 .le. et2) then
+         t = rhos2*dasin(q/rhos)+rhoe2*dasin(q/rhoe)-q*et
+      else
+         t = rhos2*(pi-dasin(q/rhos))+rhoe2*dasin(q/rhoe)-q*et
+      end if
+      shadfncone = 1.d0 - t/(pi*rhos2)
       return
       end
 

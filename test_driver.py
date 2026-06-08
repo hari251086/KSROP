@@ -128,6 +128,7 @@ def main():
         f.write('3.986004415D5 6378.1363D0 1.495978707d08'
                 ' 1.32712440018d11 4.902801076d3\n')
         f.write('0 0 0\n')
+        f.write('4.56d-6\n')          # PSR_srp: solar radiation pressure (N/m^2)
 
     # input/input.opm: initial state in CCSDS OPM format
     with open('input/input.opm', 'w') as f:
@@ -149,11 +150,12 @@ def main():
         f.write('Y_DOT          =        0.000000 [km/s]\n')
         f.write('Z_DOT          =        0.000000 [km/s]\n')
 
-    # input/input.dat: simulation parameters only (3 lines)
+    # input/input.dat: simulation parameters (4 lines)
     with open('input/input.dat', 'w') as f:
         f.write('1 360 1d-15\n')
         f.write('0 0 0\n')
         f.write('50.0 0 7.2921150d-5 3.35281066d-3 1.0\n')
+        f.write('1.2 0.01 0 1\n')     # CR_srp, AM_srp, IPSR=off, ISHAD=cyl
 
     # --------------------------------------------------------
     # Run the driver
