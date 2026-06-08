@@ -12,6 +12,8 @@ c       car2ks -> ks2car  roundtrip       (KS transform)
 c       car2oe            elements        (orbital elements)
 c       read_cdm          public sample CDM (CCSDS 508.0-B-1 Annex)
 c       write_cdm/read_cdm  roundtrip
+c       shadfncyl         cylindrical shadow (sunlit + eclipse)
+c       shadfncone        conical shadow     (sunlit + umbra)
 c     -------------------------------------------------------
       program test_subrouts
 
@@ -301,6 +303,42 @@ c     ==============================================================
      &            x2b(1), x2(1), eps8, npass, nfail)
       call assert('roundtrip  OBJECT2 CNDOT_NDOT matches',
      &            cov2b(6,6), cov2(6,6), 1.d-10, npass, nfail)
+
+c     ==============================================================
+c     21. shadfncyl: satellite clearly on sunlit side -> ROHP = 1.0
+c         sat=[8000,0,0] km, sun=[1.5e8,0,0] km  (same hemisphere as sun)
+c     ==============================================================
+      rohp_cyl = shadfncyl(8.d3, 0.d0, 0.d0,
+     &                     1.5d8, 0.d0, 0.d0)
+      call assert('shadfncyl  sunlit side -> 1.0',
+     &            rohp_cyl, 1.d0, eps10, npass, nfail)
+
+c     ==============================================================
+c     22. shadfncyl: satellite inside cylindrical shadow -> ROHP = 0.0
+c         sat=[-8000,0,0] km (anti-sun), sun=[1.5e8,0,0] km
+c     ==============================================================
+      rohp_cyl = shadfncyl(-8.d3, 0.d0, 0.d0,
+     &                      1.5d8, 0.d0, 0.d0)
+      call assert('shadfncyl  eclipse (anti-sun) -> 0.0',
+     &            rohp_cyl, 0.d0, eps10, npass, nfail)
+
+c     ==============================================================
+c     23. shadfncone: satellite clearly on sunlit side -> ROHP = 1.0
+c         sat=[8000,0,0] km, sun=[1.5e8,0,0] km
+c     ==============================================================
+      rohp_cone = shadfncone(8.d3, 0.d0, 0.d0,
+     &                       1.5d8, 0.d0, 0.d0)
+      call assert('shadfncone sunlit side -> 1.0',
+     &            rohp_cone, 1.d0, eps10, npass, nfail)
+
+c     ==============================================================
+c     24. shadfncone: satellite in umbra -> ROHP = 0.0
+c         sat=[-8000,0,0] km (anti-sun), sun=[1.5e8,0,0] km
+c     ==============================================================
+      rohp_cone = shadfncone(-8.d3, 0.d0, 0.d0,
+     &                        1.5d8, 0.d0, 0.d0)
+      call assert('shadfncone umbra (anti-sun) -> 0.0',
+     &            rohp_cone, 0.d0, eps10, npass, nfail)
 
 c     ==============================================================
 c     Summary

@@ -14,7 +14,7 @@ Orbit propagation using **Kustaanheimo–Stiefel (KS) regular elements** with a 
 | Earth oblateness (Jn) | Active | EGM2008 model, configurable up to degree 2190 |
 | Luni-solar gravity | Active | Sun and Moon position vectors, configurable degree |
 | Atmospheric drag | Active | Oblate, co-rotating exponential atmosphere referenced to perigee conditions; tabulated density (ATM.DAT) |
-| Solar radiation pressure | Planned | Cannon-ball model (not yet implemented) |
+| Solar radiation pressure | Active | Cannon-ball model, cylindrical and conical shadow options (ported from KSJLSDNP2.F) |
 
 ---
 
@@ -135,12 +135,13 @@ Z_DOT          =        0.000000 [km/s]
 
 ### `input.DAT` — Simulation parameters
 
-Three lines only (orbital initial conditions have moved to `input.opm`):
+Four lines (orbital initial conditions have moved to `input.opm`):
 
 ```
-nrev  istep  tole          ! Revolutions, steps/revolution, integrator tolerance
-n_geo  n_sun  n_moon       ! Force model flags (non-zero = on, 0 = off)
+nrev  istep  tole               ! Revolutions, steps/revolution, integrator tolerance
+n_geo  n_sun  n_moon            ! Force model flags (non-zero = on, 0 = off)
 BN  IDRAG  WE_rot  EPS_f  FR_rot   ! Drag parameters
+CR  AM  IPSR  ISHAD             ! SRP parameters
 ```
 
 **Example:**
@@ -149,6 +150,7 @@ BN  IDRAG  WE_rot  EPS_f  FR_rot   ! Drag parameters
 10  360  1d-15
 10  0  0
 50.0  0  7.2921150d-5  3.35281066d-3  1.0
+1.2  0.01  0  1
 ```
 
 **Drag parameter line:**
@@ -161,11 +163,21 @@ BN  IDRAG  WE_rot  EPS_f  FR_rot   ! Drag parameters
 | `EPS_f` | `3.35281066d-3` | Earth flattening (1/298.257) |
 | `FR_rot` | `1.0` | Atmospheric co-rotation factor |
 
+**SRP parameter line:**
+
+| Parameter | Example | Description |
+|---|---|---|
+| `CR` | `1.2` | Radiation pressure coefficient (dimensionless, typical range 1–2) |
+| `AM` | `0.01` | Area-to-mass ratio A/m (m²/kg) |
+| `IPSR` | `1` | SRP: 1 = on, 0 = off |
+| `ISHAD` | `1` | Shadow model: 0 = no shadow (always sunlit), 1 = cylindrical, 2 = conical |
+
 ### `const_new.dat` — Physical constants
 
 ```
 mu  R_Earth  AU  mu_Sun  mu_Moon
 ngeo_deg  nsun_deg  nmoon_deg
+PSR_srp
 ```
 
 | Parameter | Value | Units |
@@ -178,6 +190,7 @@ ngeo_deg  nsun_deg  nmoon_deg
 | `ngeo_deg` | 0–2190 | Geopotential degree (0 or 1 = point mass) |
 | `nsun_deg` | 0–2190 | Solar gravity Legendre degree |
 | `nmoon_deg` | 0–2190 | Lunar gravity Legendre degree |
+| `PSR_srp` | 4.56×10⁻⁶ | Solar radiation pressure at 1 AU (N/m²) |
 
 ### `ATM.DAT` — Atmosphere table
 
@@ -260,6 +273,11 @@ Written once at the start of each run with the initial epoch state vector and Ke
 | `n_force(3) ≠ 0` | Lunar gravity on — degree set by `nmoon_deg` |
 | `IDRAG = 0` | Atmospheric drag off |
 | `IDRAG = 1` | Atmospheric drag on |
+| `IPSR = 0` | Solar radiation pressure off |
+| `IPSR = 1` | SRP on — cannonball model |
+| `ISHAD = 0` | No shadow model (satellite always in full sunlight) |
+| `ISHAD = 1` | Cylindrical shadow model (Hubaux et al. 2012, smooth tanh) |
+| `ISHAD = 2` | Conical shadow model (D.G. Cook 2001, geometric umbra/penumbra) |
 
 ---
 
@@ -271,9 +289,11 @@ Perturbing forces are transformed to KS space via the **L(u)** matrix and added 
 
 | Element | Rate equation |
 |---|---|
-| `z(j+1)`, `z(j+5)` | State elements — conservative (geo + third-body) + drag |
-| `z(1)` | Time element — geopotential + third-body + drag contributions |
-| `z(10)` | Energy element — drag dissipation: dω/ds = −½(u̇·q_drag)/ω |
+| `z(j+1)`, `z(j+5)` | State elements — conservative (geo + third-body) + drag + SRP |
+| `z(1)` | Time element — geopotential + third-body + drag + SRP contributions |
+| `z(10)` | Energy element — non-conservative: dω/ds = −½(u̇·(q_drag+q_srp))/ω |
+
+**SRP model:** Cannonball force `a_SRP = −ν · P_SRP · Cr·(A/m) · (r_sun−r_sat)/|r_sun−r_sat| × 10⁻³` (result in km/s²), where ν is the shadow factor from the selected shadow model. The L(u) matrix transforms the Cartesian SRP acceleration into KS space exactly as for drag.
 
 The step size is scaled by the frequency ratio Γ = ω/ω_Kep to maintain accuracy across eccentricities.
 
@@ -303,7 +323,7 @@ ifort test_subrouts.F Subrouts.F Legendre.F -o test_subrouts.exe
 ./test_subrouts.exe
 ```
 
-20 tests: `dotp3`, `dotp4`, `vmn`, `cross`, `INTPOL` (×2), `aLegP` P2/P3/P4, `car2ks`→`ks2car` roundtrip (×6), `car2oe` a/e/i.
+24 tests: `dotp3`, `dotp4`, `vmn`, `cross`, `INTPOL` (×2), `aLegP` P2/P3/P4, `car2ks`→`ks2car` roundtrip (×6), `car2oe` a/e/i, `shadfncyl` (sunlit + eclipse), `shadfncone` (sunlit + umbra).
 
 ### Integration test — `test_driver.py`
 
@@ -344,6 +364,8 @@ Times integrator, step-size sensitivity, drag overhead, and EGM2008 file-read co
 | `geo_coeff(n,c_j)` | Stream EGM2008 zonal harmonics up to degree n (reads O(n²) lines) |
 | `force_models(n_for,ngeo,s,m)` | Apply force model on/off flags |
 | `INTPOL(XT,YT,M1,X1,Y1)` | Linear interpolation in sorted atmosphere table |
+| `shadfncyl(x1,x2,x3,xs,ys,zs)` | Cylindrical shadow factor ν ∈ [0,1] — smooth tanh transition (Hubaux et al. 2012) |
+| `shadfncone(x1,x2,x3,xs,ys,zs)` | Conical shadow factor ν ∈ {0,1} with penumbra partial shading (D.G. Cook 2001) |
 
 ### Ephemeris
 
@@ -391,7 +413,7 @@ Times integrator, step-size sensitivity, drag overhead, and EGM2008 file-read co
 - `car2oe` may produce NaN for near-circular or near-equatorial orbits (special cases partially handled).
 - `aLegP` is internally hardcoded to evaluate polynomials up to degree 49; results for `ngeo_deg ≥ 50` are incorrect beyond that degree.
 - EGM2008 file (~231 MB) is not included in the repository; set `ngeo_deg = 0` in `const_new.dat` to run without it (point-mass gravity).
-- Solar radiation pressure is not yet implemented.
+- Solar radiation pressure: implemented as cannonball model; no tesseral harmonics or radiation pressure variations with orbit geometry.
 
 ---
 
@@ -420,3 +442,4 @@ Times integrator, step-size sensitivity, drag overhead, and EGM2008 file-read co
 | 2026-06-07 | Moved CCSDS OPM/OEM file I/O out of `driver_KS.F` and into `Subrouts.F` as reusable subroutines: added `write_opm`, `read_oem`, `write_oem` alongside the existing `read_opm`; `driver_KS.F` now calls these instead of writing the records inline |
 | 2026-06-07 | Added CCSDS CDM v1.0 (Conjunction Data Message) I/O to `Subrouts.F`: `read_cdm`/`write_cdm` plus internal helpers `cdm_object_field`, `cdm_cov_index`, `cdm_rtn_index`, parsing/emitting the relative-geometry summary and each OBJECT1/OBJECT2 state vector + lower-triangular RTN covariance; `test_subrouts.F` gained a read/roundtrip test against the public CCSDS 508.0-B-1 sample CDM (`input/cdm_sample.kvn`) |
 | 2026-06-07 | Fixed an implicit-typing bug in the new CDM I/O: `miss_dist`/`miss_dist2` start with `m`, which falls outside the `implicit double precision (a-h, o-z)` ranges and defaults to `INTEGER`, causing `MISS_DISTANCE` to come back as a reinterpreted-bits garbage value instead of `715.0`; fixed by declaring `miss_dist`/`miss_dist2` explicitly as `double precision` in `read_cdm`, `write_cdm`, and `test_subrouts.F` |
+| 2026-06-08 | Solar radiation pressure (SRP) implemented: cannonball model ported from `KSJLSDNP2.F`; two shadow models added to `Subrouts.F` (`shadfncyl` — cylindrical, Hubaux et al. 2012; `shadfncone` — conical, D.G. Cook 2001); SRP perturbation force (KS L(u)-transformed) added to all three KS element ODEs (z10 energy, z1 time, z2-z9 state); new `PSR_srp` line in `const_new.dat`; new SRP-parameter line (CR, A/m, IPSR, ISHAD) in `input.dat`; 4 shadow-function unit tests added to `test_subrouts.F` (24 total) |
