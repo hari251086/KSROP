@@ -27,6 +27,7 @@ Orbit propagation using **Kustaanheimo–Stiefel (KS) regular elements** with a 
 | `driver_KS.F` | Main program — reads OPM input, initialises KS elements, runs integration loop |
 | `Subrouts.F` | Subroutines — coordinate transforms, integrator, OPM I/O, force models, utilities |
 | `Legendre.F` | Zonal Legendre polynomial evaluation (`aLegP`, `p_polynomial_value`) |
+| `TLEread.F` | TLE (Two-Line Element) reader — parses 2-line and 3-line TLE files, single or multi-entry |
 
 ### Input
 
@@ -37,6 +38,8 @@ Orbit propagation using **Kustaanheimo–Stiefel (KS) regular elements** with a 
 | `const_new.dat` | Physical constants and geopotential degree settings |
 | `ATM.DAT` | Tabulated atmospheric density and scale height (60–630 km, 291 entries) |
 | `EGM2008_to2190_TideFree` | EGM2008 geopotential coefficients (~231 MB, required when `ngeo_deg ≥ 2`) |
+| `example_47944.tle.txt` | TLE test data — 3,977 entries for NORAD 47944 (single-satellite, multi-epoch) |
+| `example_multi.tle.txt` | TLE test data — 94,597 entries, multi-satellite catalog with alpha-numeric IDs |
 
 ### Output (generated at runtime)
 
@@ -50,7 +53,8 @@ Orbit propagation using **Kustaanheimo–Stiefel (KS) regular elements** with a 
 
 | File | Description |
 |---|---|
-| `test_subrouts.F` | Fortran unit tests — 20 tests covering core subroutines |
+| `test_subrouts.F` | Fortran unit tests — 47 tests covering core subroutines |
+| `test_tle.F` | Fortran TLE reader tests — 147 checks across unit, inline, and file-based tests |
 | `test_driver.py` | Python integration test — 10 checks on two-body propagation |
 | `test_initial_conditions.py` | Python multi-IC test — 110 checks across 10 orbits under two-body and full dynamics |
 | `benchmark.py` | Performance profiler — timing across force model configurations |
@@ -324,7 +328,33 @@ ifort test_subrouts.F Subrouts.F Legendre.F -o test_subrouts.exe
 ./test_subrouts.exe
 ```
 
-24 tests: `dotp3`, `dotp4`, `vmn`, `cross`, `INTPOL` (×2), `aLegP` P2/P3/P4, `car2ks`→`ks2car` roundtrip (×6), `car2oe` a/e/i, `shadfncyl` (sunlit + eclipse), `shadfncone` (sunlit + umbra).
+47 tests: `dotp3`, `dotp4`, `vmn`, `cross`, `INTPOL` (×2), `aLegP` P2/P3/P4, `car2ks`→`ks2car` roundtrip (×6), `car2oe` a/e/i, `shadfncyl` (sunlit + eclipse), `shadfncone` (sunlit + umbra), CDM reader/writer/roundtrip.
+
+### TLE reader test — `test_tle.F`
+
+```bash
+ifort test_tle.F TLEread.F -o test_tle.exe
+./test_tle.exe
+```
+
+147 checks across 14 test groups:
+
+- **`tle_expval`** (10): implied-decimal decoding — positive/negative/zero mantissa, ±exponent, explicit `+` sign, large mantissa, boundary values
+- **`tle_chksum`** (7): modulo-10 checksum — valid/corrupted lines, actual file lines with dashes
+- **`tle_parse1`** (18): NORAD ID (numeric + alpha-numeric), catid strings, epoch year pivot (56→2056, 57→1957, 00→2000, 99→1999), ±ndot, non-zero nddot, bstar
+- **`tle_parse2`** (13): inclination, RAAN, eccentricity (low/high/very-high), AOP, mean anomaly, mean motion, revolution number
+- **`read_tle` inline** (27): two-line, three-line, mixed 2/3-line, blank lines, orphan line 1/line 2, consecutive line 1s, maxtle buffer limit
+- **Name false-positive rejection** (5): names starting with `'1'` or `'2'` correctly identified as names
+- **Consecutive name lines** (2): second name overwrites first
+- **Catalog ID mismatch** (3): mismatched line 1/line 2 pairs skipped
+- **Short line rejection** (4): truncated lines rejected as TLE data
+- **Col-8 classification** (4): invalid classification rejected, U/C/S accepted
+- **Corrupt field handling** (7): `ierr` flag on garbage fields, corrupt entries skipped by `read_tle`
+- **BOM stripping** (3): UTF-8 BOM at file start handled, non-BOM regression
+- **Alpha-numeric revnum** (5): revnum > 99999 returns -1, entry not skipped, orbital data preserved
+- **iostat guard** (1): unopened unit returns `ntle=0` without crash
+- **`example_47944.tle.txt`** (13): 3,977-entry single-satellite — NORAD consistency, ndot sign, SSO inclination, epoch monotonicity, full-file checksum validation
+- **`example_multi.tle.txt`** (21): 94,597-entry multi-satellite — field ranges, alpha-numeric IDs, physical period, full-file checksum validation (189,194 lines)
 
 ### Integration test — `test_driver.py`
 
@@ -412,6 +442,17 @@ Times integrator, step-size sensitivity, drag overhead, and EGM2008 file-read co
 | `vmn(x)` | 3-vector magnitude |
 | `cross(x,y,z)` | 3-vector cross product |
 
+### TLE reader (`TLEread.F`)
+
+| Subroutine | Description |
+|---|---|
+| `read_tle(iunit,maxtle,names,catid,norad,epoch_yr,epoch_day,ndot,nddot,bstar,ainc,raan,ecc,aop,ama,amm,revnum,ntle)` | Read all TLE entries from a file — handles 2-line, 3-line, and mixed formats; BOM stripping; catalog ID cross-check; corrupt-field skip |
+| `tle_parse1(line,catid,norad,iyr4,eday,dndot,dnddot,dbstar,ierr)` | Parse TLE line 1 — catalog ID, epoch, ndot, nddot, B*; `ierr=1` on corrupt fields |
+| `tle_parse2(line,ainc,araan,aecc,aaop,aama,aamm,irevnum,ierr)` | Parse TLE line 2 — orbital elements; alpha-numeric revnum returns -1; `ierr=1` on corrupt fields |
+| `tle_expval(str,val)` | Decode TLE implied-decimal exponent format (e.g. `' 37765-3'` → `3.7765×10⁻⁴`) |
+| `tle_chksum(line,ick,iok)` | Verify modulo-10 checksum of a TLE line |
+| `tle_isline(raw,llen,lnum,istle)` | Validate whether a raw string is a TLE line (length, col 1-2, col 8 classification) |
+
 ### Integrator
 
 | Function | Description |
@@ -457,3 +498,4 @@ Times integrator, step-size sensitivity, drag overhead, and EGM2008 file-read co
 | 2026-06-08 | Solar radiation pressure (SRP) implemented: cannonball model ported from `KSJLSDNP2.F`; two shadow models added to `Subrouts.F` (`shadfncyl` — cylindrical, Hubaux et al. 2012; `shadfncone` — conical, D.G. Cook 2001); SRP perturbation force (KS L(u)-transformed) added to all three KS element ODEs (z10 energy, z1 time, z2-z9 state); new `PSR_srp` line in `const_new.dat`; new SRP-parameter line (CR, A/m, IPSR, ISHAD) in `input.dat`; 4 shadow-function unit tests added to `test_subrouts.F` (24 total) |
 | 2026-06-20 | Fixed double-Gam step-size bug in KS integrator: `rkgil` was called with `dE*Gam` but `dE` was already `dE_0*Gam`, giving `dE_0*Gam²` — an overcorrected integration step in the generalized eccentric anomaly; now passes `dE` for the correct single perturbation scaling |
 | 2026-06-20 | Added `test_initial_conditions.py`: 110 checks across 10 orbital regimes (LEO, GTO, polar, retrograde, near-equatorial, Molniya, GEO, SSO, HEO, MEO) under two-body (exact conservation) and full dynamics (J10 + luni-solar + SRP + drag; bounded-drift verification) |
+| 2026-06-20 | Added `TLEread.F`: TLE (Two-Line Element) reader with `read_tle`, `tle_parse1`, `tle_parse2`, `tle_expval`, `tle_chksum`, `tle_isline` subroutines — handles 2-line and 3-line formats, single and multi-entry files, alpha-numeric NORAD IDs and revolution numbers, UTF-8 BOM stripping, col-8 classification validation, catalog ID cross-check, corrupt-field error handling (`ierr` flag), and `iostat`-guarded reads; 147 tests (`test_tle.F`) validated against 98,574 real TLE entries including full-file checksum verification of 197,148 lines |
