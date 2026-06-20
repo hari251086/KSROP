@@ -514,7 +514,7 @@ c     -----------------------------------------------------------
 
             end do
 
-            I_rkg = rkgil(n,y,z,E,dE*Gam,nt)
+            I_rkg = rkgil(n,y,z,E,dE,nt)
             call ks2ksr(y,u,us,E,cse,sie)
             call ks2car(u,us,x,xd,w)
             call car2oe(x,xd,pek)
