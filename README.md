@@ -52,6 +52,7 @@ Orbit propagation using **Kustaanheimo–Stiefel (KS) regular elements** with a 
 |---|---|
 | `test_subrouts.F` | Fortran unit tests — 20 tests covering core subroutines |
 | `test_driver.py` | Python integration test — 10 checks on two-body propagation |
+| `test_initial_conditions.py` | Python multi-IC test — 110 checks across 10 orbits under two-body and full dynamics |
 | `benchmark.py` | Performance profiler — timing across force model configurations |
 | `Makefile` | Unix/Linux build targets: `all`, `tests`, `run`, `test`, `clean` |
 | `build.bat` | Windows build script for Intel Fortran |
@@ -333,6 +334,17 @@ python test_driver.py driver_KS.exe
 
 10 checks on a 1-revolution two-body propagation: OEM row count (361 = 1×360+1), DATA_START/DATA_STOP structure, energy conservation, angular momentum conservation, orbit closure (position and velocity), semi-major axis vs vis-viva, semi-major axis conserved, OPM output present.
 
+### Multi-IC test — `test_initial_conditions.py`
+
+```bash
+python test_initial_conditions.py driver_KS.exe
+```
+
+110 checks across 10 orbital regimes (LEO, GTO, polar, retrograde, near-equatorial, Molniya, GEO, SSO, HEO, MEO), run in two phases:
+
+- **Phase 1 — Two-body** (50 checks): all perturbations off; verifies energy, angular momentum, orbit closure, and semi-major axis conservation to machine precision.
+- **Phase 2 — Full dynamics** (60 checks): J10 geopotential + degree-2 luni-solar + SRP + drag (for perigee < 500 km); verifies propagation completes, all states remain finite, altitude stays physical, and osculating energy / angular momentum / SMA drift stay within bounded envelopes.
+
 ### Performance profiling — `benchmark.py`
 
 ```bash
@@ -444,3 +456,4 @@ Times integrator, step-size sensitivity, drag overhead, and EGM2008 file-read co
 | 2026-06-07 | Fixed an implicit-typing bug in the new CDM I/O: `miss_dist`/`miss_dist2` start with `m`, which falls outside the `implicit double precision (a-h, o-z)` ranges and defaults to `INTEGER`, causing `MISS_DISTANCE` to come back as a reinterpreted-bits garbage value instead of `715.0`; fixed by declaring `miss_dist`/`miss_dist2` explicitly as `double precision` in `read_cdm`, `write_cdm`, and `test_subrouts.F` |
 | 2026-06-08 | Solar radiation pressure (SRP) implemented: cannonball model ported from `KSJLSDNP2.F`; two shadow models added to `Subrouts.F` (`shadfncyl` — cylindrical, Hubaux et al. 2012; `shadfncone` — conical, D.G. Cook 2001); SRP perturbation force (KS L(u)-transformed) added to all three KS element ODEs (z10 energy, z1 time, z2-z9 state); new `PSR_srp` line in `const_new.dat`; new SRP-parameter line (CR, A/m, IPSR, ISHAD) in `input.dat`; 4 shadow-function unit tests added to `test_subrouts.F` (24 total) |
 | 2026-06-20 | Fixed double-Gam step-size bug in KS integrator: `rkgil` was called with `dE*Gam` but `dE` was already `dE_0*Gam`, giving `dE_0*Gam²` — an overcorrected integration step in the generalized eccentric anomaly; now passes `dE` for the correct single perturbation scaling |
+| 2026-06-20 | Added `test_initial_conditions.py`: 110 checks across 10 orbital regimes (LEO, GTO, polar, retrograde, near-equatorial, Molniya, GEO, SSO, HEO, MEO) under two-body (exact conservation) and full dynamics (J10 + luni-solar + SRP + drag; bounded-drift verification) |
