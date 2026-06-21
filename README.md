@@ -61,33 +61,53 @@ KSROP/
 
 ## 3. Building
 
-Requires **Intel Fortran** (`ifort`/`ifx`) or **GNU Fortran** (`gfortran`).
+Requires **Intel oneAPI Fortran** (`ifx`) or **GNU Fortran** (`gfortran`), plus a C/C++ linker (MSVC on Windows).
 
-### Quick build
+### Windows — Intel oneAPI ifx 2025.0
 
-```bash
-# Windows
-build.bat
+The Intel compiler requires both the Visual Studio and Intel environments to be initialised in the same shell session:
 
-# Unix/Linux/macOS
-make
+```bat
+:: Single-command build (from cmd.exe or PowerShell via cmd /c)
+call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+call "C:\Program Files (x86)\Intel\Fortran\compiler\2025.0\env\vars.bat"
+cd /d "C:\Users\hari2\OneDrive\Documents\GitHub\KSROP"
+
+:: Propagator
+ifx driver_KS.F Subrouts.F Legendre.F TLEread.F /exe:driver_KS.exe
+
+:: TLE-to-OPM converter
+ifx tle2opm.F Subrouts.F TLEread.F Legendre.F /exe:tle2opm.exe
+
+:: Tests
+ifx test_subrouts.F Subrouts.F Legendre.F /exe:test_subrouts.exe
+ifx test_bugs.F Subrouts.F Legendre.F /exe:test_bugs.exe
+ifx test_tle.F Subrouts.F TLEread.F Legendre.F /exe:test_tle.exe
+ifx test_tle2sv.F Subrouts.F TLEread.F Legendre.F /exe:test_tle2sv.exe
+ifx test_tle2opm.F Subrouts.F TLEread.F Legendre.F /exe:test_tle2opm.exe
 ```
 
-### Manual compilation
+> **Note:** Use `/exe:name.exe` (not `-o`) for the output flag with `ifx` on Windows.
+
+### Unix / Linux / macOS
 
 ```bash
-# Propagator
-ifort driver_KS.F Subrouts.F Legendre.F TLEread.F -o driver_KS.exe
+make            # build driver_KS
+make tests      # build all test executables
+make test       # build + run all tests
+make clean      # remove build artefacts
+```
 
-# TLE-to-OPM converter
-ifort tle2opm.F Subrouts.F TLEread.F Legendre.F -o tle2opm.exe
+### Manual (gfortran)
 
-# All tests
-ifort test_subrouts.F Subrouts.F Legendre.F -o test_subrouts.exe
-ifort test_bugs.F Subrouts.F Legendre.F -o test_bugs.exe
-ifort test_tle.F Subrouts.F TLEread.F Legendre.F -o test_tle.exe
-ifort test_tle2sv.F Subrouts.F TLEread.F Legendre.F -o test_tle2sv.exe
-ifort test_tle2opm.F Subrouts.F TLEread.F Legendre.F -o test_tle2opm.exe
+```bash
+gfortran driver_KS.F Subrouts.F Legendre.F TLEread.F -o driver_KS.exe
+gfortran tle2opm.F Subrouts.F TLEread.F Legendre.F -o tle2opm.exe
+gfortran test_subrouts.F Subrouts.F Legendre.F -o test_subrouts.exe
+gfortran test_bugs.F Subrouts.F Legendre.F -o test_bugs.exe
+gfortran test_tle.F Subrouts.F TLEread.F Legendre.F -o test_tle.exe
+gfortran test_tle2sv.F Subrouts.F TLEread.F Legendre.F -o test_tle2sv.exe
+gfortran test_tle2opm.F Subrouts.F TLEread.F Legendre.F -o test_tle2opm.exe
 ```
 
 ---
