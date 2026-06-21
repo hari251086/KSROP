@@ -1,4 +1,26 @@
 c     -------------------------------------------------------------
+c     Shared constants initialisation
+c     -------------------------------------------------------------
+c     ============================================================
+      subroutine init_constants()
+c     Read physical constants from input/const_new.dat and populate
+c     the /xy/ common block. Must be called once at program start.
+c     ============================================================
+      implicit double precision (a-h,o-z)
+      common /xy/ pi,d2r,r2d,amue,AU,R_Earth
+
+      pi  = 4.d0*datan(1.d0)
+      d2r = pi/180.d0
+      r2d = 180.d0/pi
+
+      open(unit=99, file='input/const_new.dat', status='old')
+      read(99,*) amue, R_Earth, AU
+      close(99)
+
+      return
+      end
+
+c     -------------------------------------------------------------
 c     integrators
 c     -------------------------------------------------------------
 c     ks-orbital integrator
@@ -44,8 +66,8 @@ c     ============================================================
 !     a_kep(3:7) in degrees;
 !     x in km; xd in km/s;
       dimension a_k(3),a_n(3),ecc(3),h(3),x(3),xd(3),a_kep(7)
-      
-      common /xy/ pi,d2r,r2d,amue
+
+      common /xy/ pi,d2r,r2d,amue,AU,R_Earth
 
       rmag = vmn(x)
       vmag = vmn(xd)
@@ -160,8 +182,8 @@ c     ============================================================
 !     a_kep(3:7) in degrees;
 !     x in km; xd in km/s;
       dimension x(3),xd(3),a_kep(7),rot(3,3),V_pf(3),R_pf(3)
-      
-      common /xy/ pi,d2r,r2d,amue
+
+      common /xy/ pi,d2r,r2d,amue,AU,R_Earth
 
 !     degree to radians (use local copies to preserve input)
       aa = a_kep(1)
@@ -515,11 +537,11 @@ c     ============================================================
 
       function atan3(a,b)
       implicit double precision (a-h,o-z)
-      pi=4.0d0*datan(1.0d0)
+      common /xy/ pi,d2r,r2d,amue,AU,R_Earth
       atan3 = datan2(a, b)
       if(atan3.lt.0.d0) atan3 = atan3 + 2.d0*pi
       return
-      end 
+      end
 c     ============================================================
       
 c     ============================================================

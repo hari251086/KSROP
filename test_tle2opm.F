@@ -38,13 +38,8 @@ c     -------------------------------------------------------
 
       character*23 epochstr
 
-c     --- Initialise ---
-      pi      = 4.d0 * datan(1.d0)
-      d2r     = pi / 180.d0
-      r2d     = 180.d0 / pi
-      amue    = 3.986004415d5
-      AU      = 1.495978707d8
-      R_Earth = 6378.1363d0
+c     --- Initialise constants from const_new.dat ---
+      call init_constants()
 
       npass = 0
       nfail = 0
