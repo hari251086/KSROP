@@ -56,6 +56,9 @@ Orbit propagation using **Kustaanheimo–Stiefel (KS) regular elements** with a 
 | `test_subrouts.F` | Fortran unit tests — 47 tests covering core subroutines |
 | `test_tle.F` | Fortran TLE reader tests — 147 checks across unit, inline, and file-based tests |
 | `test_tle2sv.F` | Fortran TLE-to-state-vector tests — 78 checks covering SGP4 init/prop, TEME→J2000, full pipeline, edge cases |
+| `test_tle2opm.F` | Fortran TLE-to-OPM pipeline tests — 21 checks: epoch selection, SGP4 conversion, physical plausibility, OPM roundtrip |
+| `test_bugs.F` | Fortran bug regression tests — 17 checks targeting fixed bugs in Subrouts.F |
+| `tle2opm.F` | TLE-to-OPM converter — reads TLE, selects by NORAD/epoch, outputs CCSDS OPM via SGP4 |
 | `test_driver.py` | Python integration test — 10 checks on two-body propagation |
 | `test_initial_conditions.py` | Python multi-IC test — 110 checks across 10 orbits under two-body and full dynamics |
 | `benchmark.py` | Performance profiler — timing across force model configurations |
@@ -375,6 +378,33 @@ ifx test_tle2sv.F TLEread.F -o test_tle2sv.exe
 - **Edge cases** (14): zero B*, tiny eccentricity, near-zero/retrograde inclination, MA=360≡0, large B*, 1957 epoch, critical inclination, ecc=0.5
 - **Batch conversion** (4): read 3 TLEs via `read_tle`, convert all to J2000 states, verify distinct and physical
 
+### TLE-to-OPM converter — `tle2opm.F`
+
+```bash
+ifort tle2opm.F Subrouts.F TLEread.F Legendre.F -o tle2opm.exe
+./tle2opm.exe
+```
+
+Reads `input/tle2opm.cfg` (TLE filename, target NORAD, target epoch), selects the closest TLE entry, converts to J2000 state via SGP4, and writes `input/KSROP_<EPOCH>_<NORAD>.opm` + `input/input.opm`.
+
+### TLE-to-OPM test — `test_tle2opm.F`
+
+```bash
+ifort test_tle2opm.F Subrouts.F TLEread.F Legendre.F -o test_tle2opm.exe
+./test_tle2opm.exe
+```
+
+21 checks: TLE read, epoch selection (offset < 1 day), tle2sv validity, physical plausibility (altitude, velocity, radius), orbital elements (SMA, ecc, inc, RAAN, period), epoch string format, OPM write/read roundtrip, orbital energy.
+
+### Bug regression test — `test_bugs.F`
+
+```bash
+ifort test_bugs.F Subrouts.F Legendre.F -o test_bugs.exe
+./test_bugs.exe
+```
+
+17 checks targeting fixed bugs: force_models type mismatch, car2oe equatorial/circular/hyperbolic edge cases, acos precision, rkgil SAVE, solarnpv close(1), cal2jd fractional seconds, oe2car input preservation, atan3 division by zero.
+
 ### Integration test — `test_driver.py`
 
 ```bash
@@ -525,3 +555,4 @@ Times integrator, step-size sensitivity, drag overhead, and EGM2008 file-read co
 | 2026-06-20 | Added `TLEread.F`: TLE (Two-Line Element) reader with `read_tle`, `tle_parse1`, `tle_parse2`, `tle_expval`, `tle_chksum`, `tle_isline` subroutines — handles 2-line and 3-line formats, single and multi-entry files, alpha-numeric NORAD IDs and revolution numbers, UTF-8 BOM stripping, col-8 classification validation, catalog ID cross-check, corrupt-field error handling (`ierr` flag), and `iostat`-guarded reads; 147 tests (`test_tle.F`) validated against 98,574 real TLE entries including full-file checksum verification of 197,148 lines |
 | 2026-06-21 | Added TLE-to-state-vector conversion to `TLEread.F`: `tle2sv` (complete pipeline), `tle_epoch2jd` (epoch→JD), `tle_sgp4_init`/`tle_sgp4_prop` (SGP4 near-Earth propagator with WGS-72 constants, Brouwer mean-element recovery, secular J2/J4 rates, drag coefficients), `tle_teme2j2k` (TEME→J2000 frame transformation via IAU-76 precession + simplified IAU-80 nutation); 78 tests (`test_tle2sv.F`) covering ISS/NOAA-18/Vanguard-1 orbits, deep-space rejection, edge cases (zero ecc, retrograde, critical inclination, ecc=0.5), and batch read+convert pipeline |
 | 2026-06-21 | Fixed 11 bugs in `Subrouts.F` (7 confirmed failing, 4 latent): (1) `force_models` type mismatch corrupting `amuM` via implicit integer dummy; (2) `car2ks` calling `vmn` with 3 scalar args instead of array; (3–4) `car2oe` equatorial/circular special cases dead (impossible `dabs<0` condition) causing NaN for equatorial orbits; (5) `car2oe` using single-precision `acos` instead of `dacos`; (6) `car2oe` `ea` uninitialized for hyperbolic orbits; (7) `rkgil` local `q(10)` missing `save`; (8) `solarnpv` spurious `close(1)` closing caller's file; (9) `cal2jd` truncating fractional seconds to integer (losing up to 1 s); (10) `oe2car` destructively modifying input `a_kep` array; (11) `atan3` division by zero when `b=0`. Added `test_bugs.F` (17 regression tests) |
+| 2026-06-21 | Added `tle2opm.F`: standalone TLE-to-OPM converter that reads a TLE file, selects the entry closest to a target epoch/NORAD (configured via `input/tle2opm.cfg`), converts to J2000 state via SGP4 (`tle2sv`), computes osculating elements (`car2oe`), and writes a CCSDS OPM v2.0 file with naming convention `KSROP_<EPOCH>_<NORAD>.opm`; also copies to `input/input.opm` for direct use by `driver_KS.exe`. Generated `input/KSROP_20250501T200802_47944.opm` (NORAD 47944, SSO LEO, alt~370 km, 2025-05-01). Added `test_tle2opm.F` (21 tests) |
