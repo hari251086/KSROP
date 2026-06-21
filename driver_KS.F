@@ -92,8 +92,8 @@ c     SRP: cannonball SRP perturbation (ported from KSJLSDNP2.F)
       integer IPSR, ISHAD
 c     OEM/OPM epoch strings (YYYY-MM-DDTHH:MM:SS.sss = 23 chars)
       character*23 epochstr, epoch_stop, oem_start
-c     OEM filename: output/KSROP_YYYYMMDDTHHMMSS.oem  (32 chars)
-      character*32 oem_fname
+c     Output filenames: output/KSROP_YYYYMMDDTHHMMSS.*
+      character*40 oem_fname, reg_fname
       character*15 compact_epoch
 c     Trajectory buffer: allocated once nrev is known; written after run
       double precision, allocatable :: traj_jd(:)
@@ -104,6 +104,10 @@ c     Trajectory buffer: allocated once nrev is known; written after run
       d2r=pi/180.d0
       r2d=180.d0/pi
 
+c     Get UTC timestamp for output filenames
+      call utc_now_epoch(epochstr, compact_epoch)
+      reg_fname = 'output/KSROP_'//compact_epoch//'_Regular.out'
+
 c     Input Files
       open (unit = 1, file = 'input/const_new.dat') !Constants
       open (unit = 2, file = 'input/input.dat')      !Simulation parameters
@@ -111,7 +115,7 @@ c     Input Files
       open (unit = 8, file = 'input/input.opm')      !CCSDS OPM initial state
 
 c     Output files (unit 3 opened later with timestamped filename)
-      open (unit = 4, file = 'output/regular.out') !KS elements (debug)
+      open (unit = 4, file = reg_fname)            !KS elements (debug)
       open (unit = 5, file = 'output/ksrop.opm')   !CCSDS OPM initial Keplerian
 
       read(1,*) amue,R_Earth,AU,amuS,amuM
@@ -609,9 +613,8 @@ c     -----------------------------------------------------------
   90  continue
 
 c     --- Write CCSDS OEM v2.0 after run completes ---
-c     CREATION_DATE and filename use current UTC wall-clock time.
+c     CREATION_DATE and filename use the run-start UTC timestamp.
 c     START_TIME / STOP_TIME use the actual propagated orbital epochs.
-      call utc_now_epoch(epochstr, compact_epoch)
       oem_fname = 'output/KSROP_'//compact_epoch//'.oem'
       open (unit = 3, file = oem_fname)
 

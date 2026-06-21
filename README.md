@@ -42,8 +42,8 @@ KSROP/
 │
 ├── output/                              Runtime-generated files
 │   ├── KSROP_YYYYMMDDTHHMMSS.oem       Trajectory (CCSDS OEM v2.0)
-│   ├── ksrop.opm                        Initial Keplerian elements (OPM)
-│   └── regular.out                      KS elements debug dump
+│   ├── KSROP_YYYYMMDDTHHMMSS_Regular.out  KS elements debug dump
+│   └── ksrop.opm                        Initial Keplerian elements (OPM)
 │
 ├── test_subrouts.F                      Unit tests (47 checks)
 ├── test_tle.F                           TLE reader tests (147 checks)
