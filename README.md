@@ -33,10 +33,12 @@ Orbit propagation using **Kustaanheimo–Stiefel (KS) regular elements** with a 
 
 | File | Description |
 |---|---|
-| `input.opm` | **CCSDS OPM v2.0** — initial state: epoch, position, velocity |
+| `input.opm` | **CCSDS OPM v2.0** — initial state: epoch, position, velocity (used by `driver_KS`) |
 | `input.DAT` | Simulation parameters: revolutions, steps, force flags, drag coefficients |
-| `const_new.dat` | Physical constants and geopotential degree settings |
+| `const_new.dat` | Physical constants and geopotential degree settings (single source of truth for all programs) |
 | `ATM.DAT` | Tabulated atmospheric density and scale height (60–630 km, 291 entries) |
+| `tle2opm.cfg` | Configuration for `tle2opm.exe`: TLE filename, target NORAD ID, target epoch |
+| `KSROP_20250501T200802_47944.opm` | Generated OPM for NORAD 47944 at 2025-05-01 (SSO LEO, alt~370 km, i~97.5°) |
 | `EGM2008_to2190_TideFree` | EGM2008 geopotential coefficients (~231 MB, required when `ngeo_deg ≥ 2`) |
 | `example_47944.tle.txt` | TLE test data — 3,977 entries for NORAD 47944 (single-satellite, multi-epoch) |
 | `example_multi.tle.txt` | TLE test data — 94,597 entries, multi-satellite catalog with alpha-numeric IDs |
