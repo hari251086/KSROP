@@ -27,7 +27,7 @@ Orbit propagation using **Kustaanheimo–Stiefel (KS) regular elements** with a 
 | `driver_KS.F` | Main program — reads OPM input, initialises KS elements, runs integration loop |
 | `Subrouts.F` | Subroutines — coordinate transforms, integrator, OPM I/O, force models, utilities |
 | `Legendre.F` | Zonal Legendre polynomial evaluation (`aLegP`, `p_polynomial_value`) |
-| `TLEread.F` | TLE (Two-Line Element) reader — parses 2-line and 3-line TLE files, single or multi-entry |
+| `TLEread.F` | TLE (Two-Line Element) reader and SGP4 state-vector conversion — parses TLE files, converts to J2000 Cartesian state via SGP4 propagator + TEME→J2000 frame rotation |
 
 ### Input
 
@@ -55,6 +55,7 @@ Orbit propagation using **Kustaanheimo–Stiefel (KS) regular elements** with a 
 |---|---|
 | `test_subrouts.F` | Fortran unit tests — 47 tests covering core subroutines |
 | `test_tle.F` | Fortran TLE reader tests — 147 checks across unit, inline, and file-based tests |
+| `test_tle2sv.F` | Fortran TLE-to-state-vector tests — 78 checks covering SGP4 init/prop, TEME→J2000, full pipeline, edge cases |
 | `test_driver.py` | Python integration test — 10 checks on two-body propagation |
 | `test_initial_conditions.py` | Python multi-IC test — 110 checks across 10 orbits under two-body and full dynamics |
 | `benchmark.py` | Performance profiler — timing across force model configurations |
@@ -356,6 +357,24 @@ ifort test_tle.F TLEread.F -o test_tle.exe
 - **`example_47944.tle.txt`** (13): 3,977-entry single-satellite — NORAD consistency, ndot sign, SSO inclination, epoch monotonicity, full-file checksum validation
 - **`example_multi.tle.txt`** (21): 94,597-entry multi-satellite — field ranges, alpha-numeric IDs, physical period, full-file checksum validation (189,194 lines)
 
+### TLE-to-state-vector test — `test_tle2sv.F`
+
+```bash
+ifx test_tle2sv.F TLEread.F -o test_tle2sv.exe
+./test_tle2sv.exe
+```
+
+78 checks across 7 test groups:
+
+- **`tle_epoch2jd`** (7): J2000 epoch, 2024, leap year, year boundaries, 1957 era, day-to-day difference
+- **`tle_sgp4_init`** (14): ISS near-Earth init, recovered mean motion/SMA, perigee altitude, secular rates, deep-space rejection (GEO, Molniya), low-orbit, zero eccentricity, equatorial, polar
+- **`tle_sgp4_prop`** (10): t=0 state validity (rmag, vmag, inclination bound, energy), 1-minute displacement, full-orbit return (rmag/vmag preserved)
+- **`tle_teme2j2k`** (6): magnitude preservation, near-identity at J2000 epoch, rotation angle < 1°, r·v invariance
+- **`tle2sv` full pipeline** (12): ISS, NOAA-18 (SSO), Vanguard 1 (high eccentricity), GEO deep-space rejection
+- **Consistency** (7): angular momentum, SMA from energy, period from SMA, repeatability, different MA → different position, perigee/apogee ratio
+- **Edge cases** (14): zero B*, tiny eccentricity, near-zero/retrograde inclination, MA=360≡0, large B*, 1957 epoch, critical inclination, ecc=0.5
+- **Batch conversion** (4): read 3 TLEs via `read_tle`, convert all to J2000 states, verify distinct and physical
+
 ### Integration test — `test_driver.py`
 
 ```bash
@@ -452,6 +471,11 @@ Times integrator, step-size sensitivity, drag overhead, and EGM2008 file-read co
 | `tle_expval(str,val)` | Decode TLE implied-decimal exponent format (e.g. `' 37765-3'` → `3.7765×10⁻⁴`) |
 | `tle_chksum(line,ick,iok)` | Verify modulo-10 checksum of a TLE line |
 | `tle_isline(raw,llen,lnum,istle)` | Validate whether a raw string is a TLE line (length, col 1-2, col 8 classification) |
+| `tle2sv(iyr4,eday,ainc,raan,ecc,aop,ama,amm,bstar,r_j2k,v_j2k,ierr)` | Complete TLE→J2000 state vector: SGP4 init + propagate at t=0 + TEME→J2000 frame rotation |
+| `tle_epoch2jd(iyr4,eday,djd)` | Convert TLE epoch (year + fractional day) to Julian Date |
+| `tle_sgp4_init(amm,ecc,ainc,raan,aop,ama,bstar,djd,...)` | SGP4 initialization: recover mean motion/SMA, compute secular J2/J4 rates and drag coefficients; `ierr=1` for deep-space (period ≥ 225 min) |
+| `tle_sgp4_prop(tsince,...,r_teme,v_teme,ierr)` | SGP4 near-Earth propagation at tsince minutes from epoch → TEME position/velocity |
+| `tle_teme2j2k(r_teme,v_teme,djd,r_j2k,v_j2k)` | TEME→J2000 frame transformation via IAU-76 precession + simplified IAU-80 nutation (4-term) + equation of equinoxes |
 
 ### Integrator
 
@@ -499,3 +523,4 @@ Times integrator, step-size sensitivity, drag overhead, and EGM2008 file-read co
 | 2026-06-20 | Fixed double-Gam step-size bug in KS integrator: `rkgil` was called with `dE*Gam` but `dE` was already `dE_0*Gam`, giving `dE_0*Gam²` — an overcorrected integration step in the generalized eccentric anomaly; now passes `dE` for the correct single perturbation scaling |
 | 2026-06-20 | Added `test_initial_conditions.py`: 110 checks across 10 orbital regimes (LEO, GTO, polar, retrograde, near-equatorial, Molniya, GEO, SSO, HEO, MEO) under two-body (exact conservation) and full dynamics (J10 + luni-solar + SRP + drag; bounded-drift verification) |
 | 2026-06-20 | Added `TLEread.F`: TLE (Two-Line Element) reader with `read_tle`, `tle_parse1`, `tle_parse2`, `tle_expval`, `tle_chksum`, `tle_isline` subroutines — handles 2-line and 3-line formats, single and multi-entry files, alpha-numeric NORAD IDs and revolution numbers, UTF-8 BOM stripping, col-8 classification validation, catalog ID cross-check, corrupt-field error handling (`ierr` flag), and `iostat`-guarded reads; 147 tests (`test_tle.F`) validated against 98,574 real TLE entries including full-file checksum verification of 197,148 lines |
+| 2026-06-21 | Added TLE-to-state-vector conversion to `TLEread.F`: `tle2sv` (complete pipeline), `tle_epoch2jd` (epoch→JD), `tle_sgp4_init`/`tle_sgp4_prop` (SGP4 near-Earth propagator with WGS-72 constants, Brouwer mean-element recovery, secular J2/J4 rates, drag coefficients), `tle_teme2j2k` (TEME→J2000 frame transformation via IAU-76 precession + simplified IAU-80 nutation); 78 tests (`test_tle2sv.F`) covering ISS/NOAA-18/Vanguard-1 orbits, deep-space rejection, edge cases (zero ecc, retrograde, critical inclination, ecc=0.5), and batch read+convert pipeline |

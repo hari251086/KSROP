@@ -17,6 +17,12 @@ TARGET  = driver_KS
 TEST_SRC  = test_subrouts.F Subrouts.F Legendre.F
 TEST_BIN  = test_subrouts
 
+TEST_TLE_SRC  = test_tle.F TLEread.F
+TEST_TLE_BIN  = test_tle
+
+TEST_TLE2SV_SRC = test_tle2sv.F TLEread.F
+TEST_TLE2SV_BIN = test_tle2sv
+
 .PHONY: all tests run test clean
 
 all: $(TARGET)
@@ -24,10 +30,16 @@ all: $(TARGET)
 $(TARGET): $(SRC)
 	$(FC) $(FFLAGS) $(SRC) -o $(TARGET)
 
-tests: $(TEST_BIN)
+tests: $(TEST_BIN) $(TEST_TLE_BIN) $(TEST_TLE2SV_BIN)
 
 $(TEST_BIN): $(TEST_SRC)
 	$(FC) $(FFLAGS) $(TEST_SRC) -o $(TEST_BIN)
+
+$(TEST_TLE_BIN): $(TEST_TLE_SRC)
+	$(FC) $(FFLAGS) $(TEST_TLE_SRC) -o $(TEST_TLE_BIN)
+
+$(TEST_TLE2SV_BIN): $(TEST_TLE2SV_SRC)
+	$(FC) $(FFLAGS) $(TEST_TLE2SV_SRC) -o $(TEST_TLE2SV_BIN)
 
 run: $(TARGET)
 	./$(TARGET)
