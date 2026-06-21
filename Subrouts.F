@@ -4,7 +4,8 @@ c     -------------------------------------------------------------
 c     ks-orbital integrator
       function rkgil(n,y,f,x,h,nt)
       implicit double precision (a-h,o-z)
-      dimension y(10),f(10),q(10) 
+      dimension y(10),f(10),q(10)
+      save q
       nt=nt+1 
       go to (1,2,3,4),nt
     1 do 11 j=1,n 
@@ -82,7 +83,7 @@ c     ============================================================
       raan = dacos(a_n(1)/anmag)
       if(a_n(2).lt.0.d0) raan = 2.d0*pi-raan
 
-      aop = acos(dotp3(a_n,ecc)/(anmag*e))
+      aop = dacos(dotp3(a_n,ecc)/(anmag*e))
       if(ecc(3).lt.0.d0) aop = 2.d0*pi-aop
 
       anu = dacos(dotp3(ecc,x)/(e*rmag))
@@ -92,20 +93,22 @@ c     ============================================================
       
 !     Special Cases
 !     Elliptical, equatorial. aop = true longitude of periapsis
-      if(dabs(dabs(h(3)/hmag)-1.d0).lt.0.d0) then
+      if(dabs(dabs(h(3)/hmag)-1.d0).lt.1.d-10) then
          raan = 0.d0
-         aop = dacos(ecc(1)/e)
-         if(ecc(2).lt.0.d0) aop = 2.d0*pi - aop
+         if(e.gt.1.d-10) then
+            aop = dacos(ecc(1)/e)
+            if(ecc(2).lt.0.d0) aop = 2.d0*pi - aop
+         end if
       end if
 !     Circular, inclined. anu = argument of latitude
-      if(e.le.0.d0) then
+      if(e.lt.1.d-10) then
          aop = 0.d0
          anu = dacos(dotp3(a_n,x)/(anmag*rmag))
          if(x(3).lt.0.d0) anu = 2.d0*pi - anu
          am = anu
       end if
 !     Circular,equatorial. anu = true longitude
-      if(dabs(dabs(h(3)/hmag)-1.d0).lt.0.d0.and.e.lt.0.d0) then
+      if(dabs(dabs(h(3)/hmag)-1.d0).lt.1.d-10.and.e.lt.1.d-10) then
          raan = 0.d0
          aop = 0.d0
          anu = dacos(x(1)/rmag)
@@ -113,6 +116,7 @@ c     ============================================================
       end if
 
 !     Mean anomaly
+      ea = 0.d0
       sinn = dsin(anu)
       cosn = dcos(anu)
       if(e.lt.1.d0) then
@@ -126,9 +130,11 @@ c     ============================================================
       end if
 
       if(am.gt.2.d0*pi) am = am - 2.d0*pi
-      if(ea.gt.2.d0*pi) ea = ea - 2.d0*pi
+      if(e.lt.1.d0) then
+         if(ea.gt.2.d0*pi) ea = ea - 2.d0*pi
+         if(ea.lt.0.d0) ea = ea+2.d0*pi
+      end if
       if(am.lt.0.d0) am = am+2.d0*pi
-      if(ea.lt.0.d0) ea = ea+2.d0*pi
       
       a_kep(1) = a
       a_kep(2) = e
@@ -157,17 +163,13 @@ c     ============================================================
       
       common /xy/ pi,d2r,r2d,amue
 
-!     degree to radians
-      do i = 3,6
-         a_kep(i)=a_kep(i)*d2r
-      end do
-      
+!     degree to radians (use local copies to preserve input)
       aa = a_kep(1)
       ae = a_kep(2)
-      ai = a_kep(3)
-      aO = a_kep(4)
-      aw = a_kep(5)
-      am = a_kep(6)
+      ai = a_kep(3)*d2r
+      aO = a_kep(4)*d2r
+      aw = a_kep(5)*d2r
+      am = a_kep(6)*d2r
       p = aa*(1.d0-ae**2)
 
       sini = dsin(ai)
@@ -311,7 +313,7 @@ c     ============================================================
       implicit double precision (a-h,o-z)
       dimension u(4),us(4),x(3),xd(3)
 
-      r=vmn(x(1),x(2),x(3))
+      r=vmn(x)
       if (x(1)) 12,11,11
  11   u(4)=0.0d0
       rpx1=r+x(1) 
@@ -500,31 +502,22 @@ c     ============================================================
       iyr = cal(1)
       imon = cal(2)
       iday = cal(3)
-      ih = cal(4)
-      imin = cal(5)
-      isec = cal(6)
       intmon1=(imon+9.0d0)/12.0d0
       intmon2=(275.0d0*imon)/9.0d0
       jyr=(7.0d0*(iyr+intmon1))/4.0d0
       tyr1=367.0d0*iyr
-      ft1=(isec/60.0d0)
-      ft2=ft1+imin
-      ft3=ft2/60.0d0
-      ft4=ft3+ih
-      ftime=ft4/24.0d0
+      ftime=(cal(4)*3600.d0 + cal(5)*60.d0 + cal(6)) / 86400.d0
       ccday1=iday+1721013.5d0
       ddj=tyr1-jyr+intmon2+ccday1+ftime
       return
       end
 
 
-      function atan3(a,b) 
+      function atan3(a,b)
       implicit double precision (a-h,o-z)
       pi=4.0d0*datan(1.0d0)
-      atan3=datan(dabs(a/b))
-      if((b.lt.0.).and.(a.gt.0.))atan3=pi-atan3 
-      if((b.lt.0.).and.(a.lt.0.))atan3=pi+atan3 
-      if((b.gt.0.).and.(a.lt.0.))atan3=2.0d0*pi-atan3 
+      atan3 = datan2(a, b)
+      if(atan3.lt.0.d0) atan3 = atan3 + 2.d0*pi
       return
       end 
 c     ============================================================
@@ -668,20 +661,20 @@ c     right ascension and declination
       s(2) = AU*sralfa*crdecl
       s(3) = AU*srdecl
 
-      close(1)
       return
       end
 
 c     ============================================================      
-      subroutine force_models(n_for,ngeo,s,m)
+      subroutine force_models(n_for,ngeo,s,amoon)
 c     Selection of force models
       implicit double precision(a-h,o-z)
+      double precision amoon
       dimension n_for(3)
 c     n_for(1): oblateness, n_for(2): sun, n_for(3): moon
 c     ============================================================
       if(n_for(1).eq.0) ngeo = 0.d0
       if(n_for(2).eq.0) s = 0.d0
-      if(n_for(3).eq.0) m = 0.d0
+      if(n_for(3).eq.0) amoon = 0.d0
 
       return
       end
