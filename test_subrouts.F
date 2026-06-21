@@ -38,13 +38,8 @@ c     --- declarations ---
 c     'm' is implicitly INTEGER (outside a-h, o-z) -- declare explicitly
       double precision miss_dist, miss_dist2
 
-c     --- initialise common block (must match const_new.dat) ---
-      pi      = 4.d0 * datan(1.d0)
-      d2r     = pi / 180.d0
-      r2d     = 180.d0 / pi
-      amue    = 3.986004415d5    ! km3/s2
-      AU      = 1.495978707d8    ! km
-      R_Earth = 6378.1363d0      ! km
+c     --- initialise common block from const_new.dat ---
+      call init_constants()
 
       npass = 0
       nfail = 0
