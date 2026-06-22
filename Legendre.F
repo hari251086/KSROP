@@ -11,10 +11,10 @@ c    P(n,-1) = (-1)^N.
 c    | P(n,x) | .le. 1 in [-1,1].
 c
 c    The N zeroes of P(n,x) are the abscissas used for Gauss-Legendre
-c    quadrature of the integral of a function F(X) with weight function 1
+c    quadrature of integral of F(X) with weight 1
 c    over the interval [-1,1].
 c
-c    The Legendre polynomials are orthogonal under the inner product defined
+c    Legendre polys are orthogonal under inner product
 c    as integration from -1 to 1:
 c
 c      Integral ( -1 .le. X .le. 1 ) P(I,X) * P(J,X) dX 
@@ -26,11 +26,11 @@ c
 c    A function F(X) defined on [-1,1] may be approximated by the series
 c      C0*P(0,x) + C1*P(1,x) + ... + CN*P(n,x)
 c    where
-c      C(I) = (2*I+1)/(2) * Integral ( -1 .le. X .le. 1 ) F(X) P(I,x) dx.
+c      C(I) = (2*I+1)/2 * Int(-1..1) F(X) P(I,x) dx.
 c
 c    The formula is:
 c
-c      P(n,x) = (1/2^N) * sum ( 0 .le. M .le. N/2 ) C(N,M) C(2N-2M,N) X^(N-2*M)
+c      P(n,x) = (1/2^N)*sum(M=0..N/2) C(N,M)*C(2N-2M,N)*X^(N-2M)
 c
 c  Differential equation:
 c
@@ -46,9 +46,9 @@ c    P( 4,x) = (   35 X^4 -    30 X^2 +     3)/8
 c    P( 5,x) = (   63 X^5 -    70 X^3 +    15 X)/8
 c    P( 6,x) = (  231 X^6 -   315 X^4 +   105 X^2 -     5)/16
 c    P( 7,x) = (  429 X^7 -   693 X^5 +   315 X^3 -    35 X)/16
-c    P( 8,x) = ( 6435 X^8 - 12012 X^6 +  6930 X^4 -  1260 X^2 +   35)/128
-c    P( 9,x) = (12155 X^9 - 25740 X^7 + 18018 X^5 -  4620 X^3 +  315 X)/128
-c    P(10,x) = (46189 X^10-109395 X^8 + 90090 X^6 - 30030 X^4 + 3465 X^2-63)/256
+c    P( 8,x) = (6435X^8-12012X^6+6930X^4-1260X^2+35)/128
+c    P( 9,x) = (12155X^9-25740X^7+18018X^5-4620X^3+315X)/128
+c    P(10,x) = (46189X^10-109395X^8+90090X^6-30030X^4+..)/256
 c
 c  Recursion:
 c
@@ -94,7 +94,7 @@ c    Note that polynomials 0 through N will be evaluated.
 c
 c    Input, double precision X(M), the evaluation points.
 c
-c    Output, double precision V(M,0:N), the values of the Legendre polynomials 
+c    Output, double precision V(M,0:N), Legendre polys
 c    of order 0 through N at the points X.
 c
       implicit none
