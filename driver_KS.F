@@ -11,7 +11,7 @@ c     - Atmospheric drag ( Oblate, co-rotating exponential
 c       atmosphere referenced to perigee conditions, tabulated
 c       density model via ATM.DAT -- same physical model and
 c       logic as KSJLSDNP2.F )
-c     - Solar radiation pressure (cannon-ball model, ported from KSJLSDNP2.F)
+c     - Solar radiation pressure (cannon-ball, KSJLSDNP2)
 c     -------------------------------------------------------------
 c     Author: Harishkumar Sellamuthu
 c     hari251086@gmail.com
@@ -21,10 +21,10 @@ c     --------
 c     Initial position in geocentric inertial reference frame in km
 c     Initial velocity in geocentric inertial reference frame in km/s
 c     Initial date in yyyy,mm,dd,hh,mm,ss (to be included)
-c     Number of revolutions, number of steps, tolerance (10^-15 is default)
+c     Revolutions, steps, tolerance (1e-15 default)
 c     Force model flags: n_force(1)=geo, n_force(2)=sun, n_force(3)=moon
 c     Drag params: BN(kg/m2), IDRAG(0/1), WE_rot(rad/s), EPS_f, FR_rot
-c     SRP params: CR(reflectivity), AM(m2/kg), IPSR(0/1), ISHAD(0=none/1=cyl/2=cone)
+c     SRP: CR, AM(m2/kg), IPSR(0/1), ISHAD(0/1/2)
 c     -------------------------------------------------------------c
 c     Compiling with Intel Fortran compiler in command line:
 c     ifort <driver_File>.F <Subroutines_File>.F
@@ -72,7 +72,7 @@ c     Value of pi, degree to radians and radians to degree
 c     Drag: atmosphere tables and KS drag perturbation vectors
       dimension ALT_atm(ndim_atm),DEN_atm(ndim_atm),SCH_atm(ndim_atm)
       dimension qdrag(4),p_drag(3)
-c     IDRAG: integer flag (0=off, 1=on); default integer via implicit i-n
+c     IDRAG: integer flag (0=off, 1=on); implicit i-n
       integer IDRAG
 c     Drag model state (oblate, co-rotating exponential atmosphere
 c     referenced to perigee conditions -- same physical model and
@@ -110,13 +110,13 @@ c     Get UTC timestamp for output filenames
 
 c     Input Files
       open (unit = 1, file = 'input/const_new.dat') !Constants
-      open (unit = 2, file = 'input/input.dat')      !Simulation parameters
+      open (unit = 2, file = 'input/input.dat')    !Sim params
       open (unit = 6, file = 'input/ATM.DAT')        !Atmosphere density
-      open (unit = 8, file = 'input/input.opm')      !CCSDS OPM initial state
+      open (unit = 8, file = 'input/input.opm')    !OPM input
 
 c     Output files (unit 3 opened later with timestamped filename)
       open (unit = 4, file = reg_fname)            !KS elements (debug)
-      open (unit = 5, file = 'output/ksrop.opm')   !CCSDS OPM initial Keplerian
+      open (unit = 5, file = 'output/ksrop.opm')  !OPM output
 
       read(1,*) amue,R_Earth,AU,amuS,amuM
       read(1,*) ngeo_deg,nsun_deg,nmoon_deg
@@ -133,7 +133,7 @@ c     Drag parameters: ballistic coeff (kg/m2), drag on/off,
 c     Earth rotation rate (rad/s), Earth flattening, rotation factor
       read(2,*) BN, IDRAG, WE_rot, EPS_f, FR_rot
 c     SRP parameters: reflectivity coeff, area-to-mass (m^2/kg),
-c     SRP on/off, shadow model (0=always sunlit, 1=cylindrical, 2=conical)
+c     SRP on/off, shadow model (0=sunlit,1=cyl,2=cone)
       read(2,*) CR_srp, AM_srp, IPSR, ISHAD
 
       allocate(traj_jd(nrev*istep+1),
@@ -419,11 +419,13 @@ c     -----------------------------------------------------------
 
             Tau_3body1 = 0.d0
             do i = 2,nsun_deg
-               Tau_3body1=Tau_3body1+(i+2)*sleg(i+1)*RbyRs(i)*RbyRs(1)*amuS
+               Tau_3body1=Tau_3body1
+     &              +(i+2)*sleg(i+1)*RbyRs(i)*RbyRs(1)*amuS
             end do
             Tau_3body2 = 0.d0
             do i = 2,nmoon_deg
-               Tau_3body2=Tau_3body2+(i+2)*oleg(i+1)*RbyRm(i)*RbyRm(1)*amuM
+               Tau_3body2=Tau_3body2
+     &              +(i+2)*oleg(i+1)*RbyRm(i)*RbyRm(1)*amuM
             end do
 
 c     -----------------------------------------------------------
@@ -438,7 +440,7 @@ c     -----------------------------------------------------------
 c     -----------------------------------------------------------
 c     Time element: conservative + drag + SRP contributions
 c     Tau_term replaced by Tau_geo (fixes uninitialized variable)
-c     Non-conservative adds: R*(u.(qdrag+qsrp))/(8w^3) - z(10)*(2/w^2)*(u.us)
+c     Non-conservative: drag + SRP energy correction
 c     -----------------------------------------------------------
             z(1) = (amue + Tau_geo + Tau_3body1 + Tau_3body2
      &             + R(1)*(dotp4(u,qdrag)+dotp4(u,qsrp)))/(8.d0*w*w*w)
@@ -495,7 +497,7 @@ c     -----------------------------------------------------------
                end do
 
 c     -----------------------------------------------------------
-c     State elements: conservative + drag + SRP forces, energy correction
+c     State: conservative + drag + SRP, energy corr
 c     z(j+1) = [geo + 3body - R*(drag+srp)]*sin(E/2)*0.25/w^2
 c              + 2*z(10)*us(j)*sin(E/2)/w
 c     z(j+5) = -[geo + 3body - R*(drag+srp)]*cos(E/2)*0.25/w^2
