@@ -47,7 +47,7 @@ KSROP/
 │
 ├── test_subrouts.F                      Unit tests (47 checks)
 ├── test_tle.F                           TLE reader tests (147 checks)
-├── test_tle2sv.F                        SGP4/frame tests (78 checks)
+├── test_tle2sv.F                        SGP4/SDP4/frame tests (118 checks)
 ├── test_tle2opm.F                       TLE-to-OPM pipeline tests (21 checks)
 ├── test_bugs.F                          Bug regression tests (17 checks)
 ├── test_driver.py                       Integration test (10 checks)
@@ -136,7 +136,7 @@ Reads `input/tle2opm.cfg`, selects closest TLE entry by NORAD/epoch, converts vi
 ./test_subrouts.exe                          # 47 unit tests
 ./test_bugs.exe                              # 17 regression tests
 ./test_tle.exe                               # 147 TLE reader tests
-./test_tle2sv.exe                            # 78 SGP4/frame tests
+./test_tle2sv.exe                            # 118 SGP4/SDP4/frame tests
 ./test_tle2opm.exe                           # 21 pipeline tests
 python test_driver.py driver_KS.exe          # 10 integration tests
 python test_initial_conditions.py driver_KS.exe  # 110 multi-orbit tests
@@ -352,10 +352,12 @@ Step size is scaled by Γ = ω/ω_Kep to maintain accuracy across eccentricities
 | `tle_expval(str,val)` | Decode implied-decimal exponent format |
 | `tle_chksum(line,ick,iok)` | Verify modulo-10 checksum |
 | `tle_isline(raw,llen,lnum,istle)` | Validate TLE line format |
-| `tle2sv(iyr4,eday,...,r_j2k,v_j2k,ierr)` | Complete TLE → J2000 state vector |
+| `tle2sv(iyr4,eday,...,r_j2k,v_j2k,ierr)` | Complete TLE → J2000 state vector (dispatches SGP4/SDP4) |
 | `tle_epoch2jd(iyr4,eday,djd)` | TLE epoch → Julian date |
-| `tle_sgp4_init(...)` | SGP4 initialisation (WGS-72 constants) |
+| `tle_sgp4_init(...)` | SGP4 initialisation — near-Earth (period < 225 min) |
 | `tle_sgp4_prop(tsince,...,r_teme,v_teme,ierr)` | SGP4 near-Earth propagation |
+| `tle_sdp4_init(...,dsstate,iresfl,ierr)` | SDP4 initialisation — deep-space (period >= 225 min) |
+| `tle_sdp4_prop(tsince,...,dsstate,iresfl,r_teme,v_teme,ierr)` | SDP4 deep-space propagation |
 | `tle_teme2j2k(r_teme,v_teme,djd,r_j2k,v_j2k)` | TEME → J2000 frame rotation |
 
 ### Integrator
@@ -411,3 +413,4 @@ EGM2008 streaming read: O(n²) lines for degree n (J2 = 3 lines, not 2.4M).
 | 2026-06-21 | Fixed 11 bugs in Subrouts.F (type mismatch, dead code, precision, uninitialized vars) |
 | 2026-06-21 | Added `tle2opm.F`: TLE-to-OPM converter; generated NORAD 47944 OPM (2025-05-01) |
 | 2026-06-21 | Refactored constants: `init_constants()` reads `const_new.dat`; unified common block |
+| 2026-06-22 | Added SDP4 deep-space theory to `TLEread.F`: `tle_sdp4_init`/`tle_sdp4_prop` with lunar-solar secular gravity, synchronous and half-day resonance handling, long-period periodics; `tle2sv` now dispatches SGP4 (period < 225 min) or SDP4 (period >= 225 min) transparently; deep-space state carried in `dsstate(50)` array with `iresfl` resonance flag; 40 new tests (118 total in `test_tle2sv.F`) covering GEO, Molniya, GPS orbit types, resonance detection, propagation, and full pipeline validation |
