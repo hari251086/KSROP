@@ -19,6 +19,7 @@ c     ============================================================
       implicit double precision (a-h, o-z)
 
       integer npass, nfail, ierr, iyr4, iall_ok, imax
+      integer iresfl
       double precision r_j2k(3), v_j2k(3)
       double precision r_teme(3), v_teme(3)
       double precision r_out(3), v_out(3)
@@ -28,6 +29,7 @@ c     ============================================================
       double precision djd, djd2, tol
       double precision rmag, vmag, hmag, energy
       double precision pi, d2r, twopi
+      double precision dsstate(50)
 
 c     Batch test arrays
       integer i_norad(3), i_yr(3), i_rev(3), i_ntle
@@ -174,28 +176,54 @@ c     T15: xmdot should be close to n0dd (mean motion dominates)
       call assert_d('ISS xmdot ~ n0dd',
      &              xmdot, n0dd, 1.d-4, npass, nfail)
 
-c     T16: Deep-space orbit rejection
+c     T16: Deep-space orbit acceptance via SDP4
 c     Geostationary: n ~ 1.0 rev/day -> period ~ 1440 min > 225
-      call tle_sgp4_init(1.0d0, 0.001d0, 0.1d0,
+      call tle_sdp4_init(1.0d0, 0.001d0, 0.1d0,
      &                   0.d0, 0.d0, 0.d0,
      &                   0.d0, djd,
      &                   n0dd, a0dd, cosio, sinio,
      &                   eta, c1_coeff, c4_coeff, t0,
      &                   perigee_km,
-     &                   omgdot, xnodot, xmdot, ierr)
-      call assert_i('GEO deep-space ierr=1',
-     &              ierr, 1, npass, nfail)
+     &                   omgdot, xnodot, xmdot,
+     &                   dsstate, iresfl, ierr)
+      call assert_i('GEO SDP4 init ierr=0',
+     &              ierr, 0, npass, nfail)
+      if (n0dd .gt. 0.d0) then
+         call assert_i('GEO n0dd > 0', 1, 1, npass, nfail)
+      else
+         call assert_i('GEO n0dd > 0', 0, 1, npass, nfail)
+      end if
+      if (a0dd .gt. 6.d0) then
+         call assert_i('GEO a0dd > 6 Re', 1, 1, npass, nfail)
+      else
+         call assert_i('GEO a0dd > 6 Re', 0, 1, npass, nfail)
+      end if
+      if (perigee_km .gt. 30000.d0) then
+         call assert_i('GEO perigee > 30000 km',
+     &                 1, 1, npass, nfail)
+      else
+         call assert_i('GEO perigee > 30000 km',
+     &                 0, 1, npass, nfail)
+      end if
 
-c     T17: Molniya-like deep space (n ~ 2.006 rev/day)
-      call tle_sgp4_init(2.006d0, 0.74d0, 63.4d0,
+c     T17: Molniya-like deep space via SDP4 (n ~ 2.006 rev/day)
+      call tle_sdp4_init(2.006d0, 0.74d0, 63.4d0,
      &                   0.d0, 270.d0, 0.d0,
      &                   0.d0, djd,
      &                   n0dd, a0dd, cosio, sinio,
      &                   eta, c1_coeff, c4_coeff, t0,
      &                   perigee_km,
-     &                   omgdot, xnodot, xmdot, ierr)
-      call assert_i('Molniya deep-space ierr=1',
-     &              ierr, 1, npass, nfail)
+     &                   omgdot, xnodot, xmdot,
+     &                   dsstate, iresfl, ierr)
+      call assert_i('Molniya SDP4 init ierr=0',
+     &              ierr, 0, npass, nfail)
+      if (n0dd .gt. 0.d0 .and. a0dd .gt. 1.d0) then
+         call assert_i('Molniya elements physical',
+     &                 1, 1, npass, nfail)
+      else
+         call assert_i('Molniya elements physical',
+     &                 0, 1, npass, nfail)
+      end if
 
 c     T18: Low perigee regime (very low orbit)
       call tle_sgp4_init(16.4d0, 0.001d0, 51.6d0,
@@ -527,11 +555,27 @@ c     T49: Negative energy (bound orbit)
      &                 0, 1, npass, nfail)
       end if
 
-c     T50: Deep-space TLE (GEO) returns error
+c     T50: Deep-space TLE (GEO) via SDP4 - now succeeds
       call tle2sv(2026, 170.d0, 0.1d0, 0.d0,
      &            0.001d0, 0.d0, 0.d0, 1.0d0, 0.d0,
      &            r_j2k, v_j2k, ierr)
-      call assert_i('GEO tle2sv ierr=1', ierr, 1, npass, nfail)
+      call assert_i('GEO tle2sv ierr=0', ierr, 0, npass, nfail)
+      rmag = dsqrt(r_j2k(1)**2+r_j2k(2)**2+r_j2k(3)**2)
+      vmag = dsqrt(v_j2k(1)**2+v_j2k(2)**2+v_j2k(3)**2)
+      if (rmag .gt. 41000.d0 .and. rmag .lt. 43000.d0) then
+         call assert_i('GEO rmag in [41k,43k] km',
+     &                 1, 1, npass, nfail)
+      else
+         call assert_i('GEO rmag in [41k,43k] km',
+     &                 0, 1, npass, nfail)
+      end if
+      if (vmag .gt. 2.8d0 .and. vmag .lt. 3.3d0) then
+         call assert_i('GEO vmag in [2.8,3.3] km/s',
+     &                 1, 1, npass, nfail)
+      else
+         call assert_i('GEO vmag in [2.8,3.3] km/s',
+     &                 0, 1, npass, nfail)
+      end if
 
 c     ============================================================
 c     Consistency and regression tests
@@ -835,6 +879,330 @@ c     ~ 8614 km
          call assert_i('Vanguard SMA in [7k,10k] km',
      &                 0, 1, npass, nfail)
       end if
+
+c     ============================================================
+c     SDP4 deep-space tests
+c     ============================================================
+      write(*,*) ''
+      write(*,*) '  --- SDP4 deep-space ---'
+
+c     DS1: SDP4 init GEO (typical geostationary)
+      call tle_epoch2jd(2026, 170.5d0, djd)
+      call tle_sdp4_init(1.00274d0, 0.0003d0, 0.5d0,
+     &                   75.d0, 0.d0, 180.d0,
+     &                   0.d0, djd,
+     &                   n0dd, a0dd, cosio, sinio,
+     &                   eta, c1_coeff, c4_coeff, t0,
+     &                   perigee_km,
+     &                   omgdot, xnodot, xmdot,
+     &                   dsstate, iresfl, ierr)
+      call assert_i('DS1 GEO init ierr=0', ierr, 0, npass, nfail)
+      call assert_i('DS1 GEO iresfl=1 (sync)',
+     &              iresfl, 1, npass, nfail)
+      if (a0dd .gt. 6.0d0 .and. a0dd .lt. 7.5d0) then
+         call assert_i('DS1 GEO a0dd ~6.6 Re',
+     &                 1, 1, npass, nfail)
+      else
+         call assert_i('DS1 GEO a0dd ~6.6 Re',
+     &                 0, 1, npass, nfail)
+      end if
+
+c     DS2: SDP4 init Molniya
+      call tle_sdp4_init(2.006d0, 0.74d0, 63.4d0,
+     &                   0.d0, 270.d0, 0.d0,
+     &                   0.d0, djd,
+     &                   n0dd, a0dd, cosio, sinio,
+     &                   eta, c1_coeff, c4_coeff, t0,
+     &                   perigee_km,
+     &                   omgdot, xnodot, xmdot,
+     &                   dsstate, iresfl, ierr)
+      call assert_i('DS2 Molniya init ierr=0',
+     &              ierr, 0, npass, nfail)
+      call assert_i('DS2 Molniya iresfl=2 (half-day)',
+     &              iresfl, 2, npass, nfail)
+
+c     DS3: SDP4 init GPS
+      call tle_sdp4_init(2.005d0, 0.005d0, 55.d0,
+     &                   100.d0, 0.d0, 0.d0,
+     &                   0.d0, djd,
+     &                   n0dd, a0dd, cosio, sinio,
+     &                   eta, c1_coeff, c4_coeff, t0,
+     &                   perigee_km,
+     &                   omgdot, xnodot, xmdot,
+     &                   dsstate, iresfl, ierr)
+      call assert_i('DS3 GPS init ierr=0', ierr, 0, npass, nfail)
+      call assert_i('DS3 GPS iresfl=2 (half-day)',
+     &              iresfl, 2, npass, nfail)
+
+c     DS4: SDP4 init non-resonant (n=1.5, period ~960 min)
+      call tle_sdp4_init(1.5d0, 0.3d0, 28.d0,
+     &                   0.d0, 0.d0, 0.d0,
+     &                   0.d0, djd,
+     &                   n0dd, a0dd, cosio, sinio,
+     &                   eta, c1_coeff, c4_coeff, t0,
+     &                   perigee_km,
+     &                   omgdot, xnodot, xmdot,
+     &                   dsstate, iresfl, ierr)
+      call assert_i('DS4 non-res init ierr=0',
+     &              ierr, 0, npass, nfail)
+      call assert_i('DS4 non-res iresfl=0',
+     &              iresfl, 0, npass, nfail)
+
+c     DS5: SDP4 prop GEO t=0
+      call tle_sdp4_init(1.00274d0, 0.0003d0, 0.5d0,
+     &                   75.d0, 0.d0, 180.d0,
+     &                   0.d0, djd,
+     &                   n0dd, a0dd, cosio, sinio,
+     &                   eta, c1_coeff, c4_coeff, t0,
+     &                   perigee_km,
+     &                   omgdot, xnodot, xmdot,
+     &                   dsstate, iresfl, ierr)
+      call tle_sdp4_prop(0.d0,
+     &              0.0003d0, 0.5d0, 75.d0, 0.d0, 180.d0,
+     &              n0dd, a0dd, cosio, sinio,
+     &              eta, c1_coeff, c4_coeff, perigee_km,
+     &              omgdot, xnodot, xmdot, 0.d0,
+     &              dsstate, iresfl,
+     &              r_teme, v_teme, ierr)
+      call assert_i('DS5 GEO prop t=0 ierr=0',
+     &              ierr, 0, npass, nfail)
+      rmag = dsqrt(r_teme(1)**2+r_teme(2)**2+r_teme(3)**2)
+      vmag = dsqrt(v_teme(1)**2+v_teme(2)**2+v_teme(3)**2)
+      if (rmag .gt. 41000.d0 .and. rmag .lt. 43500.d0) then
+         call assert_i('DS5 GEO rmag [41k,43.5k] km',
+     &                 1, 1, npass, nfail)
+      else
+         call assert_i('DS5 GEO rmag [41k,43.5k] km',
+     &                 0, 1, npass, nfail)
+      end if
+      if (vmag .gt. 2.8d0 .and. vmag .lt. 3.3d0) then
+         call assert_i('DS5 GEO vmag [2.8,3.3] km/s',
+     &                 1, 1, npass, nfail)
+      else
+         call assert_i('DS5 GEO vmag [2.8,3.3] km/s',
+     &                 0, 1, npass, nfail)
+      end if
+
+c     DS6: SDP4 prop Molniya t=0
+      call tle_sdp4_init(2.006d0, 0.74d0, 63.4d0,
+     &                   0.d0, 270.d0, 0.d0,
+     &                   0.d0, djd,
+     &                   n0dd, a0dd, cosio, sinio,
+     &                   eta, c1_coeff, c4_coeff, t0,
+     &                   perigee_km,
+     &                   omgdot, xnodot, xmdot,
+     &                   dsstate, iresfl, ierr)
+      call tle_sdp4_prop(0.d0,
+     &              0.74d0, 63.4d0, 0.d0, 270.d0, 0.d0,
+     &              n0dd, a0dd, cosio, sinio,
+     &              eta, c1_coeff, c4_coeff, perigee_km,
+     &              omgdot, xnodot, xmdot, 0.d0,
+     &              dsstate, iresfl,
+     &              r_teme, v_teme, ierr)
+      call assert_i('DS6 Molniya prop t=0 ierr=0',
+     &              ierr, 0, npass, nfail)
+      rmag = dsqrt(r_teme(1)**2+r_teme(2)**2+r_teme(3)**2)
+      vmag = dsqrt(v_teme(1)**2+v_teme(2)**2+v_teme(3)**2)
+      if (rmag .gt. 6000.d0) then
+         call assert_i('DS6 Molniya rmag > 6000 km',
+     &                 1, 1, npass, nfail)
+      else
+         call assert_i('DS6 Molniya rmag > 6000 km',
+     &                 0, 1, npass, nfail)
+      end if
+      energy = 0.5d0*vmag*vmag - 398600.8d0/rmag
+      if (energy .lt. 0.d0) then
+         call assert_i('DS6 Molniya energy < 0',
+     &                 1, 1, npass, nfail)
+      else
+         call assert_i('DS6 Molniya energy < 0',
+     &                 0, 1, npass, nfail)
+      end if
+
+c     DS7: SDP4 prop GEO t=1440 (1 day)
+      call tle_sdp4_init(1.00274d0, 0.0003d0, 0.5d0,
+     &                   75.d0, 0.d0, 180.d0,
+     &                   0.d0, djd,
+     &                   n0dd, a0dd, cosio, sinio,
+     &                   eta, c1_coeff, c4_coeff, t0,
+     &                   perigee_km,
+     &                   omgdot, xnodot, xmdot,
+     &                   dsstate, iresfl, ierr)
+      call tle_sdp4_prop(1440.d0,
+     &              0.0003d0, 0.5d0, 75.d0, 0.d0, 180.d0,
+     &              n0dd, a0dd, cosio, sinio,
+     &              eta, c1_coeff, c4_coeff, perigee_km,
+     &              omgdot, xnodot, xmdot, 0.d0,
+     &              dsstate, iresfl,
+     &              r_teme, v_teme, ierr)
+      call assert_i('DS7 GEO prop t=1440 ierr=0',
+     &              ierr, 0, npass, nfail)
+      rmag = dsqrt(r_teme(1)**2+r_teme(2)**2+r_teme(3)**2)
+      if (rmag .gt. 41000.d0 .and. rmag .lt. 43500.d0) then
+         call assert_i('DS7 GEO 1day rmag [41k,43.5k]',
+     &                 1, 1, npass, nfail)
+      else
+         call assert_i('DS7 GEO 1day rmag [41k,43.5k]',
+     &                 0, 1, npass, nfail)
+      end if
+
+c     DS8: SDP4 prop Molniya t=1440
+      call tle_sdp4_init(2.006d0, 0.74d0, 63.4d0,
+     &                   0.d0, 270.d0, 0.d0,
+     &                   0.d0, djd,
+     &                   n0dd, a0dd, cosio, sinio,
+     &                   eta, c1_coeff, c4_coeff, t0,
+     &                   perigee_km,
+     &                   omgdot, xnodot, xmdot,
+     &                   dsstate, iresfl, ierr)
+      call tle_sdp4_prop(1440.d0,
+     &              0.74d0, 63.4d0, 0.d0, 270.d0, 0.d0,
+     &              n0dd, a0dd, cosio, sinio,
+     &              eta, c1_coeff, c4_coeff, perigee_km,
+     &              omgdot, xnodot, xmdot, 0.d0,
+     &              dsstate, iresfl,
+     &              r_teme, v_teme, ierr)
+      call assert_i('DS8 Molniya prop t=1440 ierr=0',
+     &              ierr, 0, npass, nfail)
+      rmag = dsqrt(r_teme(1)**2+r_teme(2)**2+r_teme(3)**2)
+      if (rmag .gt. 6000.d0) then
+         call assert_i('DS8 Molniya 1day rmag>6000',
+     &                 1, 1, npass, nfail)
+      else
+         call assert_i('DS8 Molniya 1day rmag>6000',
+     &                 0, 1, npass, nfail)
+      end if
+c     Check state is finite
+      if (dabs(r_teme(1)).lt.1.d10 .and.
+     &    dabs(r_teme(2)).lt.1.d10 .and.
+     &    dabs(r_teme(3)).lt.1.d10) then
+         call assert_i('DS8 Molniya state finite',
+     &                 1, 1, npass, nfail)
+      else
+         call assert_i('DS8 Molniya state finite',
+     &                 0, 1, npass, nfail)
+      end if
+
+c     DS9: tle2sv GEO full pipeline
+      call tle2sv(2026, 170.5d0, 0.5d0, 75.d0, 0.0003d0,
+     &            0.d0, 180.d0, 1.00274d0, 0.d0,
+     &            r_j2k, v_j2k, ierr)
+      call assert_i('DS9 tle2sv GEO ierr=0',
+     &              ierr, 0, npass, nfail)
+      rmag = dsqrt(r_j2k(1)**2+r_j2k(2)**2+r_j2k(3)**2)
+      if (rmag .gt. 41000.d0 .and. rmag .lt. 43500.d0) then
+         call assert_i('DS9 GEO rmag [41k,43.5k]',
+     &                 1, 1, npass, nfail)
+      else
+         call assert_i('DS9 GEO rmag [41k,43.5k]',
+     &                 0, 1, npass, nfail)
+      end if
+      energy = 0.5d0*(v_j2k(1)**2+v_j2k(2)**2+v_j2k(3)**2)
+     &       - 398600.8d0/rmag
+      if (energy .lt. 0.d0) then
+         call assert_i('DS9 GEO energy < 0',
+     &                 1, 1, npass, nfail)
+      else
+         call assert_i('DS9 GEO energy < 0',
+     &                 0, 1, npass, nfail)
+      end if
+
+c     DS10: tle2sv Molniya full pipeline
+      call tle2sv(2026, 170.5d0, 63.4d0, 0.d0, 0.74d0,
+     &            270.d0, 0.d0, 2.006d0, 0.d0,
+     &            r_j2k, v_j2k, ierr)
+      call assert_i('DS10 tle2sv Molniya ierr=0',
+     &              ierr, 0, npass, nfail)
+      rmag = dsqrt(r_j2k(1)**2+r_j2k(2)**2+r_j2k(3)**2)
+      vmag = dsqrt(v_j2k(1)**2+v_j2k(2)**2+v_j2k(3)**2)
+      energy = 0.5d0*vmag*vmag - 398600.8d0/rmag
+      if (energy .lt. 0.d0) then
+         call assert_i('DS10 Molniya energy < 0',
+     &                 1, 1, npass, nfail)
+      else
+         call assert_i('DS10 Molniya energy < 0',
+     &                 0, 1, npass, nfail)
+      end if
+      if (dabs(r_j2k(1)).lt.1.d10 .and.
+     &    dabs(r_j2k(2)).lt.1.d10 .and.
+     &    dabs(r_j2k(3)).lt.1.d10) then
+         call assert_i('DS10 Molniya state finite',
+     &                 1, 1, npass, nfail)
+      else
+         call assert_i('DS10 Molniya state finite',
+     &                 0, 1, npass, nfail)
+      end if
+
+c     DS11: tle2sv GPS full pipeline
+      call tle2sv(2026, 170.5d0, 55.d0, 100.d0, 0.005d0,
+     &            0.d0, 0.d0, 2.005d0, 0.d0,
+     &            r_j2k, v_j2k, ierr)
+      call assert_i('DS11 tle2sv GPS ierr=0',
+     &              ierr, 0, npass, nfail)
+      rmag = dsqrt(r_j2k(1)**2+r_j2k(2)**2+r_j2k(3)**2)
+      if (rmag .gt. 26000.d0 .and. rmag .lt. 27500.d0) then
+         call assert_i('DS11 GPS rmag [26k,27.5k]',
+     &                 1, 1, npass, nfail)
+      else
+         call assert_i('DS11 GPS rmag [26k,27.5k]',
+     &                 0, 1, npass, nfail)
+      end if
+
+c     DS12: Near-Earth (ISS) unchanged, still uses SGP4
+      call tle2sv(2026, 170.5d0, 51.64d0, 123.4567d0, 0.00067d0,
+     &            45.1234d0, 315.d0, 15.54d0, 1.027d-4,
+     &            r_j2k, v_j2k, ierr)
+      call assert_i('DS12 ISS still SGP4 ierr=0',
+     &              ierr, 0, npass, nfail)
+      rmag = dsqrt(r_j2k(1)**2+r_j2k(2)**2+r_j2k(3)**2)
+      if (rmag .gt. 6400.d0 .and. rmag .lt. 7200.d0) then
+         call assert_i('DS12 ISS rmag [6400,7200]',
+     &                 1, 1, npass, nfail)
+      else
+         call assert_i('DS12 ISS rmag [6400,7200]',
+     &                 0, 1, npass, nfail)
+      end if
+
+c     DS13: Period boundary (n=6.4, period ~ 225 min exactly)
+      call tle2sv(2026, 170.5d0, 28.5d0, 0.d0, 0.01d0,
+     &            0.d0, 0.d0, 6.4d0, 0.d0,
+     &            r_j2k, v_j2k, ierr)
+      call assert_i('DS13 boundary n=6.4 ierr=0',
+     &              ierr, 0, npass, nfail)
+      rmag = dsqrt(r_j2k(1)**2+r_j2k(2)**2+r_j2k(3)**2)
+      if (rmag .gt. 5000.d0) then
+         call assert_i('DS13 boundary rmag > 5000',
+     &                 1, 1, npass, nfail)
+      else
+         call assert_i('DS13 boundary rmag > 5000',
+     &                 0, 1, npass, nfail)
+      end if
+
+c     DS14: Deep-space z bounded by inclination
+      call tle2sv(2026, 170.5d0, 0.5d0, 75.d0, 0.0003d0,
+     &            0.d0, 180.d0, 1.00274d0, 0.d0,
+     &            r_j2k, v_j2k, ierr)
+      rmag = dsqrt(r_j2k(1)**2+r_j2k(2)**2+r_j2k(3)**2)
+      zmax = rmag * dsin(0.5d0*d2r + 2.d0*d2r)
+      if (dabs(r_j2k(3)) .le. zmax) then
+         call assert_i('DS14 GEO z bounded by inc',
+     &                 1, 1, npass, nfail)
+      else
+         call assert_i('DS14 GEO z bounded by inc',
+     &                 0, 1, npass, nfail)
+      end if
+
+c     DS15: Repeatability - two SDP4 calls identical
+      call tle2sv(2026, 170.5d0, 0.5d0, 75.d0, 0.0003d0,
+     &            0.d0, 180.d0, 1.00274d0, 0.d0,
+     &            r_j2k, v_j2k, ierr)
+      call tle2sv(2026, 170.5d0, 0.5d0, 75.d0, 0.0003d0,
+     &            0.d0, 180.d0, 1.00274d0, 0.d0,
+     &            r_out, v_out, ierr)
+      dr = dsqrt((r_j2k(1)-r_out(1))**2 + (r_j2k(2)-r_out(2))**2
+     &         + (r_j2k(3)-r_out(3))**2)
+      call assert_d('DS15 SDP4 repeatability dr=0',
+     &              dr, 0.d0, 1.d-10, npass, nfail)
 
 c     ============================================================
 c     Summary
