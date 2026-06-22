@@ -34,7 +34,7 @@ c     --- declarations ---
       dimension tca_cal2(6), x1b(3), xd1b(3), cov1b(6,6)
       dimension x2b(3), xd2b(3), cov2b(6,6)
       character*23 creation_str, tca_str
-      integer npass, nfail
+      integer npass, nfail, iall_ok, iq1, iq2, iq3, iq4
 c     'm' is implicitly INTEGER (outside a-h, o-z) -- declare explicitly
       double precision miss_dist, miss_dist2
 
@@ -334,6 +334,268 @@ c     ==============================================================
      &                        1.5d8, 0.d0, 0.d0)
       call assert('shadfncone umbra (anti-sun) -> 0.0',
      &            rohp_cone, 0.d0, eps10, npass, nfail)
+
+c     ==============================================================
+c     Sun azimuth angle tests
+c     ==============================================================
+      write(*,*) ''
+      write(*,*) '  --- sun_azimuth ---'
+
+c     SA1: Sun on apsidal line → Λ_S ≈ pi/2
+c     Equatorial orbit (i=0), perigee along x (ω=0, Ω=0)
+c     Sun along x-axis: αS=0, δS=0
+c     l3 = cos(0)cos(0)*1 + ... = 1, l4 = 0 → atan2(1,0) = pi/2
+      call sun_azimuth(0.d0, 0.d0, 0.d0, 0.d0, 0.d0,
+     &                 res_atan)
+      call assert('SA1 Sun on apsidal line = pi/2',
+     &            res_atan, pi/2.d0, 1.d-10, npass, nfail)
+
+c     SA2: Sun at 90° from apsidal line → Λ_S ≈ 0 or pi
+c     Equatorial orbit, perigee along x, Sun along y: αS=pi/2
+      call sun_azimuth(0.d0, 0.d0, 0.d0, pi/2.d0, 0.d0,
+     &                 res_atan)
+      call assert('SA2 Sun 90deg from apsides = 0',
+     &            res_atan, 0.d0, 1.d-10, npass, nfail)
+
+c     SA3: Sun opposite apsidal line → Λ_S ≈ 3*pi/2
+c     Equatorial orbit, Sun along -x: αS=pi
+      call sun_azimuth(0.d0, 0.d0, 0.d0, pi, 0.d0,
+     &                 res_atan)
+      call assert('SA3 Sun opposite apsides=3pi/2',
+     &            res_atan, 1.5d0*pi, 1.d-10, npass, nfail)
+
+c     SA4: Rotating RAAN by 90° shifts azimuth
+c     Equatorial orbit, ω=0, Ω=pi/2, Sun at αS=pi/2
+c     Perigee now along y → Sun on apsidal line → pi/2
+      call sun_azimuth(0.d0, 0.d0, pi/2.d0, pi/2.d0, 0.d0,
+     &                 res_atan)
+      call assert('SA4 RAAN=90 shift = pi/2',
+     &            res_atan, pi/2.d0, 1.d-10, npass, nfail)
+
+c     SA5: Non-zero inclination, Sun in equatorial plane
+c     i=45°, ω=0, Ω=0, Sun along x: αS=0, δS=0
+c     l11=1, l12=0, l13=0 → l3=1
+c     l21=0, l22=cos(45), l23=0 → l4=0
+c     → atan2(1,0) = pi/2
+      call sun_azimuth(45.d0*d2r, 0.d0, 0.d0, 0.d0, 0.d0,
+     &                 res_atan)
+      call assert('SA5 i=45 Sun on apsides=pi/2',
+     &            res_atan, pi/2.d0, 1.d-10, npass, nfail)
+
+c     SA6: Polar orbit (i=90°), ω=0, Ω=0, Sun along z
+c     l13=sin(0)*sin(90)=0, l23=cos(0)*sin(90)=1
+c     Sun along z: αS=0, δS=pi/2 → els=(0,0,1)
+c     l3=l13*1=0, l4=l23*1=1 → atan2(0,1)=0
+      call sun_azimuth(pi/2.d0, 0.d0, 0.d0, 0.d0, pi/2.d0,
+     &                 res_atan)
+      call assert('SA6 polar i=90 Sun@pole = 0',
+     &            res_atan, 0.d0, 1.d-10, npass, nfail)
+
+c     SA7: Output always in [0, 2*pi)
+c     Various inputs should all give non-negative result
+      call sun_azimuth(30.d0*d2r, 45.d0*d2r, 60.d0*d2r,
+     &                 3.5d0, -0.3d0, res_atan)
+      if (res_atan .ge. 0.d0 .and. res_atan .lt. 2.d0*pi) then
+         write(*,*) '  [PASS]  SA7 azimuth in [0, 2pi)'
+         npass = npass + 1
+      else
+         write(*,*) '  [FAIL]  SA7 azimuth in [0, 2pi)'
+         nfail = nfail + 1
+      end if
+
+c     SA8: Symmetry — opposite Sun gives opposite quadrant
+      call sun_azimuth(0.d0, 0.d0, 0.d0, 0.d0, 0.d0,
+     &                 res_atan)
+      call sun_azimuth(0.d0, 0.d0, 0.d0, pi, 0.d0,
+     &                 hmag)
+      call assert('SA8 opposite Sun = pi apart',
+     &            dabs(hmag - res_atan), pi, 1.d-10,
+     &            npass, nfail)
+
+c     SA9: ω rotation shifts azimuth by same amount
+c     Equatorial orbit, Sun along x, ω=0 → pi/2
+c     ω=pi/4 should shift by pi/4
+      call sun_azimuth(0.d0, 0.d0, 0.d0, 0.d0, 0.d0,
+     &                 res_atan)
+      call sun_azimuth(0.d0, pi/4.d0, 0.d0, 0.d0, 0.d0,
+     &                 hmag)
+      call assert('SA9 omega shift = pi/4',
+     &            dabs(hmag - res_atan), pi/4.d0, 1.d-10,
+     &            npass, nfail)
+
+c     SA10: Full azimuth sweep — all 4 quadrants reachable
+c     Equatorial orbit, vary αS from 0 to 2pi
+      iall_ok = 1
+      iq1 = 0
+      iq2 = 0
+      iq3 = 0
+      iq4 = 0
+      do i = 0, 35
+         call sun_azimuth(0.d0, 0.d0, 0.d0,
+     &        dble(i)*10.d0*d2r, 0.d0, res_atan)
+         if (res_atan .lt. 0.d0 .or. res_atan .ge. 2.d0*pi)
+     &      iall_ok = 0
+         if (res_atan .ge. 0.d0 .and.
+     &       res_atan .lt. pi/2.d0) iq1 = 1
+         if (res_atan .ge. pi/2.d0 .and.
+     &       res_atan .lt. pi) iq2 = 1
+         if (res_atan .ge. pi .and.
+     &       res_atan .lt. 1.5d0*pi) iq3 = 1
+         if (res_atan .ge. 1.5d0*pi .and.
+     &       res_atan .lt. 2.d0*pi) iq4 = 1
+      end do
+      if (iall_ok .eq. 1 .and. iq1+iq2+iq3+iq4 .eq. 4) then
+         write(*,*) '  [PASS]  SA10 all 4 quadrants reached'
+         npass = npass + 1
+      else
+         write(*,*) '  [FAIL]  SA10 all 4 quadrants reached'
+         nfail = nfail + 1
+      end if
+
+c     SA11: Realistic GEO orbit (i=0.05°, e≈0, Ω=75°, ω=0°)
+c     Sun at vernal equinox: αS≈0, δS≈0
+c     Result should be finite and in [0, 2pi)
+      call sun_azimuth(0.05d0*d2r, 0.d0, 75.d0*d2r,
+     &                 0.d0, 0.d0, res_atan)
+      if (res_atan .ge. 0.d0 .and. res_atan .lt. 2.d0*pi) then
+         write(*,*) '  [PASS]  SA11 GEO orbit valid range'
+         npass = npass + 1
+      else
+         write(*,*) '  [FAIL]  SA11 GEO orbit valid range'
+         nfail = nfail + 1
+      end if
+
+c     SA12: GEO — Sun at summer solstice (αS≈90°, δS≈23.4°)
+c     Result should differ from equinox (SA11)
+      call sun_azimuth(0.05d0*d2r, 0.d0, 75.d0*d2r,
+     &                 90.d0*d2r, 23.4d0*d2r, hmag)
+      if (dabs(hmag - res_atan) .gt. 0.1d0) then
+         write(*,*) '  [PASS]  SA12 GEO solstice differs'
+         npass = npass + 1
+      else
+         write(*,*) '  [FAIL]  SA12 GEO solstice differs'
+         nfail = nfail + 1
+      end if
+
+c     SA13: Realistic GTO (i=7°, e=0.73, ω=178°, Ω=240°)
+c     Ariane 5 ESC-A (case A from manuscript Table 4)
+c     Sun near winter solstice: αS≈270°, δS≈-23.4°
+      call sun_azimuth(7.d0*d2r, 178.d0*d2r, 240.d0*d2r,
+     &                 270.d0*d2r, -23.4d0*d2r, res_atan)
+      if (res_atan .ge. 0.d0 .and. res_atan .lt. 2.d0*pi) then
+         write(*,*) '  [PASS]  SA13 GTO Ariane valid range'
+         npass = npass + 1
+      else
+         write(*,*) '  [FAIL]  SA13 GTO Ariane valid range'
+         nfail = nfail + 1
+      end if
+
+c     SA14: GTO — varying Sun RA sweeps all quadrants
+c     i=7°, ω=320°, Ω=240° (Ariane GTO config)
+      iq1 = 0
+      iq2 = 0
+      iq3 = 0
+      iq4 = 0
+      do i = 0, 35
+         call sun_azimuth(7.d0*d2r, 320.d0*d2r, 240.d0*d2r,
+     &        dble(i)*10.d0*d2r, 0.d0, res_atan)
+         if (res_atan .ge. 0.d0 .and.
+     &       res_atan .lt. pi/2.d0) iq1 = 1
+         if (res_atan .ge. pi/2.d0 .and.
+     &       res_atan .lt. pi) iq2 = 1
+         if (res_atan .ge. pi .and.
+     &       res_atan .lt. 1.5d0*pi) iq3 = 1
+         if (res_atan .ge. 1.5d0*pi .and.
+     &       res_atan .lt. 2.d0*pi) iq4 = 1
+      end do
+      if (iq1+iq2+iq3+iq4 .eq. 4) then
+         write(*,*) '  [PASS]  SA14 GTO all quadrants'
+         npass = npass + 1
+      else
+         write(*,*) '  [FAIL]  SA14 GTO all quadrants'
+         nfail = nfail + 1
+      end if
+
+c     SA15: Molniya orbit (i=63.4°, e=0.74, ω=270°, Ω=0°)
+c     Sun at αS=180°, δS=0° (autumn equinox)
+      call sun_azimuth(63.4d0*d2r, 270.d0*d2r, 0.d0,
+     &                 180.d0*d2r, 0.d0, res_atan)
+      if (res_atan .ge. 0.d0 .and. res_atan .lt. 2.d0*pi) then
+         write(*,*) '  [PASS]  SA15 Molniya valid range'
+         npass = npass + 1
+      else
+         write(*,*) '  [FAIL]  SA15 Molniya valid range'
+         nfail = nfail + 1
+      end if
+
+c     SA16: GTO with high inclination (PSLV, i=19.2°)
+c     ω=128°, Ω=166°, Sun at αS=160°, δS=12°
+      call sun_azimuth(19.2d0*d2r, 128.d0*d2r, 166.d0*d2r,
+     &                 160.d0*d2r, 12.d0*d2r, res_atan)
+      if (res_atan .ge. 0.d0 .and. res_atan .lt. 2.d0*pi) then
+         write(*,*) '  [PASS]  SA16 PSLV GTO valid range'
+         npass = npass + 1
+      else
+         write(*,*) '  [FAIL]  SA16 PSLV GTO valid range'
+         nfail = nfail + 1
+      end if
+
+c     SA17: Proton-M Briz-M (i=48.7°, ω=167°, Ω=1.4°)
+c     Sun at αS=95°, δS=23°
+      call sun_azimuth(48.7d0*d2r, 167.d0*d2r, 1.4d0*d2r,
+     &                 95.d0*d2r, 23.d0*d2r, res_atan)
+      if (res_atan .ge. 0.d0 .and. res_atan .lt. 2.d0*pi) then
+         write(*,*) '  [PASS]  SA17 Briz-M HEO valid range'
+         npass = npass + 1
+      else
+         write(*,*) '  [FAIL]  SA17 Briz-M HEO valid range'
+         nfail = nfail + 1
+      end if
+
+c     SA18: Seasonal variation requires meaningful inclination
+c     i=30°, ω=0, Ω=75°: winter vs summer δS
+      call sun_azimuth(30.d0*d2r, 0.d0, 75.d0*d2r,
+     &                 90.d0*d2r, -23.4d0*d2r, res_atan)
+      call sun_azimuth(30.d0*d2r, 0.d0, 75.d0*d2r,
+     &                 90.d0*d2r, 23.4d0*d2r, hmag)
+      if (dabs(hmag - res_atan) .gt. 0.01d0) then
+         write(*,*) '  [PASS]  SA18 seasonal shift i=30'
+         npass = npass + 1
+      else
+         write(*,*) '  [FAIL]  SA18 seasonal shift i=30'
+         nfail = nfail + 1
+      end if
+
+c     SA19: GTO RAAN sweep — azimuth varies smoothly
+c     i=7°, ω=320°, Sun fixed at equinox
+      iall_ok = 1
+      do i = 0, 35
+         call sun_azimuth(7.d0*d2r, 320.d0*d2r,
+     &        dble(i)*10.d0*d2r, 0.d0, 0.d0, res_atan)
+         if (res_atan .lt. 0.d0 .or. res_atan .ge. 2.d0*pi)
+     &      iall_ok = 0
+      end do
+      if (iall_ok .eq. 1) then
+         write(*,*) '  [PASS]  SA19 GTO RAAN sweep valid'
+         npass = npass + 1
+      else
+         write(*,*) '  [FAIL]  SA19 GTO RAAN sweep valid'
+         nfail = nfail + 1
+      end if
+
+c     SA20: Manuscript Case A (Ariane ESC-A)
+c     i=6.1°, ω=320°, Ω=240°, αS≈280°, δS≈-23°
+c     Just verify finite result in [0, 2pi)
+      call sun_azimuth(6.1d0*d2r, 320.d0*d2r, 240.d0*d2r,
+     &                 280.d0*d2r, -23.d0*d2r, res_atan)
+      if (res_atan .ge. 0.d0 .and. res_atan .lt. 2.d0*pi
+     &    .and. res_atan .eq. res_atan) then
+         write(*,*) '  [PASS]  SA20 Case A finite azimuth'
+         npass = npass + 1
+      else
+         write(*,*) '  [FAIL]  SA20 Case A finite azimuth'
+         nfail = nfail + 1
+      end if
 
 c     ==============================================================
 c     Summary

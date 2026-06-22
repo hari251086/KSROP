@@ -45,7 +45,7 @@ KSROP/
 │   ├── KSROP_YYYYMMDDTHHMMSS_Regular.out  KS elements debug dump
 │   └── ksrop.opm                        Initial Keplerian elements (OPM)
 │
-├── test_subrouts.F                      Unit tests (47 checks)
+├── test_subrouts.F                      Unit tests (57 checks)
 ├── test_tle.F                           TLE reader tests (147 checks)
 ├── test_tle2sv.F                        SGP4/SDP4/frame tests (156 checks)
 ├── test_tle2opm.F                       TLE-to-OPM pipeline tests (21 checks)
@@ -148,7 +148,7 @@ bash test_all.sh                             # lint + 388 Fortran + integration
 bash lint_check.sh                           # lint only (line length, precision, common blocks)
 ```
 
-**Total: 498 automated checks + 5 lint rules.**
+**Total: 508 automated checks + 5 lint rules.**
 
 ---
 
@@ -313,6 +313,7 @@ Step size is scaled by Γ = ω/ω_Kep to maintain accuracy across eccentricities
 | Subroutine | Description |
 |---|---|
 | `solarnpv(dj,s)` | Sun position (geocentric, km) |
+| `sun_azimuth(ai,omega,raan,alpha_s,delta_s,lambda_s)` | Sun azimuth angle w.r.t. orbital plane (Cook 1962) |
 | `lunarpv(dj,tm)` | Moon position (geocentric, km) |
 | `third_body_aux(deg,x,tb,R1,amu_tb,...)` | Third-body distance ratios and coefficients |
 | `aLegP(n,x,P)` | Zonal Legendre polynomials |
@@ -420,4 +421,5 @@ EGM2008 streaming read: O(n²) lines for degree n (J2 = 3 lines, not 2.4M).
 | 2026-06-21 | Added `tle2opm.F`: TLE-to-OPM converter; generated NORAD 47944 OPM (2025-05-01) |
 | 2026-06-21 | Refactored constants: `init_constants()` reads `const_new.dat`; unified common block |
 | 2026-06-22 | Added SDP4 deep-space theory to `TLEread.F`: `tle_sdp4_init`/`tle_sdp4_prop` with lunar-solar secular gravity, synchronous and half-day resonance handling, long-period periodics; `tle2sv` now dispatches SGP4 (period < 225 min) or SDP4 (period >= 225 min) transparently; deep-space state carried in `dsstate(50)` array with `iresfl` resonance flag; 78 new tests (156 total in `test_tle2sv.F`) covering GEO, Molniya, GPS orbit types, resonance detection, propagation, edge cases (backward prop, 30-day duration, e=0.85, retrograde, polar, critical inc, angle sweeps, energy/momentum conservation, SGP4/SDP4 boundary continuity), and full pipeline validation |
+| 2026-06-22 | Added `sun_azimuth` subroutine to `Subrouts.F`: computes Sun azimuth angle (Λ_S) w.r.t. spacecraft orbital plane per Cook (1962); 10 tests in `test_subrouts.F` (apsidal alignment, quadrant sweep, inclination/RAAN/ω rotation, polar orbit, range validation) |
 | 2026-06-22 | Added automated lint checks: `lint_check.sh` (line length, single-precision intrinsics, common block consistency, tabs, trailing whitespace) and `test_all.sh` (unified runner for lint + all test suites); fixed 12 source lines exceeding 72-column F77 limit |
