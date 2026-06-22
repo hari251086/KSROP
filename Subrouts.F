@@ -686,7 +686,65 @@ c     right ascension and declination
       return
       end
 
-c     ============================================================      
+c     ============================================================
+      subroutine sun_azimuth(ai, omega, raan, alpha_s, delta_s,
+     &                       lambda_s)
+c     Compute Sun azimuth angle with respect to the spacecraft
+c     orbital plane. Cook (1962), thesis Appendix 2.
+c
+c     Input (all in radians)
+c       ai      : inclination
+c       omega   : argument of perigee
+c       raan    : right ascension of the ascending node
+c       alpha_s : Sun right ascension
+c       delta_s : Sun declination
+c
+c     Output (radians, mapped to [0, 2*pi))
+c       lambda_s: Sun azimuth angle
+c     ============================================================
+      implicit double precision (a-h, o-z)
+      double precision lambda_s
+
+      pi = 4.d0*datan(1.d0)
+
+      csw = dcos(omega)
+      snw = dsin(omega)
+      csi = dcos(ai)
+      sni = dsin(ai)
+      csO = dcos(raan)
+      snO = dsin(raan)
+
+c     Direction cosines of apsidal line (perigee) in ECI
+      el11 = csw*csO - snO*snw*csi
+      el12 = csw*snO + csO*snw*csi
+      el13 = snw*sni
+
+c     Direction cosines of normal to apsidal line in orbital plane
+      el21 = -snw*csO - snO*csw*csi
+      el22 = -snw*snO + csO*csw*csi
+      el23 = csw*sni
+
+c     Sun unit vector in ECI
+      csA = dcos(alpha_s)
+      snA = dsin(alpha_s)
+      csD = dcos(delta_s)
+      snD = dsin(delta_s)
+      els1 = csA*csD
+      els2 = snA*csD
+      els3 = snD
+
+c     Projections onto orbital plane
+      el3 = el11*els1 + el12*els2 + el13*els3
+      el4 = el21*els1 + el22*els2 + el23*els3
+
+c     Sun azimuth angle (0 to 2*pi)
+      lambda_s = datan2(el3, el4)
+      if (lambda_s .lt. 0.d0) lambda_s = lambda_s + 2.d0*pi
+
+      return
+      end
+
+c     ============================================================
       subroutine force_models(n_for,ngeo,s,amoon)
 c     Selection of force models
       implicit double precision(a-h,o-z)
