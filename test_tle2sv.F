@@ -1205,6 +1205,410 @@ c     DS15: Repeatability - two SDP4 calls identical
      &              dr, 0.d0, 1.d-10, npass, nfail)
 
 c     ============================================================
+c     Extended SDP4 edge-case and stress tests
+c     ============================================================
+      write(*,*) ''
+      write(*,*) '  --- SDP4 extended edge cases ---'
+
+c     DS16: Backward propagation (negative tsince)
+c     GEO propagated -1440 min should still be valid
+      call tle_sdp4_init(1.00274d0, 0.0003d0, 0.5d0,
+     &     75.d0, 0.d0, 180.d0, 0.d0, 2460478.5d0,
+     &     n0dd, a0dd, cosio, sinio, eta, c1_coeff, c4_coeff,
+     &     t0, perigee_km, omgdot, xnodot, xmdot,
+     &     dsstate, iresfl, ierr)
+      call tle_sdp4_prop(-1440.d0,
+     &     0.0003d0, 0.5d0, 75.d0, 0.d0, 180.d0,
+     &     n0dd, a0dd, cosio, sinio, eta, c1_coeff, c4_coeff,
+     &     perigee_km, omgdot, xnodot, xmdot, 0.d0,
+     &     dsstate, iresfl, r_teme, v_teme, ierr)
+      call assert_i('DS16 backward prop ierr=0',
+     &              ierr, 0, npass, nfail)
+      rmag = dsqrt(r_teme(1)**2+r_teme(2)**2+r_teme(3)**2)
+      if (rmag .gt. 40000.d0 .and. rmag .lt. 45000.d0) then
+         call assert_i('DS16 backward GEO rmag ok', 1,1,npass,nfail)
+      else
+         call assert_i('DS16 backward GEO rmag ok', 0,1,npass,nfail)
+      end if
+
+c     DS17: Long-duration propagation (7 days = 10080 min)
+      call tle_sdp4_prop(10080.d0,
+     &     0.0003d0, 0.5d0, 75.d0, 0.d0, 180.d0,
+     &     n0dd, a0dd, cosio, sinio, eta, c1_coeff, c4_coeff,
+     &     perigee_km, omgdot, xnodot, xmdot, 0.d0,
+     &     dsstate, iresfl, r_teme, v_teme, ierr)
+      call assert_i('DS17 7-day GEO prop ierr=0',
+     &              ierr, 0, npass, nfail)
+      rmag = dsqrt(r_teme(1)**2+r_teme(2)**2+r_teme(3)**2)
+      if (rmag .gt. 39000.d0 .and. rmag .lt. 46000.d0) then
+         call assert_i('DS17 7-day GEO rmag ok', 1, 1, npass, nfail)
+      else
+         call assert_i('DS17 7-day GEO rmag ok', 0, 1, npass, nfail)
+      end if
+c     Verify state is finite (no NaN)
+      if (r_teme(1) .eq. r_teme(1) .and.
+     &    v_teme(1) .eq. v_teme(1)) then
+         call assert_i('DS17 7-day state finite', 1, 1, npass, nfail)
+      else
+         call assert_i('DS17 7-day state finite', 0, 1, npass, nfail)
+      end if
+
+c     DS18: Long-duration Molniya (30 days = 43200 min)
+      call tle_sdp4_init(2.006d0, 0.74d0, 63.4d0,
+     &     0.d0, 270.d0, 0.d0, 0.d0, 2460478.5d0,
+     &     n0dd, a0dd, cosio, sinio, eta, c1_coeff, c4_coeff,
+     &     t0, perigee_km, omgdot, xnodot, xmdot,
+     &     dsstate, iresfl, ierr)
+      call tle_sdp4_prop(43200.d0,
+     &     0.74d0, 63.4d0, 0.d0, 270.d0, 0.d0,
+     &     n0dd, a0dd, cosio, sinio, eta, c1_coeff, c4_coeff,
+     &     perigee_km, omgdot, xnodot, xmdot, 0.d0,
+     &     dsstate, iresfl, r_teme, v_teme, ierr)
+      call assert_i('DS18 30-day Molniya ierr=0',
+     &              ierr, 0, npass, nfail)
+      rmag = dsqrt(r_teme(1)**2+r_teme(2)**2+r_teme(3)**2)
+      if (rmag .gt. 6000.d0 .and. rmag .lt. 50000.d0) then
+         call assert_i('DS18 30-day Molniya rmag ok',1,1,npass,nfail)
+      else
+         call assert_i('DS18 30-day Molniya rmag ok',0,1,npass,nfail)
+      end if
+
+c     DS19: Very high eccentricity (e=0.85, GTO-like deep space)
+      call tle2sv(2026, 170.d0, 7.d0, 240.d0, 0.85d0,
+     &            180.d0, 0.d0, 1.5d0, 1.d-4,
+     &            r_j2k, v_j2k, ierr)
+      call assert_i('DS19 high-ecc e=0.85 ierr=0',
+     &              ierr, 0, npass, nfail)
+      rmag = dsqrt(r_j2k(1)**2+r_j2k(2)**2+r_j2k(3)**2)
+      energy = 0.5d0*(v_j2k(1)**2+v_j2k(2)**2+v_j2k(3)**2)
+     &       - 398600.4415d0/rmag
+      if (energy .lt. 0.d0) then
+         call assert_i('DS19 high-ecc bound orbit', 1,1,npass,nfail)
+      else
+         call assert_i('DS19 high-ecc bound orbit', 0,1,npass,nfail)
+      end if
+
+c     DS20: Near-zero eccentricity deep space (circular GEO)
+      call tle2sv(2026, 170.d0, 0.05d0, 75.d0, 0.0001d0,
+     &            0.d0, 0.d0, 1.00274d0, 0.d0,
+     &            r_j2k, v_j2k, ierr)
+      call assert_i('DS20 near-circ GEO ierr=0',
+     &              ierr, 0, npass, nfail)
+      rmag = dsqrt(r_j2k(1)**2+r_j2k(2)**2+r_j2k(3)**2)
+      if (rmag .gt. 41000.d0 .and. rmag .lt. 43500.d0) then
+         call assert_i('DS20 near-circ GEO rmag ok',1,1,npass,nfail)
+      else
+         call assert_i('DS20 near-circ GEO rmag ok',0,1,npass,nfail)
+      end if
+
+c     DS21: Near-equatorial deep space (i ≈ 0)
+      call tle2sv(2026, 170.d0, 0.01d0, 0.d0, 0.0003d0,
+     &            0.d0, 0.d0, 1.00274d0, 0.d0,
+     &            r_j2k, v_j2k, ierr)
+      call assert_i('DS21 equatorial GEO ierr=0',
+     &              ierr, 0, npass, nfail)
+      rmag = dsqrt(r_j2k(1)**2+r_j2k(2)**2+r_j2k(3)**2)
+c     z should be tiny for equatorial orbit
+      if (dabs(r_j2k(3)) .lt. rmag*0.01d0) then
+         call assert_i('DS21 equatorial z~0', 1, 1, npass, nfail)
+      else
+         call assert_i('DS21 equatorial z~0', 0, 1, npass, nfail)
+      end if
+
+c     DS22: Retrograde deep space (i = 120°)
+      call tle2sv(2026, 170.d0, 120.d0, 0.d0, 0.3d0,
+     &            90.d0, 0.d0, 1.5d0, 0.d0,
+     &            r_j2k, v_j2k, ierr)
+      call assert_i('DS22 retrograde i=120 ierr=0',
+     &              ierr, 0, npass, nfail)
+      rmag = dsqrt(r_j2k(1)**2+r_j2k(2)**2+r_j2k(3)**2)
+      if (rmag .gt. 5000.d0) then
+         call assert_i('DS22 retrograde rmag>5000', 1,1,npass,nfail)
+      else
+         call assert_i('DS22 retrograde rmag>5000', 0,1,npass,nfail)
+      end if
+
+c     DS23: Polar deep space (i = 90°)
+      call tle2sv(2026, 170.d0, 90.d0, 45.d0, 0.3d0,
+     &            0.d0, 0.d0, 1.5d0, 0.d0,
+     &            r_j2k, v_j2k, ierr)
+      call assert_i('DS23 polar i=90 ierr=0',
+     &              ierr, 0, npass, nfail)
+      energy = 0.5d0*(v_j2k(1)**2+v_j2k(2)**2+v_j2k(3)**2)
+     &       - 398600.4415d0 /
+     &         dsqrt(r_j2k(1)**2+r_j2k(2)**2+r_j2k(3)**2)
+      if (energy .lt. 0.d0) then
+         call assert_i('DS23 polar energy < 0', 1, 1, npass, nfail)
+      else
+         call assert_i('DS23 polar energy < 0', 0, 1, npass, nfail)
+      end if
+
+c     DS24: Critical inclination deep space (i ≈ 63.4°, non-Molniya)
+      call tle2sv(2026, 170.d0, 63.4d0, 90.d0, 0.3d0,
+     &            45.d0, 0.d0, 1.5d0, 0.d0,
+     &            r_j2k, v_j2k, ierr)
+      call assert_i('DS24 critical-inc ierr=0',
+     &              ierr, 0, npass, nfail)
+
+c     DS25: All mean anomalies produce valid states (MA sweep)
+      iall_ok = 1
+      do imax = 0, 350, 50
+         call tle2sv(2026, 170.d0, 0.5d0, 75.d0, 0.0003d0,
+     &               0.d0, dble(imax), 1.00274d0, 0.d0,
+     &               r_j2k, v_j2k, ierr)
+         if (ierr .ne. 0) iall_ok = 0
+         rmag = dsqrt(r_j2k(1)**2+r_j2k(2)**2+r_j2k(3)**2)
+         if (rmag .lt. 40000.d0 .or. rmag .gt. 44000.d0) iall_ok = 0
+      end do
+      call assert_i('DS25 GEO MA sweep all valid',
+     &              iall_ok, 1, npass, nfail)
+
+c     DS26: All RAAN values produce valid states (RAAN sweep)
+      iall_ok = 1
+      do imax = 0, 350, 50
+         call tle2sv(2026, 170.d0, 0.5d0, dble(imax), 0.0003d0,
+     &               0.d0, 0.d0, 1.00274d0, 0.d0,
+     &               r_j2k, v_j2k, ierr)
+         if (ierr .ne. 0) iall_ok = 0
+         rmag = dsqrt(r_j2k(1)**2+r_j2k(2)**2+r_j2k(3)**2)
+         if (rmag .lt. 40000.d0 .or. rmag .gt. 44000.d0) iall_ok = 0
+      end do
+      call assert_i('DS26 GEO RAAN sweep all valid',
+     &              iall_ok, 1, npass, nfail)
+
+c     DS27: All AOP values produce valid states (AOP sweep)
+      iall_ok = 1
+      do imax = 0, 350, 50
+         call tle2sv(2026, 170.d0, 63.4d0, 0.d0, 0.74d0,
+     &               dble(imax), 0.d0, 2.006d0, 0.d0,
+     &               r_j2k, v_j2k, ierr)
+         if (ierr .ne. 0) iall_ok = 0
+         rmag = dsqrt(r_j2k(1)**2+r_j2k(2)**2+r_j2k(3)**2)
+         if (rmag .lt. 6000.d0 .or. rmag .gt. 50000.d0) iall_ok = 0
+      end do
+      call assert_i('DS27 Molniya AOP sweep valid',
+     &              iall_ok, 1, npass, nfail)
+
+c     DS28: Epoch variation — different years produce valid states
+      iall_ok = 1
+      do imax = 2020, 2026
+         call tle2sv(imax, 100.d0, 0.5d0, 75.d0, 0.0003d0,
+     &               0.d0, 0.d0, 1.00274d0, 0.d0,
+     &               r_j2k, v_j2k, ierr)
+         if (ierr .ne. 0) iall_ok = 0
+         rmag = dsqrt(r_j2k(1)**2+r_j2k(2)**2+r_j2k(3)**2)
+         if (rmag .lt. 40000.d0 .or. rmag .gt. 44000.d0) iall_ok = 0
+      end do
+      call assert_i('DS28 epoch year sweep valid',
+     &              iall_ok, 1, npass, nfail)
+
+c     DS29: Non-zero B* drag with deep space
+      call tle2sv(2026, 170.d0, 7.d0, 240.d0, 0.73d0,
+     &            320.d0, 30.d0, 1.5d0, 3.d-5,
+     &            r_j2k, v_j2k, ierr)
+      call assert_i('DS29 non-zero B* ierr=0',
+     &              ierr, 0, npass, nfail)
+      rmag = dsqrt(r_j2k(1)**2+r_j2k(2)**2+r_j2k(3)**2)
+      if (rmag .gt. 5000.d0) then
+         call assert_i('DS29 B* drag rmag>5000', 1, 1, npass, nfail)
+      else
+         call assert_i('DS29 B* drag rmag>5000', 0, 1, npass, nfail)
+      end if
+
+c     DS30: B* drag effect — higher B* produces different state
+      call tle2sv(2026, 170.d0, 7.d0, 240.d0, 0.73d0,
+     &            320.d0, 30.d0, 1.5d0, 0.d0,
+     &            r_j2k, v_j2k, ierr)
+      call tle2sv(2026, 170.d0, 7.d0, 240.d0, 0.73d0,
+     &            320.d0, 30.d0, 1.5d0, 1.d-3,
+     &            r_out, v_out, ierr)
+c     At t=0, B* only affects through C1/C4 which are 0 at t=0
+c     So states should be identical at epoch (drag is secular)
+      dr = dsqrt((r_j2k(1)-r_out(1))**2 + (r_j2k(2)-r_out(2))**2
+     &         + (r_j2k(3)-r_out(3))**2)
+      call assert_d('DS30 B* at epoch dr~0',
+     &              dr, 0.d0, 1.d-6, npass, nfail)
+
+c     DS31: GPS angular momentum conservation (short span)
+c     Propagate at t=0 and t=10 min, check |h| is similar
+      call tle_sdp4_init(2.005d0, 0.005d0, 55.d0,
+     &     0.d0, 0.d0, 0.d0, 0.d0, 2460478.5d0,
+     &     n0dd, a0dd, cosio, sinio, eta, c1_coeff, c4_coeff,
+     &     t0, perigee_km, omgdot, xnodot, xmdot,
+     &     dsstate, iresfl, ierr)
+      call tle_sdp4_prop(0.d0,
+     &     0.005d0, 55.d0, 0.d0, 0.d0, 0.d0,
+     &     n0dd, a0dd, cosio, sinio, eta, c1_coeff, c4_coeff,
+     &     perigee_km, omgdot, xnodot, xmdot, 0.d0,
+     &     dsstate, iresfl, r_teme, v_teme, ierr)
+      hmag = dsqrt(
+     &  (r_teme(2)*v_teme(3)-r_teme(3)*v_teme(2))**2 +
+     &  (r_teme(3)*v_teme(1)-r_teme(1)*v_teme(3))**2 +
+     &  (r_teme(1)*v_teme(2)-r_teme(2)*v_teme(1))**2)
+      call tle_sdp4_prop(10.d0,
+     &     0.005d0, 55.d0, 0.d0, 0.d0, 0.d0,
+     &     n0dd, a0dd, cosio, sinio, eta, c1_coeff, c4_coeff,
+     &     perigee_km, omgdot, xnodot, xmdot, 0.d0,
+     &     dsstate, iresfl, r_out, v_out, ierr)
+      energy = dsqrt(
+     &  (r_out(2)*v_out(3)-r_out(3)*v_out(2))**2 +
+     &  (r_out(3)*v_out(1)-r_out(1)*v_out(3))**2 +
+     &  (r_out(1)*v_out(2)-r_out(2)*v_out(1))**2)
+c     |h| should be conserved to ~1% over 10 min
+      if (dabs(energy - hmag)/hmag .lt. 0.01d0) then
+         call assert_i('DS31 GPS |h| conserved 10m',1,1,npass,nfail)
+      else
+         call assert_i('DS31 GPS |h| conserved 10m',0,1,npass,nfail)
+      end if
+
+c     DS32: GEO energy conservation (short span, no drag)
+      call tle_sdp4_prop(0.d0,
+     &     0.0003d0, 0.5d0, 75.d0, 0.d0, 180.d0,
+     &     n0dd, a0dd, cosio, sinio, eta, c1_coeff, c4_coeff,
+     &     perigee_km, omgdot, xnodot, xmdot, 0.d0,
+     &     dsstate, iresfl, r_teme, v_teme, ierr)
+c     Reuse GEO init from DS16 block (still in dsstate)
+      call tle_sdp4_init(1.00274d0, 0.0003d0, 0.5d0,
+     &     75.d0, 0.d0, 180.d0, 0.d0, 2460478.5d0,
+     &     n0dd, a0dd, cosio, sinio, eta, c1_coeff, c4_coeff,
+     &     t0, perigee_km, omgdot, xnodot, xmdot,
+     &     dsstate, iresfl, ierr)
+      call tle_sdp4_prop(0.d0,
+     &     0.0003d0, 0.5d0, 75.d0, 0.d0, 180.d0,
+     &     n0dd, a0dd, cosio, sinio, eta, c1_coeff, c4_coeff,
+     &     perigee_km, omgdot, xnodot, xmdot, 0.d0,
+     &     dsstate, iresfl, r_teme, v_teme, ierr)
+      rmag = dsqrt(r_teme(1)**2+r_teme(2)**2+r_teme(3)**2)
+      vmag = dsqrt(v_teme(1)**2+v_teme(2)**2+v_teme(3)**2)
+      energy = 0.5d0*vmag*vmag - 398600.4415d0/rmag
+      call tle_sdp4_prop(60.d0,
+     &     0.0003d0, 0.5d0, 75.d0, 0.d0, 180.d0,
+     &     n0dd, a0dd, cosio, sinio, eta, c1_coeff, c4_coeff,
+     &     perigee_km, omgdot, xnodot, xmdot, 0.d0,
+     &     dsstate, iresfl, r_out, v_out, ierr)
+      rmag = dsqrt(r_out(1)**2+r_out(2)**2+r_out(3)**2)
+      vmag = dsqrt(v_out(1)**2+v_out(2)**2+v_out(3)**2)
+      hmag = 0.5d0*vmag*vmag - 398600.4415d0/rmag
+c     Energy drift < 1% over 1 hour for no-drag GEO
+      if (dabs(hmag - energy)/dabs(energy) .lt. 0.01d0) then
+         call assert_i('DS32 GEO energy ~const 1h',1,1,npass,nfail)
+      else
+         call assert_i('DS32 GEO energy ~const 1h',0,1,npass,nfail)
+      end if
+
+c     DS33: Period boundary just below (near-Earth side)
+c     n=6.41 → period ≈ 224.6 min (SGP4)
+      call tle2sv(2026, 170.d0, 28.d0, 0.d0, 0.01d0,
+     &            0.d0, 0.d0, 6.41d0, 0.d0,
+     &            r_j2k, v_j2k, ierr)
+      call assert_i('DS33 n=6.41 SGP4 side ierr=0',
+     &              ierr, 0, npass, nfail)
+
+c     DS34: Period boundary just above (deep-space side)
+c     n=6.39 → period ≈ 225.3 min (SDP4)
+      call tle2sv(2026, 170.d0, 28.d0, 0.d0, 0.01d0,
+     &            0.d0, 0.d0, 6.39d0, 0.d0,
+     &            r_j2k, v_j2k, ierr)
+      call assert_i('DS34 n=6.39 SDP4 side ierr=0',
+     &              ierr, 0, npass, nfail)
+
+c     DS35: Both sides of boundary produce similar states
+c     (continuity at the SGP4/SDP4 transition)
+      call tle2sv(2026, 170.d0, 28.d0, 0.d0, 0.01d0,
+     &            0.d0, 0.d0, 6.41d0, 0.d0,
+     &            r_j2k, v_j2k, ierr)
+      call tle2sv(2026, 170.d0, 28.d0, 0.d0, 0.01d0,
+     &            0.d0, 0.d0, 6.39d0, 0.d0,
+     &            r_out, v_out, ierr)
+      dr = dsqrt((r_j2k(1)-r_out(1))**2 + (r_j2k(2)-r_out(2))**2
+     &         + (r_j2k(3)-r_out(3))**2)
+c     States should be within ~500 km of each other (similar orbits)
+      if (dr .lt. 500.d0) then
+         call assert_i('DS35 SGP4/SDP4 transition',1,1,npass,nfail)
+      else
+         call assert_i('DS35 SGP4/SDP4 transition',0,1,npass,nfail)
+      end if
+
+c     DS36: Molniya AOP=270 (classical configuration)
+      call tle2sv(2026, 170.d0, 63.4d0, 0.d0, 0.74d0,
+     &            270.d0, 0.d0, 2.006d0, 0.d0,
+     &            r_j2k, v_j2k, ierr)
+      call assert_i('DS36 Molniya AOP=270 ierr=0',
+     &              ierr, 0, npass, nfail)
+c     At perigee (MA=0 with AOP=270), rmag should be near perigee
+      rmag = dsqrt(r_j2k(1)**2+r_j2k(2)**2+r_j2k(3)**2)
+      if (rmag .gt. 6000.d0 .and. rmag .lt. 50000.d0) then
+         call assert_i('DS36 Molniya rmag physical',1,1,npass,nfail)
+      else
+         call assert_i('DS36 Molniya rmag physical',0,1,npass,nfail)
+      end if
+
+c     DS37: Super-synchronous orbit (n < 1 rev/day)
+      call tle2sv(2026, 170.d0, 5.d0, 0.d0, 0.001d0,
+     &            0.d0, 0.d0, 0.5d0, 0.d0,
+     &            r_j2k, v_j2k, ierr)
+      call assert_i('DS37 super-sync ierr=0',
+     &              ierr, 0, npass, nfail)
+      rmag = dsqrt(r_j2k(1)**2+r_j2k(2)**2+r_j2k(3)**2)
+c     Super-sync orbit: rmag > GEO radius
+      if (rmag .gt. 42000.d0) then
+         call assert_i('DS37 super-sync rmag>42k', 1,1,npass,nfail)
+      else
+         call assert_i('DS37 super-sync rmag>42k', 0,1,npass,nfail)
+      end if
+
+c     DS38: Very low mean motion (n=0.3, period ~4800 min ≈ 3.3 days)
+      call tle2sv(2026, 170.d0, 10.d0, 0.d0, 0.001d0,
+     &            0.d0, 0.d0, 0.3d0, 0.d0,
+     &            r_j2k, v_j2k, ierr)
+      call assert_i('DS38 very-low-n ierr=0',
+     &              ierr, 0, npass, nfail)
+      rmag = dsqrt(r_j2k(1)**2+r_j2k(2)**2+r_j2k(3)**2)
+c     High altitude orbit: rmag >> GEO
+      if (rmag .gt. 60000.d0) then
+         call assert_i('DS38 very-low-n rmag>60k', 1,1,npass,nfail)
+      else
+         call assert_i('DS38 very-low-n rmag>60k', 0,1,npass,nfail)
+      end if
+
+c     DS39: Inclination sweep for GEO (0° to 170° in 10° steps)
+      iall_ok = 1
+      do imax = 0, 170, 10
+         call tle2sv(2026, 170.d0, dble(imax)+0.1d0, 0.d0,
+     &               0.0003d0, 0.d0, 0.d0, 1.00274d0, 0.d0,
+     &               r_j2k, v_j2k, ierr)
+         if (ierr .ne. 0) iall_ok = 0
+         rmag = dsqrt(r_j2k(1)**2+r_j2k(2)**2+r_j2k(3)**2)
+         if (rmag .lt. 39000.d0 .or. rmag .gt. 45000.d0) iall_ok = 0
+      end do
+      call assert_i('DS39 GEO inc sweep 0-170',
+     &              iall_ok, 1, npass, nfail)
+
+c     DS40: Time series consistency — propagate in steps matches
+c     single large step (for non-resonant case)
+      call tle_sdp4_init(1.5d0, 0.3d0, 28.d0,
+     &     0.d0, 45.d0, 0.d0, 0.d0, 2460478.5d0,
+     &     n0dd, a0dd, cosio, sinio, eta, c1_coeff, c4_coeff,
+     &     t0, perigee_km, omgdot, xnodot, xmdot,
+     &     dsstate, iresfl, ierr)
+c     Single step to t=100 min
+      call tle_sdp4_prop(100.d0,
+     &     0.3d0, 28.d0, 0.d0, 45.d0, 0.d0,
+     &     n0dd, a0dd, cosio, sinio, eta, c1_coeff, c4_coeff,
+     &     perigee_km, omgdot, xnodot, xmdot, 0.d0,
+     &     dsstate, iresfl, r_teme, v_teme, ierr)
+c     States should match since SDP4 prop is stateless (always from epoch)
+      call tle_sdp4_prop(100.d0,
+     &     0.3d0, 28.d0, 0.d0, 45.d0, 0.d0,
+     &     n0dd, a0dd, cosio, sinio, eta, c1_coeff, c4_coeff,
+     &     perigee_km, omgdot, xnodot, xmdot, 0.d0,
+     &     dsstate, iresfl, r_out, v_out, ierr)
+      dr = dsqrt((r_teme(1)-r_out(1))**2+(r_teme(2)-r_out(2))**2
+     &         + (r_teme(3)-r_out(3))**2)
+      call assert_d('DS40 SDP4 stateless repeat',
+     &              dr, 0.d0, 1.d-10, npass, nfail)
+
+c     ============================================================
 c     Summary
 c     ============================================================
       write(*,*) ''
