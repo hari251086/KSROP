@@ -297,6 +297,20 @@ c     -----------------------------------------------------------
 c     Drag: per-revolution reference setup
 c     Oblate, co-rotating exponential atmosphere referenced to
 c     perigee conditions (same physical model as KSJLSDNP2.F).
+c
+c     MODEL: thesis eq. 5.2 (Sharma 1999):
+c       rho = rho_p * exp{-ae/H*(1-cosE)
+c             - eps*r_p*sin^2(I)/H*[sin^2(w+f)-sin^2(w)]}
+c     where H = scale height from ATM.DAT, eps = Earth
+c     flattening, f = true anomaly, E = eccentric anomaly.
+c
+c     NOTE: the advanced model (thesis eq. 5.3) with density
+c     scale height variation (R_i coefficients i=1..8, from
+c     Sharma & Raj 2009/2010) is NOT implemented. The current
+c     model uses constant H per revolution. For the R_i model
+c     see thesis pp. 111-113 and Nair & Sharma (2003).
+c     The basic model is sufficient for re-entry prediction
+c     with < 5% RPE as demonstrated in the manuscript.
 c     The reference orbital elements and atmosphere/rotation
 c     parameters below are evaluated once per revolution from the
 c     osculating elements at the start of the revolution, and held
