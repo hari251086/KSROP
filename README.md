@@ -47,12 +47,14 @@ KSROP/
 │
 ├── test_subrouts.F                      Unit tests (47 checks)
 ├── test_tle.F                           TLE reader tests (147 checks)
-├── test_tle2sv.F                        SGP4/SDP4/frame tests (118 checks)
+├── test_tle2sv.F                        SGP4/SDP4/frame tests (156 checks)
 ├── test_tle2opm.F                       TLE-to-OPM pipeline tests (21 checks)
 ├── test_bugs.F                          Bug regression tests (17 checks)
 ├── test_driver.py                       Integration test (10 checks)
 ├── test_initial_conditions.py           Multi-orbit test (110 checks)
 ├── benchmark.py                         Performance profiler
+├── lint_check.sh                        Automated F77 lint checks (line length, precision, common blocks)
+├── test_all.sh                          Unified test runner (lint + all test suites)
 ├── Makefile                             Unix build
 └── build.bat                            Windows build (Intel Fortran)
 ```
@@ -136,13 +138,17 @@ Reads `input/tle2opm.cfg`, selects closest TLE entry by NORAD/epoch, converts vi
 ./test_subrouts.exe                          # 47 unit tests
 ./test_bugs.exe                              # 17 regression tests
 ./test_tle.exe                               # 147 TLE reader tests
-./test_tle2sv.exe                            # 118 SGP4/SDP4/frame tests
+./test_tle2sv.exe                            # 156 SGP4/SDP4/frame tests
 ./test_tle2opm.exe                           # 21 pipeline tests
 python test_driver.py driver_KS.exe          # 10 integration tests
 python test_initial_conditions.py driver_KS.exe  # 110 multi-orbit tests
+
+# Lint + all tests in one command
+bash test_all.sh                             # lint + 388 Fortran + integration
+bash lint_check.sh                           # lint only (line length, precision, common blocks)
 ```
 
-**Total: 440 automated checks.**
+**Total: 498 automated checks + 5 lint rules.**
 
 ---
 
@@ -413,4 +419,5 @@ EGM2008 streaming read: O(n²) lines for degree n (J2 = 3 lines, not 2.4M).
 | 2026-06-21 | Fixed 11 bugs in Subrouts.F (type mismatch, dead code, precision, uninitialized vars) |
 | 2026-06-21 | Added `tle2opm.F`: TLE-to-OPM converter; generated NORAD 47944 OPM (2025-05-01) |
 | 2026-06-21 | Refactored constants: `init_constants()` reads `const_new.dat`; unified common block |
-| 2026-06-22 | Added SDP4 deep-space theory to `TLEread.F`: `tle_sdp4_init`/`tle_sdp4_prop` with lunar-solar secular gravity, synchronous and half-day resonance handling, long-period periodics; `tle2sv` now dispatches SGP4 (period < 225 min) or SDP4 (period >= 225 min) transparently; deep-space state carried in `dsstate(50)` array with `iresfl` resonance flag; 40 new tests (118 total in `test_tle2sv.F`) covering GEO, Molniya, GPS orbit types, resonance detection, propagation, and full pipeline validation |
+| 2026-06-22 | Added SDP4 deep-space theory to `TLEread.F`: `tle_sdp4_init`/`tle_sdp4_prop` with lunar-solar secular gravity, synchronous and half-day resonance handling, long-period periodics; `tle2sv` now dispatches SGP4 (period < 225 min) or SDP4 (period >= 225 min) transparently; deep-space state carried in `dsstate(50)` array with `iresfl` resonance flag; 78 new tests (156 total in `test_tle2sv.F`) covering GEO, Molniya, GPS orbit types, resonance detection, propagation, edge cases (backward prop, 30-day duration, e=0.85, retrograde, polar, critical inc, angle sweeps, energy/momentum conservation, SGP4/SDP4 boundary continuity), and full pipeline validation |
+| 2026-06-22 | Added automated lint checks: `lint_check.sh` (line length, single-precision intrinsics, common block consistency, tabs, trailing whitespace) and `test_all.sh` (unified runner for lint + all test suites); fixed 12 source lines exceeding 72-column F77 limit |
