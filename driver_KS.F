@@ -86,7 +86,7 @@ c     once per converged integration step.
       double precision RHOPI_dg,H_dg,BETA_dg,RPO_dg,VPO_dg
       double precision F_dg,XX_dg,XXX_dg,C_dg
       double precision SEA_dg,CEA_dg,TER_dg,TER2_dg
-      double precision CSEF_dg,SIEF_dg,FA_dg
+      double precision CSEF_dg,SIEF_dg,FA_dg,exp_arg
 c     SRP: cannonball SRP perturbation (ported from KSJLSDNP2.F)
       dimension p_srp(3), qsrp(4), r_srp(3)
       integer IPSR, ISHAD
@@ -340,12 +340,14 @@ c     the revolution only when this is below 500 km)
          SQ_dg  = A_dg*(1.d0 - EC_dg)
          HSQ_dg = SQ_dg - RREQ_dg
 
-         if (HSQ_dg .le. 500.d3) then
+         if (HSQ_dg .ge. ALT_atm(1) .and.
+     &       HSQ_dg .le. ALT_atm(ndim_atm)) then
 c     Reference density/scale-height at perigee, the rotating-
 c     atmosphere correction factor F_dg, and the oblateness/
 c     eccentricity exponent terms C_dg, XXX_dg used each step
             call INTPOL(ALT_atm, DEN_atm, ndim_atm, HSQ_dg, RHOPI_dg)
             call INTPOL(ALT_atm, SCH_atm, ndim_atm, HSQ_dg, H_dg)
+            if (H_dg .le. 0.d0) H_dg = 1.d0
             BETA_dg = 1.d0/H_dg
             RPO_dg  = SQ_dg
             VPO_dg  = dsqrt(amue*1.d9*(2.d0/RPO_dg - 1.d0/A_dg))
@@ -369,7 +371,9 @@ c     model and logic as KSJLSDNP2.F.
 c     Compute drag acceleration p_drag(3) in km/s^2, then
 c     transform to KS space via the L(u) matrix: qdrag(4) = L(u)*p_drag
 c     -----------------------------------------------------------
-            if (IDRAG .eq. 1 .and. HSQ_dg .le. 500.d3) then
+            if (IDRAG .eq. 1 .and.
+     &          HSQ_dg .ge. ALT_atm(1) .and.
+     &          HSQ_dg .le. ALT_atm(ndim_atm)) then
                SEA_dg  = dsin(EA_dg)
                CEA_dg  = dcos(EA_dg)
                TER_dg  = 1.d0 - EC_dg*CEA_dg
@@ -378,8 +382,14 @@ c     -----------------------------------------------------------
                FA_dg   = atan3(SIEF_dg,CSEF_dg)
                TER2_dg = dcos(SOMGA_dg)**2
      &                 - dcos(SOMGA_dg+FA_dg)**2
-               TER_dg  = dexp(-2.d0*C_dg*TER2_dg
-     &                  - XXX_dg*(1.d0-CEA_dg))
+               exp_arg = -2.d0*C_dg*TER2_dg
+     &                  - XXX_dg*(1.d0-CEA_dg)
+               if (exp_arg .gt. 500.d0 .or.
+     &             exp_arg .lt. -500.d0) then
+                  TER_dg = 0.d0
+               else
+                  TER_dg = dexp(exp_arg)
+               end if
                DENS = -F_dg*RHOPI_dg*TER_dg*V/(BN*2.d0)*1.d-7
                do i = 1,3
                   p_drag(i) = DENS * xd(i)
