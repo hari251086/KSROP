@@ -100,15 +100,17 @@ c     ============================================================
       end if   
       
       hmag = vmn(h)
-      ai = dacos(h(3)/hmag)
+      ai = dacos(dmax1(-1.d0,dmin1(1.d0,h(3)/hmag)))
 
-      raan = dacos(a_n(1)/anmag)
+      raan = dacos(dmax1(-1.d0,dmin1(1.d0,a_n(1)/anmag)))
       if(a_n(2).lt.0.d0) raan = 2.d0*pi-raan
 
-      aop = dacos(dotp3(a_n,ecc)/(anmag*e))
+      aop = dacos(dmax1(-1.d0,dmin1(1.d0,
+     &      dotp3(a_n,ecc)/(anmag*e))))
       if(ecc(3).lt.0.d0) aop = 2.d0*pi-aop
 
-      anu = dacos(dotp3(ecc,x)/(e*rmag))
+      anu = dacos(dmax1(-1.d0,dmin1(1.d0,
+     &      dotp3(ecc,x)/(e*rmag))))
       if(dotp3(x,xd).lt.0.d0) then
          anu = 2.d0*pi - anu
       end if
@@ -125,7 +127,8 @@ c     ============================================================
 !     Circular, inclined. anu = argument of latitude
       if(e.lt.1.d-10) then
          aop = 0.d0
-         anu = dacos(dotp3(a_n,x)/(anmag*rmag))
+         anu = dacos(dmax1(-1.d0,dmin1(1.d0,
+     &         dotp3(a_n,x)/(anmag*rmag))))
          if(x(3).lt.0.d0) anu = 2.d0*pi - anu
          am = anu
       end if
@@ -133,7 +136,7 @@ c     ============================================================
       if(dabs(dabs(h(3)/hmag)-1.d0).lt.1.d-10.and.e.lt.1.d-10) then
          raan = 0.d0
          aop = 0.d0
-         anu = dacos(x(1)/rmag)
+         anu = dacos(dmax1(-1.d0,dmin1(1.d0,x(1)/rmag)))
          if(x(2).lt.0.d0) anu = 2.d0*pi - anu
       end if
 
