@@ -1,0 +1,28 @@
+CCSDS_OPM_VERS = 2.0
+CREATION_DATE  = 2026-07-08T00:00:00.000
+ORIGINATOR     = KSROP-BENCH
+
+META_START
+OBJECT_NAME    = TC3
+OBJECT_ID      = TC3
+CENTER_NAME    = EARTH
+REF_FRAME      = EME2000
+TIME_SYSTEM    = UTC
+META_STOP
+
+STATE_VECTOR
+EPOCH          = 2019-01-01T00:00:00.000
+X              =    6521.685000 [km]
+Y              =       0.000000 [km]
+Z              =       0.000000 [km]
+X_DOT          =   0.000000000 [km/s]
+Y_DOT          =   6.954356126 [km/s]
+Z_DOT          =   3.697696743 [km/s]
+
+KEPLERIAN_ELEMENTS
+SEMI_MAJOR_AXIS   =    6621.000000 [km]
+ECCENTRICITY      =    0.015000000
+INCLINATION       =      28.000000 [deg]
+RA_OF_ASC_NODE    =       0.000000 [deg]
+ARG_OF_PERICENTER =       0.000000 [deg]
+MEAN_ANOMALY      =       0.000000 [deg]
