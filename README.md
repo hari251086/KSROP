@@ -23,7 +23,6 @@ Orbit propagation using **Kustaanheimo–Stiefel (KS) regular elements** with a 
 ```
 KSROP/
 ├── driver_KS.F                          Main propagator program
-├── KSBENCH.F                            Cartesian DOP853 benchmark propagator (issue #17)
 ├── Subrouts.F                           Shared subroutines (transforms, I/O, force models)
 ├── Legendre.F                           Zonal Legendre polynomial evaluation
 ├── TLEread.F                            TLE reader + SGP4 + TEME→J2000 conversion
@@ -78,9 +77,6 @@ cd /d "C:\Users\hari2\OneDrive\Documents\GitHub\KSROP"
 
 :: Propagator
 ifx driver_KS.F Subrouts.F Legendre.F TLEread.F /exe:driver_KS.exe
-
-:: Benchmark propagator (requires dopri8.f from reference directory)
-ifx KSBENCH.F Subrouts.F dopri8.f /exe:ksbench.exe
 
 :: TLE-to-OPM converter
 ifx tle2opm.F Subrouts.F TLEread.F Legendre.F /exe:tle2opm.exe
@@ -394,54 +390,7 @@ EGM2008 streaming read: O(n²) lines for degree n (J2 = 3 lines, not 2.4M).
 
 ---
 
-## 11. Benchmark Validation (KSBENCH)
-
-`KSBENCH.F` is an independent Cartesian ECI propagator that uses the **DOP853** integrator (Dormand-Prince 8th-order adaptive RK, Hairer 1993) with the same force models as `driver_KS.F`. Its purpose is to validate the KS regularisation + RK-Gill integration path against a high-accuracy reference.
-
-### Force model comparison
-
-| Force | driver_KS.F | KSBENCH.F |
-|---|---|---|
-| 2-body | KS element equations | Cartesian ECI |
-| Zonal Jn | KS space via aLegP | Cartesian gradient (recurrence, no singularity) |
-| Drag | Sharma 1999 perigee-reference model | ATM.DAT direct interpolation at instantaneous altitude |
-| SRP | Cannonball + same shadow functions | Identical |
-| Sun / Moon | Same solarnpv / lunarpv, Legendre expansion | Direct 3-body formula |
-| Integrator | Gill RK4, fixed step (1°/rev, istep=360) | DOP853 adaptive (tolerance-driven) |
-
-### Build
-
-```bat
-ifx KSBENCH.F Subrouts.F dopri8.f /exe:ksbench.exe
-```
-
-`dopri8.f` must be copied from `E:\Research\2. Israel-Technion\Programs\Numerical\code\dopri8.f`.
-
-### Test cases (issues #18–#23)
-
-| ID | Regime | a (km) | e | i (°) | Primary force |
-|---|---|---|---|---|---|
-| TC1 | LEO circular | 6778 | 0.001 | 51.6 | Drag, J2 |
-| TC2 | LEO SSO | 6878 | 0.001 | 98.0 | J2, drag |
-| TC3 | Deep LEO decaying | 6528 | 0.01 | 28.0 | Drag (Hp≈150 km) |
-| TC4 | GTO | 24371 | 0.731 | 28.0 | All forces |
-| TC5 | MEO | 20200 | 0.1 | 55.0 | 3rd body, Jn |
-| TC6 | Molniya | 26560 | 0.74 | 63.4 | Lunisolar |
-| TC7 | Deep HEO | 40000 | 0.9 | 28.0 | 3rd body, Jn |
-
-### Pass criteria
-
-| Phase | Forces | Duration | Max 3D position error |
-|---|---|---|---|
-| 1 — J2 only | J2, TC1–TC3 | 7 days | < 100 m |
-| 2 — Full Jn | J2–Jn, TC1–TC7 | 7 days | < 500 m |
-| 3 — + Drag | Jn + drag, TC1–TC3 | 7 days | < 1 km |
-| 4 — + 3rd body | Jn + Sun/Moon, TC4–TC7 | 7 days | < 2 km |
-| 5 — Full | All forces, TC1–TC7 | 7 days | < 2 km |
-
----
-
-## 12. Known Issues
+## 11. Known Issues
 
 - EGM2008 file (~231 MB) not included; set `ngeo_deg = 0` for point-mass gravity.
 - `aLegP` hardcoded to degree 49; results incorrect beyond that.
@@ -449,7 +398,7 @@ ifx KSBENCH.F Subrouts.F dopri8.f /exe:ksbench.exe
 
 ---
 
-## 13. Revision History
+## 12. Revision History
 
 | Date | Change |
 |---|---|
@@ -479,5 +428,3 @@ ifx KSBENCH.F Subrouts.F dopri8.f /exe:ksbench.exe
 | 2026-06-24 | Fixed atmospheric drag crash for HEO orbits (Issue #16): replaced hardcoded 500 km perigee guard with `ALT_atm` table-bounds check; added `H_dg≤0` safety after INTPOL; added exponential overflow clamp (`|arg|>500 → 0`). Prevents NaN cascade from INTPOL returning zero scale height for out-of-range altitudes |
 | 2026-07-04 | Fixed `car2oe` NaN at perigee/apogee: all `dacos()` calls now clamp their argument to [-1, 1] via `dmax1(-1.d0,dmin1(1.d0,...))`. Floating-point dot-product can exceed ±1 by ε at apsides, causing `dacos(>1) = NaN` that propagated through eccentric anomaly → drag density → full state divergence. |
 | 2026-07-07 | Replaced `ATM.DAT` with Jacchia-70 multi-species diffusive equilibrium table (F10.7=72, Kp=1.0, T∞=640 K). Added `gen_atm_j70.F90` generator. Drag ratio vs NPOE: 48% → 95–97%. |
-| 2026-07-08 | Converted `gen_atm_j70.F90` → `gen_atm_j70.F` (fixed-form F77, consistent with rest of codebase). |
-| 2026-07-08 | Added `KSBENCH.F`: Cartesian ECI benchmark propagator using DOP853 (Dormand-Prince 8th-order adaptive RK). Same force models as `driver_KS.F` (zonal geopotential, drag, SRP, luni-solar). Used for driver_KS validation across 7 orbital regimes (issues #17–#23). |
