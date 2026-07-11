@@ -393,8 +393,16 @@ EGM2008 streaming read: O(n²) lines for degree n (J2 = 3 lines, not 2.4M).
 ## 11. Known Issues
 
 - EGM2008 file (~231 MB) not included; set `ngeo_deg = 0` for point-mass gravity.
-- `aLegP` hardcoded to degree 49; results incorrect beyond that.
 - SRP is cannonball only; no tesseral harmonics or geometry-dependent variations.
+- `Tau_geo` (`driver_KS.F`, time-element numerator, zonal-harmonic contribution)
+  is suspected incorrect by the same class of error as the `qj` bug fixed
+  2026-07-11 (mismatched exponents/structure vs. the verified closed form).
+  Confirmed by isolation test to have **no effect on the position/velocity
+  trajectory** (it only feeds the physical-time/epoch labeling via `z(1)`,
+  `Tow`), so propagated states are unaffected, but OEM epoch timestamps for
+  perturbed (`ngeo_deg > 1`) runs may be mislabeled. Not yet fixed — needs a
+  from-scratch re-derivation of the KS time-element ODE in the `E`-stepping
+  convention the code actually uses.
 
 ---
 
@@ -428,3 +436,5 @@ EGM2008 streaming read: O(n²) lines for degree n (J2 = 3 lines, not 2.4M).
 | 2026-06-24 | Fixed atmospheric drag crash for HEO orbits (Issue #16): replaced hardcoded 500 km perigee guard with `ALT_atm` table-bounds check; added `H_dg≤0` safety after INTPOL; added exponential overflow clamp (`|arg|>500 → 0`). Prevents NaN cascade from INTPOL returning zero scale height for out-of-range altitudes |
 | 2026-07-04 | Fixed `car2oe` NaN at perigee/apogee: all `dacos()` calls now clamp their argument to [-1, 1] via `dmax1(-1.d0,dmin1(1.d0,...))`. Floating-point dot-product can exceed ±1 by ε at apsides, causing `dacos(>1) = NaN` that propagated through eccentric anomaly → drag density → full state divergence. |
 | 2026-07-07 | Replaced `ATM.DAT` with Jacchia-70 multi-species diffusive equilibrium table (F10.7=72, Kp=1.0, T∞=640 K). Added `gen_atm_j70.F90` generator. Drag ratio vs NPOE: 48% → 95–97%. |
+| 2026-07-11 | Fixed `aLegP` (`Legendre.F`) buffer overflow: ignored its own degree argument, always computed a full 50×50 Legendre grid into a 50-element output array and a 36×36 scratch array — a ~50x out-of-bounds write on every call (including calls with `n` as small as 2), silently corrupting adjacent stack variables. Found via independent GMAT cross-validation (see `scratch_gmat/`): a J2-only propagation diverged from an independent RK89 Cartesian propagator by ~150 km over one orbit despite the pure two-body case agreeing to sub-mm/s. Rewrote to honor `n` and use correctly-sized buffers. |
+| 2026-07-11 | Fixed `qj` oblateness force formula (`driver_KS.F`, KS-space projection of the zonal-harmonic gradient): the closed-form expression had spurious `R²`/`z²` cross-terms and an extra factor of `R` on the `uu(j)` coefficient not present in the correct derivation. Re-derived the KS-space perturbing-force formula from first principles (chain rule on `V_pot`'s Legendre expansion, then the same `L(u)ᵀ` projection already used for drag/SRP) and verified the new closed form matches to ~1e-16 relative precision at multiple orbit points. Cross-validated against GMAT: J2-only case improved from ~150 km to ~20 km orbit-closure discrepancy after this + the `aLegP` fix (remaining gap suspected to be the still-open `Tau_geo` time-labeling issue, see Known Issues). |

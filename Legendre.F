@@ -136,21 +136,17 @@ c
       return
       end
 
-c     ============================================================      
+c     ============================================================
       Subroutine aLegP(n,x,v)
-c     Computes associated Legendre Polynomial P_n(x)
-      implicit double precision (a-h,o-z)
-c     v(3) = P_2(x)
+c     Computes zonal Legendre polynomials P_0(x)..P_n(x), returned
+c     as v(i+1) = P_i(x) for i = 0..n.
 c     Author: Harishkumar Sellamuthu, 2021
 c     ============================================================
-      dimension v(50),plg(36,36)
-      call p_polynomial_value ( 1, 50, x, plg)
-      k = 1
-      do i = 1,50
-         do j = 1,50
-            v(k) = plg(j,i)
-            k = k+1
-         end do
+      implicit double precision (a-h,o-z)
+      dimension v(*),plg(1,0:2190)
+      call p_polynomial_value ( 1, n, x, plg)
+      do k = 1, n+1
+         v(k) = plg(1,k-1)
       end do
       return
       end

@@ -483,13 +483,15 @@ c     -----------------------------------------------------------
             do j = 1,4
 
 !     oblateness terms
+c     q(j) = -(n+1)*D_n/z2mR2 * [(R*P_n - z*P_n+1)*u(j)
+c                                +(R*P_n+1 - z*P_n)*uu(j)]
+c     where D_n = ObyR(n+1)*Re(n)*c_j(n), P_n=aleg(n+1), P_n+1=aleg(n+2)
                z2mR2=x(3)**2-R(1)**2
                qj=0.d0
                do i = 2,ngeo_deg
-                  qj = dble(ObyR(i+1)*Re(i)*c_j(i)*
-     &                 (R(1)*(i+1)*aleg(i+2)*(R(1)*uu(j)-x(3)*u(j))+
-     &                 (aleg(i+1)*(u(j)*(i*R(2)+x(3)**2)
-     &                 -uu(j)*(i+1)*R(1)*x(3))))/z2mR2)
+                  qj = -dble(ObyR(i+1)*Re(i)*c_j(i)*dble(i+1)*
+     &                 ((R(1)*aleg(i+1)-x(3)*aleg(i+2))*u(j)
+     &                 +(R(1)*aleg(i+2)-x(3)*aleg(i+1))*uu(j))/z2mR2)
                   q(j)=qj+q(j)
                end do
 
