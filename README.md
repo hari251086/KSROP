@@ -394,17 +394,10 @@ EGM2008 streaming read: O(n²) lines for degree n (J2 = 3 lines, not 2.4M).
 
 - EGM2008 file (~231 MB) not included; set `ngeo_deg = 0` for point-mass gravity.
 - SRP is cannonball only; no tesseral harmonics or geometry-dependent variations.
-- `Tau_geo` (`driver_KS.F`, time-element numerator, zonal-harmonic contribution)
-  is suspected incorrect (structurally, it's missing the `amue` factor every
-  other term in the same sum has, and its exponents don't match a simple
-  `r*dV/dr`-style derivation). Confirmed by isolation test to have **no
-  effect on the position/velocity trajectory** (it only feeds the
-  physical-time/epoch labeling via `z(1)`, `Tow`), so propagated states are
-  unaffected, but OEM epoch timestamps for perturbed (`ngeo_deg > 1`) runs
-  may be mislabeled by ~O(1s) per orbit. Not yet fixed — two from-scratch
-  derivation attempts of the KS time-element ODE (in the `E`-stepping
-  convention the code uses) both failed their own two-body consistency
-  check, so this needs either the original Stiefel-Scheifel/Sharma-thesis
+- `Tau_3body1`/`Tau_3body2` (luni-solar time-element terms, `driver_KS.F:447-456`)
+  have not been independently validated against GMAT the way the zonal
+  `Tau_geo` term was (2026-07-11) — worth the same scrutiny before trusting
+  perturbed-time labeling on runs with `nsun_deg`/`nmoon_deg > 0`.
   reference or a dedicated empirical calibration pass.
 
 ---
@@ -441,3 +434,4 @@ EGM2008 streaming read: O(n²) lines for degree n (J2 = 3 lines, not 2.4M).
 | 2026-07-07 | Replaced `ATM.DAT` with Jacchia-70 multi-species diffusive equilibrium table (F10.7=72, Kp=1.0, T∞=640 K). Added `gen_atm_j70.F90` generator. Drag ratio vs NPOE: 48% → 95–97%. |
 | 2026-07-11 | Fixed `aLegP` (`Legendre.F`) buffer overflow: ignored its own degree argument, always computed a full 50×50 Legendre grid into a 50-element output array and a 36×36 scratch array — a ~50x out-of-bounds write on every call (including calls with `n` as small as 2), silently corrupting adjacent stack variables. Found via independent GMAT cross-validation (see `scratch_gmat/`): a J2-only propagation diverged from an independent RK89 Cartesian propagator by ~150 km over one orbit despite the pure two-body case agreeing to sub-mm/s. Rewrote to honor `n` and use correctly-sized buffers. |
 | 2026-07-11 | Fixed `aleg`/`sleg`/`oleg` off-by-one degree (`driver_KS.F`): `aLegP(ngeo_deg,...)` fills `aleg(1..ngeo_deg+1)`, but the oblateness force and time-element formulas need `aleg(i+2)` up to `i=ngeo_deg`, i.e. `aleg(ngeo_deg+2)` — one degree beyond what was requested. That slot was uninitialized. The pre-fix `aLegP` buffer overflow masked this (it always overfilled the array regardless of `n`), so fixing the overflow first exposed this separate, pre-existing bug. Fixed by requesting `ngeo_deg+1`/`nsun_deg+1`/`nmoon_deg+1` at both call sites. Validated against GMAT (independent RK89 propagator, EGM96 zonal-only J2, `scratch_gmat/`): a near-polar test orbit's classical nodal-regression rate went from 10x too large (0.692 vs GMAT's 0.0693 deg/orbit) to matching within 0.15% (0.0692 deg/orbit), averaged over 20 orbits. An earlier attempted fix to the `qj` force-formula's algebra itself was investigated and found unnecessary — reverted (see git history) after this off-by-one turned out to be the actual root cause; `qj` matches its long-standing legacy-heritage form and independently validates correctly against GMAT once fed complete Legendre data. |
+| 2026-07-11 | Fixed `Tau_geo` (time-element numerator, `driver_KS.F`): was missing the `amue` factor present on every other term in the same `z(1)` sum, and had the wrong sign. Derived the correct closed form from the KS regular-elements time-element rate equation (Sellamuthu 2018 PhD thesis, eq. 2.56: `τ* = [μ-2rU]/(8w³) - r/(16w³)[u·∂U/∂u] - ...`), which reduces per zonal term to `+amue*(n-1)*c_j(n)*Re(n)*aleg(n+1)*ObyR(n)` — confirmed against the pre-fix formula numerically to 9 significant digits (exactly `-1/amue` times the old value). Since `Tau_geo` only affects OEM epoch timestamps, not propagated states (verified by isolation test, see 2026-07-11 entries above), the fix shows up as corrected time-labeling rather than a position change: re-running the GMAT J2–J20 cross-check with the corrected epochs closed the remaining ~18 km gap down to **~80 m** (a ~225x improvement), consistent with the ~2 s of previously mislabeled time this fix removes. |

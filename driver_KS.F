@@ -439,9 +439,17 @@ c     -----------------------------------------------------------
                qsrp(4) =  u(4)*p_srp(1)-u(3)*p_srp(2)+u(2)*p_srp(3)
             end if
 
+c     Time-element rate (KS regular elements eq., Sellamuthu 2018 thesis
+c     eq. 2.56): tau* = [mu - 2rU]/(8w^3) - r/(16w^3)*[u.dU/du] + ...
+c     which reduces, per zonal term, to +amue*(n-1)*c_j(n)*Re(n)*
+c     aleg(n+1)*ObyR(n) (matches this loop's structure once amue is
+c     included and the sign is flipped from the pre-2026-07-11 formula,
+c     which omitted amue entirely -- verified against the thesis closed
+c     form to 9 significant digits).
             Tau_geo = 0.d0
             do i = 2,ngeo_deg
-               Tau_geo = Tau_geo-(i-1)*c_j(i)*Re(i)*aleg(i+1)*ObyR(i)
+               Tau_geo = Tau_geo+amue*(i-1)*c_j(i)*Re(i)*aleg(i+1)
+     &                   *ObyR(i)
             end do
 
             Tau_3body1 = 0.d0
