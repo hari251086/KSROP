@@ -228,9 +228,12 @@ c     -----------------------------------------------------------
 
       V_pot = 0.d0
 
-      call aLegP(ngeo_deg,ZbyR(1),aleg)
-      call aLegP(nsun_deg,cphi_s,sleg)
-      call aLegP(nmoon_deg,cphi_m,oleg)
+c     +1: the force/time-element formulas below need aleg(i+2)
+c     (degree i+1) for i up to ngeo_deg, i.e. one degree beyond
+c     the requested ngeo_deg itself (same for sleg/oleg).
+      call aLegP(ngeo_deg+1,ZbyR(1),aleg)
+      call aLegP(nsun_deg+1,cphi_s,sleg)
+      call aLegP(nmoon_deg+1,cphi_m,oleg)
 
       do i = 2,ngeo_deg
          cn_j(i) = amue*Re(i)*c_j(i)*ObyR(i+1)
@@ -436,9 +439,17 @@ c     -----------------------------------------------------------
                qsrp(4) =  u(4)*p_srp(1)-u(3)*p_srp(2)+u(2)*p_srp(3)
             end if
 
+c     Time-element rate (KS regular elements eq., Sellamuthu 2018 thesis
+c     eq. 2.56): tau* = [mu - 2rU]/(8w^3) - r/(16w^3)*[u.dU/du] + ...
+c     which reduces, per zonal term, to +amue*(n-1)*c_j(n)*Re(n)*
+c     aleg(n+1)*ObyR(n) (matches this loop's structure once amue is
+c     included and the sign is flipped from the pre-2026-07-11 formula,
+c     which omitted amue entirely -- verified against the thesis closed
+c     form to 9 significant digits).
             Tau_geo = 0.d0
             do i = 2,ngeo_deg
-               Tau_geo = Tau_geo-(i-1)*c_j(i)*Re(i)*aleg(i+1)*ObyR(i)
+               Tau_geo = Tau_geo+amue*(i-1)*c_j(i)*Re(i)*aleg(i+1)
+     &                   *ObyR(i)
             end do
 
             Tau_3body1 = 0.d0
@@ -470,9 +481,9 @@ c     -----------------------------------------------------------
      &             + R(1)*(dotp4(u,qdrag)+dotp4(u,qsrp)))/(8.d0*w*w*w)
      &             - z(10)*(2.d0/(w*w))*dotp4(u,us)
 
-            if (ngeo_deg  .gt. 1) call aLegP(ngeo_deg, ZbyR(1), aleg)
-            if (nsun_deg  .gt. 1) call aLegP(nsun_deg, cphi_s,  sleg)
-            if (nmoon_deg .gt. 1) call aLegP(nmoon_deg,cphi_m,  oleg)
+            if (ngeo_deg  .gt. 1) call aLegP(ngeo_deg+1, ZbyR(1), aleg)
+            if (nsun_deg  .gt. 1) call aLegP(nsun_deg+1, cphi_s,  sleg)
+            if (nmoon_deg .gt. 1) call aLegP(nmoon_deg+1,cphi_m,  oleg)
 
             do j = 1,4
                q(j) = 0.d0
@@ -501,22 +512,32 @@ c     -----------------------------------------------------------
 
                sq = ts(1)*qu(1)+ts(2)*qu(2)+ts(3)*qu(3)
 
+c     Third-body q(j) in the KS-elements EOM convention (thesis eq.
+c     2.55/2.59): the paren consumed by z(j+1)/z(j+5) equals
+c     2*[U/2*u + (r/4)*dU/du], so per degree i (shape=(r/RK)^i*P_i):
+c       qsun(j) = RbyRs(i)*[ P_i*u(j) - ( i*(P_i - cphi*P_(i-1))*u(j)
+c                 + (i+1)*(cphi*P_i - P_(i+1))*sq/Rs )/den_s ]
+c     Verified 2026-07-12: matches the independently validated
+c     KSJLSDNP.F n=2 sun term (CNTS1/CNTS2 form) to machine precision
+c     and a finite-difference gradient of shape*u + r*L(u)^T(grad)
+c     to ~1e-8 at n=2,3. The 2026-07-11 version (commit 963968f) used
+c     the wrong convention, L(u)^T(-grad shape) alone -- missing the
+c     factor r and the U*u term, ~1e4 too small at GTO scale.
                do i = 2,nsun_deg
-                  slambda(i)=2.d0*R(i-1)*(i+1)*(sleg(i+2)
-     &                 -cphi_s*sleg(i+1))/den_s
-
-                  qs = (RbyRs(i)*(sq*slambda(i)/Rs(1)+
-     &                 u(j)*(1-i)*sleg(i+1)-slambda(i)*cphi_s))
+                  qs = RbyRs(i)*(sleg(i+1)*u(j)
+     &                 -(dble(i)*(sleg(i+1)-cphi_s*sleg(i))*u(j)
+     &                 +dble(i+1)*(cphi_s*sleg(i+1)-sleg(i+2))*sq
+     &                 /Rs(1))/den_s)
                   qsun(j) = qs + qsun(j)
                end do
 
                oq = tm(1)*qu(1)+tm(2)*qu(2)+tm(3)*qu(3)
 
                do i = 2,nmoon_deg
-                  olambda(i)=2.d0*R(i-1)*(i+1)*(oleg(i+2)
-     &                 -cphi_m*oleg(i+1))/den_m
-                  qm = (RbyRm(i)*(oq*olambda(i)/Rm(1)+
-     &                 u(j)*(1-i)*oleg(i+1)-olambda(i)*cphi_m))
+                  qm = RbyRm(i)*(oleg(i+1)*u(j)
+     &                 -(dble(i)*(oleg(i+1)-cphi_m*oleg(i))*u(j)
+     &                 +dble(i+1)*(cphi_m*oleg(i+1)-oleg(i+2))*oq
+     &                 /Rm(1))/den_m)
                   qmoon(j) = qm + qmoon(j)
                end do
 

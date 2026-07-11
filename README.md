@@ -23,7 +23,6 @@ Orbit propagation using **Kustaanheimo–Stiefel (KS) regular elements** with a 
 ```
 KSROP/
 ├── driver_KS.F                          Main propagator program
-├── KSBENCH.F                            Cartesian DOP853 benchmark propagator (issue #17)
 ├── Subrouts.F                           Shared subroutines (transforms, I/O, force models)
 ├── Legendre.F                           Zonal Legendre polynomial evaluation
 ├── TLEread.F                            TLE reader + SGP4 + TEME→J2000 conversion
@@ -78,9 +77,6 @@ cd /d "C:\Users\hari2\OneDrive\Documents\GitHub\KSROP"
 
 :: Propagator
 ifx driver_KS.F Subrouts.F Legendre.F TLEread.F /exe:driver_KS.exe
-
-:: Benchmark propagator (requires dopri8.f from reference directory)
-ifx KSBENCH.F Subrouts.F dopri8.f /exe:ksbench.exe
 
 :: TLE-to-OPM converter
 ifx tle2opm.F Subrouts.F TLEread.F Legendre.F /exe:tle2opm.exe
@@ -394,62 +390,23 @@ EGM2008 streaming read: O(n²) lines for degree n (J2 = 3 lines, not 2.4M).
 
 ---
 
-## 11. Benchmark Validation (KSBENCH)
-
-`KSBENCH.F` is an independent Cartesian ECI propagator that uses the **DOP853** integrator (Dormand-Prince 8th-order adaptive RK, Hairer 1993) with the same force models as `driver_KS.F`. Its purpose is to validate the KS regularisation + RK-Gill integration path against a high-accuracy reference.
-
-### Force model comparison
-
-| Force | driver_KS.F | KSBENCH.F |
-|---|---|---|
-| 2-body | KS element equations | Cartesian ECI |
-| Zonal Jn | KS space via aLegP | Cartesian gradient (recurrence, no singularity) |
-| Drag | Sharma 1999 perigee-reference model | ATM.DAT direct interpolation at instantaneous altitude |
-| SRP | Cannonball + same shadow functions | Identical |
-| Sun / Moon | Same solarnpv / lunarpv, Legendre expansion | Direct 3-body formula |
-| Integrator | Gill RK4, fixed step (1°/rev, istep=360) | DOP853 adaptive (tolerance-driven) |
-
-### Build
-
-```bat
-ifx KSBENCH.F Subrouts.F dopri8.f /exe:ksbench.exe
-```
-
-`dopri8.f` must be copied from `E:\Research\2. Israel-Technion\Programs\Numerical\code\dopri8.f`.
-
-### Test cases (issues #18–#23)
-
-| ID | Regime | a (km) | e | i (°) | Primary force |
-|---|---|---|---|---|---|
-| TC1 | LEO circular | 6778 | 0.001 | 51.6 | Drag, J2 |
-| TC2 | LEO SSO | 6878 | 0.001 | 98.0 | J2, drag |
-| TC3 | Deep LEO decaying | 6528 | 0.01 | 28.0 | Drag (Hp≈150 km) |
-| TC4 | GTO | 24371 | 0.731 | 28.0 | All forces |
-| TC5 | MEO | 20200 | 0.1 | 55.0 | 3rd body, Jn |
-| TC6 | Molniya | 26560 | 0.74 | 63.4 | Lunisolar |
-| TC7 | Deep HEO | 40000 | 0.9 | 28.0 | 3rd body, Jn |
-
-### Pass criteria
-
-| Phase | Forces | Duration | Max 3D position error |
-|---|---|---|---|
-| 1 — J2 only | J2, TC1–TC3 | 7 days | < 100 m |
-| 2 — Full Jn | J2–Jn, TC1–TC7 | 7 days | < 500 m |
-| 3 — + Drag | Jn + drag, TC1–TC3 | 7 days | < 1 km |
-| 4 — + 3rd body | Jn + Sun/Moon, TC4–TC7 | 7 days | < 2 km |
-| 5 — Full | All forces, TC1–TC7 | 7 days | < 2 km |
-
----
-
-## 12. Known Issues
+## 11. Known Issues
 
 - EGM2008 file (~231 MB) not included; set `ngeo_deg = 0` for point-mass gravity.
-- `aLegP` hardcoded to degree 49; results incorrect beyond that.
 - SRP is cannonball only; no tesseral harmonics or geometry-dependent variations.
+- `solarnpv`/`lunarpv` are analytic ephemeris series (Montenbruck & Gill
+  low-precision, since 2026-07-12), not JPL DE405: ~0.10% (Sun) / ~0.11%
+  (Moon) position error vs DE405 over a 60-day sweep
+  (`scratch_gmat/ephemeris_check_gmat.script`). This bounds achievable
+  third-body dynamical agreement at roughly the 0.5 km/rev level (GTO,
+  Moon-dominated); tighter would require DE-series ephemerides.
+- Third-body Legendre truncation: Sun `nsun_deg=2`, Moon `nmoon_deg=3`
+  by convention (thesis Ch. 4); the n=4 lunar term is ~1% of the lunar
+  effect at GTO apogee.
 
 ---
 
-## 13. Revision History
+## 12. Revision History
 
 | Date | Change |
 |---|---|
@@ -479,5 +436,11 @@ ifx KSBENCH.F Subrouts.F dopri8.f /exe:ksbench.exe
 | 2026-06-24 | Fixed atmospheric drag crash for HEO orbits (Issue #16): replaced hardcoded 500 km perigee guard with `ALT_atm` table-bounds check; added `H_dg≤0` safety after INTPOL; added exponential overflow clamp (`|arg|>500 → 0`). Prevents NaN cascade from INTPOL returning zero scale height for out-of-range altitudes |
 | 2026-07-04 | Fixed `car2oe` NaN at perigee/apogee: all `dacos()` calls now clamp their argument to [-1, 1] via `dmax1(-1.d0,dmin1(1.d0,...))`. Floating-point dot-product can exceed ±1 by ε at apsides, causing `dacos(>1) = NaN` that propagated through eccentric anomaly → drag density → full state divergence. |
 | 2026-07-07 | Replaced `ATM.DAT` with Jacchia-70 multi-species diffusive equilibrium table (F10.7=72, Kp=1.0, T∞=640 K). Added `gen_atm_j70.F90` generator. Drag ratio vs NPOE: 48% → 95–97%. |
-| 2026-07-08 | Converted `gen_atm_j70.F90` → `gen_atm_j70.F` (fixed-form F77, consistent with rest of codebase). |
-| 2026-07-08 | Added `KSBENCH.F`: Cartesian ECI benchmark propagator using DOP853 (Dormand-Prince 8th-order adaptive RK). Same force models as `driver_KS.F` (zonal geopotential, drag, SRP, luni-solar). Used for driver_KS validation across 7 orbital regimes (issues #17–#23). |
+| 2026-07-11 | Fixed `aLegP` (`Legendre.F`) buffer overflow: ignored its own degree argument, always computed a full 50×50 Legendre grid into a 50-element output array and a 36×36 scratch array — a ~50x out-of-bounds write on every call (including calls with `n` as small as 2), silently corrupting adjacent stack variables. Found via independent GMAT cross-validation (see `scratch_gmat/`): a J2-only propagation diverged from an independent RK89 Cartesian propagator by ~150 km over one orbit despite the pure two-body case agreeing to sub-mm/s. Rewrote to honor `n` and use correctly-sized buffers. |
+| 2026-07-11 | Fixed `aleg`/`sleg`/`oleg` off-by-one degree (`driver_KS.F`): `aLegP(ngeo_deg,...)` fills `aleg(1..ngeo_deg+1)`, but the oblateness force and time-element formulas need `aleg(i+2)` up to `i=ngeo_deg`, i.e. `aleg(ngeo_deg+2)` — one degree beyond what was requested. That slot was uninitialized. The pre-fix `aLegP` buffer overflow masked this (it always overfilled the array regardless of `n`), so fixing the overflow first exposed this separate, pre-existing bug. Fixed by requesting `ngeo_deg+1`/`nsun_deg+1`/`nmoon_deg+1` at both call sites. Validated against GMAT (independent RK89 propagator, EGM96 zonal-only J2, `scratch_gmat/`): a near-polar test orbit's classical nodal-regression rate went from 10x too large (0.692 vs GMAT's 0.0693 deg/orbit) to matching within 0.15% (0.0692 deg/orbit), averaged over 20 orbits. An earlier attempted fix to the `qj` force-formula's algebra itself was investigated and found unnecessary — reverted (see git history) after this off-by-one turned out to be the actual root cause; `qj` matches its long-standing legacy-heritage form and independently validates correctly against GMAT once fed complete Legendre data. |
+| 2026-07-11 | Fixed `Tau_geo` (time-element numerator, `driver_KS.F`): was missing the `amue` factor present on every other term in the same `z(1)` sum, and had the wrong sign. Derived the correct closed form from the KS regular-elements time-element rate equation (Sellamuthu 2018 PhD thesis, eq. 2.56: `τ* = [μ-2rU]/(8w³) - r/(16w³)[u·∂U/∂u] - ...`), which reduces per zonal term to `+amue*(n-1)*c_j(n)*Re(n)*aleg(n+1)*ObyR(n)` — confirmed against the pre-fix formula numerically to 9 significant digits (exactly `-1/amue` times the old value). Since `Tau_geo` only affects OEM epoch timestamps, not propagated states (verified by isolation test, see 2026-07-11 entries above), the fix shows up as corrected time-labeling rather than a position change: re-running the GMAT J2–J20 cross-check with the corrected epochs closed the remaining ~18 km gap down to **~80 m** (a ~225x improvement), consistent with the ~2 s of previously mislabeled time this fix removes. |
+| 2026-07-11 | Fixed `qsun`/`qmoon` (third-body force, `driver_KS.F`): the `slambda`/`olambda`-based closed form gave results 8 orders of magnitude off the correct value, with a wildly inconsistent per-component ratio (not a clean sign/scale error) — traced to the third-body potential's radial power law being `+n` (grows with `r`, a multipole expansion about the third body) rather than zonal's `-(n+1)` (falls off from a point source), which flips which Legendre recursion identity the chain-rule derivation needs (`P_(n-1)`-based, not `P_(n+1)`-based). Re-derived from first principles for a general (non-axis-aligned) third-body direction using the KS bilinear identity `L(u)ᵀx = r·u`, and verified the new closed form against `L(u)ᵀ` of a finite-difference gradient of the thesis's own third-body potential (eq. 4.1, confirmed matching sign convention) to ~1e-9 relative precision at multiple points, multiple degrees, and both `car2ks` branches. New formula: `qsun(j) = RbyRs(i)/(R(1)·den_s)·[i·(sleg(i+1)-cphi_s·sleg(i))·u(j) + (i+1)·(cphi_s·sleg(i+1)-sleg(i+2))·sq/Rs(1)]` (same structure for `qmoon`/moon). Separately, `Tau_3body1`/`Tau_3body2` were checked against the same eq. 2.56 framework (via Euler's homogeneous-function theorem, `x·∇V=m·V`, avoiding a full re-derivation) and found to **already be correct** — no change needed there. Dynamical GMAT sanity check (Sun-only, GTO-like orbit, one ~10.5h orbit): KSROP-vs-GMAT gap grows smoothly to ~6.5 km, consistent in scale with the ~0.6% difference between KSROP's compact analytic solar ephemeris (`solarnpv`) and GMAT's DE405 (quantified separately, see Known Issues) — not attributable to the force formula itself, which is independently validated to 1e-9 precision decoupled from ephemeris source. |
+| 2026-07-12 | GMAT validation campaign completed (issues #19-#23): **Phase 3 drag** — unit audit of the drag acceleration exact (the `1e-7` factor combines with `DEN_atm`'s `1e10` read-scaling to the textbook `ρv²/(2·BN)`); secular SMA decay at Hp≈243 km, BN=50: KSROP -2.01 km/day vs GMAT JacchiaRoberts (matched F10.7=72/Kp=1.0) -2.4 to -2.6 km/day — ~20% apart with both implied densities physical, within normal inter-atmosphere-model spread. Sampling must be phase-locked (periapsis) to avoid J2 osculating-SMA aliasing. **Phase 5 full force** (J2-J20 + Sun + Moon + drag + SRP conical, TC4 GTO, 2 revs ≈ 21 h): 0.3 km @ 1.4 h growing to 76 km @ 20.9 h, error concentrated along-track at perigee (≈7 s accumulated timing), consistent with the documented lunar-ephemeris (~3.6%) and drag-model (~20%) gaps — no evidence of further force-model defects. Scripts: `scratch_gmat/KSROP_drag_crosscheck.script`, `KSROP_fullforce_crosscheck.script`. |
+| 2026-07-12 | **Found & fixed the two real third-body bugs** (supersedes the 2026-07-11 `qsun`/`qmoon` entry and the Phase-4/5 "ephemeris gap" attributions): (1) `third_body_aux`'s `deg` dummy argument fell under `implicit double precision (a-h,o-z)` while every caller passes an integer — the bit pattern read as ~1e-323, its power-series do-loop ran zero times, `RbyRtb(2..)` stayed 0.0, and **the entire third-body force was exactly zero from the 2026-06-07 refactor until now** (found via a GMAT ON/OFF sensitivity test: sun+moon on vs off was bit-identical). Fixed with `integer deg`. (2) The 2026-07-11 `qsun`/`qmoon` rewrite used the wrong EOM convention — `L(u)ᵀ(−∇shape)` alone, when the KS-elements equations (thesis eq. 2.55/2.59) consume `2[U/2·u + (r/4)∂U/∂u]`, i.e. `qsun = shape·u + r·L(u)ᵀ(∇shape)` — missing a factor ~r (~1e4 at GTO). Corrected form verified to machine precision (2e-16) against the independently validated KSJLSDNP.F n=2 sun term (CNTS1/CNTS2 structure) and to ~1e-8 vs finite-difference at n=2,3. `Tau_3body1/2` confirmed correct under the same convention (algebra + dynamics). |
+| 2026-07-12 | Upgraded `solarnpv`/`lunarpv` to Montenbruck & Gill low-precision analytic series (J2000 frame; the M&G solar series is already J2000-referenced — do NOT add the −1.3972°·T precession term there, it belongs only in the lunar series). Sun: fixed-1-AU distance replaced with the elliptic form — 0.6% → **0.097%** vs DE405; Moon: 7-term Cartesian series replaced with truncated Brown theory — 3.6% → **0.109%** vs DE405 (60-day sweep, 13 epochs). |
+| 2026-07-12 | Re-validated third-body + full force vs GMAT after the fixes: **Sun-only GTO 1 rev: 1.2 m** (was 6.5 km); **Moon-only 1 rev: 0.46 km** (bounded by lunar ephemeris ~0.11% + n=3 truncation); **full conservative (J2-J20 + Sun + Moon + SRP), 2 revs: 1.9 km** (was effectively ~76 km); full force with drag: 55.9 km at the Hp≈178 km perigee — ~96% of which is the Jacchia-70-vs-JacchiaRoberts drag-model difference (documented model choice, see issue #21), not a code defect. Regression: 528/528. Scripts: `scratch_gmat/KSROP_sunonly_crosscheck.script`, `KSROP_moononly_crosscheck.script`, `KSROP_nodrag_crosscheck.script`. |

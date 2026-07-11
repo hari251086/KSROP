@@ -1,0 +1,40 @@
+%General Mission Analysis Tool(GMAT) Script
+%  DE405 Sun/Moon positions at 13 epochs (5-day steps from
+%  2016-09-20), for validating KSROP's analytic solarnpv/lunarpv.
+
+Create Spacecraft DefaultSC;
+GMAT DefaultSC.DateFormat = UTCGregorian;
+GMAT DefaultSC.Epoch = '20 Sep 2016 00:00:00.000';
+GMAT DefaultSC.CoordinateSystem = EarthMJ2000Eq;
+GMAT DefaultSC.X = 42164;
+GMAT DefaultSC.Y = 0;
+GMAT DefaultSC.Z = 0;
+GMAT DefaultSC.VX = 0;
+GMAT DefaultSC.VY = 3.0747;
+GMAT DefaultSC.VZ = 0;
+
+Create ForceModel FM2B;
+GMAT FM2B.CentralBody = Earth;
+GMAT FM2B.PointMasses = {Earth};
+
+Create Propagator Prop2B;
+GMAT Prop2B.FM = FM2B;
+GMAT Prop2B.Type = RungeKutta89;
+GMAT Prop2B.InitialStepSize = 60;
+GMAT Prop2B.Accuracy = 1e-11;
+GMAT Prop2B.MaxStep = 86400;
+
+Create ReportFile RepEph;
+GMAT RepEph.Filename = 'ephemeris_check_gmat.txt';
+GMAT RepEph.Precision = 16;
+GMAT RepEph.WriteHeaders = false;
+
+Create Variable I;
+
+BeginMissionSequence;
+
+Report RepEph Sun.EarthMJ2000Eq.X Sun.EarthMJ2000Eq.Y Sun.EarthMJ2000Eq.Z Luna.EarthMJ2000Eq.X Luna.EarthMJ2000Eq.Y Luna.EarthMJ2000Eq.Z;
+For I = 1:1:12;
+   Propagate Prop2B(DefaultSC) {DefaultSC.ElapsedSecs = 432000};
+   Report RepEph Sun.EarthMJ2000Eq.X Sun.EarthMJ2000Eq.Y Sun.EarthMJ2000Eq.Z Luna.EarthMJ2000Eq.X Luna.EarthMJ2000Eq.Y Luna.EarthMJ2000Eq.Z;
+EndFor;

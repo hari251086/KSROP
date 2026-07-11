@@ -1,0 +1,45 @@
+%General Mission Analysis Tool(GMAT) Script
+%  Sun-only third-body validation: pure two-body Earth + Sun point
+%  mass, GTO, 1 rev. Isolates the qsun force path + solar ephemeris
+%  (KSROP: M&G analytic, ~0.1% vs DE405).
+
+Create Spacecraft DefaultSC;
+GMAT DefaultSC.DateFormat = UTCGregorian;
+GMAT DefaultSC.Epoch = '20 Sep 2016 00:00:00.000';
+GMAT DefaultSC.CoordinateSystem = EarthMJ2000Eq;
+GMAT DefaultSC.DisplayStateType = Cartesian;
+GMAT DefaultSC.X = -6555.799000;
+GMAT DefaultSC.Y = 0.000000;
+GMAT DefaultSC.Z = 0.000000;
+GMAT DefaultSC.VX = 0.000000000;
+GMAT DefaultSC.VY = -9.058150532;
+GMAT DefaultSC.VZ = -4.816304071;
+
+Create ForceModel FMsun;
+GMAT FMsun.CentralBody = Earth;
+GMAT FMsun.PointMasses = {Earth, Sun};
+GMAT FMsun.Drag = None;
+GMAT FMsun.SRP = Off;
+
+Create Propagator PropSun;
+GMAT PropSun.FM = FMsun;
+GMAT PropSun.Type = RungeKutta89;
+GMAT PropSun.InitialStepSize = 10;
+GMAT PropSun.Accuracy = 1e-12;
+GMAT PropSun.MaxStep = 300;
+
+Create ReportFile RepSun;
+GMAT RepSun.Filename = 'crosscheck_sunonly_gmat.txt';
+GMAT RepSun.Precision = 16;
+GMAT RepSun.WriteHeaders = false;
+
+BeginMissionSequence;
+
+Propagate PropSun(DefaultSC) {DefaultSC.ElapsedSecs = 5060.752};
+Report RepSun DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate PropSun(DefaultSC) {DefaultSC.ElapsedSecs = 13871.039};
+Report RepSun DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate PropSun(DefaultSC) {DefaultSC.ElapsedSecs = 13871.292};
+Report RepSun DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate PropSun(DefaultSC) {DefaultSC.ElapsedSecs = 5060.994};
+Report RepSun DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;

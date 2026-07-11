@@ -1,0 +1,52 @@
+%General Mission Analysis Tool(GMAT) Script
+%  Full conservative force (J2-J20 zonal + Sun + Luna + SRP conical),
+%  DRAG OFF -- isolates the drag-model difference from the rest.
+
+Create Spacecraft DefaultSC;
+GMAT DefaultSC.DateFormat = UTCGregorian;
+GMAT DefaultSC.Epoch = '20 Sep 2016 00:00:00.000';
+GMAT DefaultSC.CoordinateSystem = EarthMJ2000Eq;
+GMAT DefaultSC.X = -6555.799000;
+GMAT DefaultSC.Y = 0.000000;
+GMAT DefaultSC.Z = 0.000000;
+GMAT DefaultSC.VX = 0.000000000;
+GMAT DefaultSC.VY = -9.058150532;
+GMAT DefaultSC.VZ = -4.816304071;
+GMAT DefaultSC.DryMass = 110;
+GMAT DefaultSC.Cr = 1.2;
+GMAT DefaultSC.SRPArea = 1.1;
+
+Create ForceModel FMc;
+GMAT FMc.CentralBody = Earth;
+GMAT FMc.PrimaryBodies = {Earth};
+GMAT FMc.PointMasses = {Sun, Luna};
+GMAT FMc.GravityField.Earth.Degree = 20;
+GMAT FMc.GravityField.Earth.Order = 0;
+GMAT FMc.GravityField.Earth.PotentialFile = 'C:\Users\hari2\OneDrive\Documents\GitHub\KSROP\scratch_gmat\EGM2008_72x72.cof';
+GMAT FMc.Drag = None;
+GMAT FMc.SRP = On;
+GMAT FMc.SRP.Flux = 1367;
+GMAT FMc.SRP.SRPModel = Spherical;
+
+Create Propagator PropC;
+GMAT PropC.FM = FMc;
+GMAT PropC.Type = RungeKutta89;
+GMAT PropC.InitialStepSize = 10;
+GMAT PropC.Accuracy = 1e-12;
+GMAT PropC.MaxStep = 300;
+
+Create ReportFile RepC;
+GMAT RepC.Filename = 'crosscheck_nodrag_gmat.txt';
+GMAT RepC.Precision = 16;
+GMAT RepC.WriteHeaders = false;
+
+BeginMissionSequence;
+
+Propagate PropC(DefaultSC) {DefaultSC.ElapsedSecs = 18883.410};
+Report RepC DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate PropC(DefaultSC) {DefaultSC.ElapsedSecs = 18784.004};
+Report RepC DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate PropC(DefaultSC) {DefaultSC.ElapsedSecs = 18982.995};
+Report RepC DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate PropC(DefaultSC) {DefaultSC.ElapsedSecs = 18684.174};
+Report RepC DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
