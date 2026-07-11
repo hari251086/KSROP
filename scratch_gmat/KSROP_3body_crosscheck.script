@@ -1,0 +1,57 @@
+%General Mission Analysis Tool(GMAT) Script
+%  Cross-validation of driver_KS.F third-body (Sun-only, n=2) fix
+%  against GMAT DE405 Sun point-mass. NOTE: KSROP uses a compact
+%  analytic solar ephemeris (solarnpv), not DE405 -- expect a
+%  mismatch proportional to that ephemeris difference (~0.6% at this
+%  epoch, quantified in ephemeris_check_gmat.script), not a clean
+%  force-formula check like the J2 crosschecks. This is a sanity/
+%  order-of-magnitude check, not a precision validation.
+
+Create Spacecraft DefaultSC;
+GMAT DefaultSC.DateFormat = UTCGregorian;
+GMAT DefaultSC.Epoch = '20 Sep 2016 00:00:00.000';
+GMAT DefaultSC.CoordinateSystem = EarthMJ2000Eq;
+GMAT DefaultSC.DisplayStateType = Cartesian;
+GMAT DefaultSC.X = -6555.799000;
+GMAT DefaultSC.Y = 0.000000;
+GMAT DefaultSC.Z = 0.000000;
+GMAT DefaultSC.VX = -0.000000000;
+GMAT DefaultSC.VY = -9.058150532;
+GMAT DefaultSC.VZ = -4.816304071;
+
+Create ForceModel FM3body;
+GMAT FM3body.CentralBody = Earth;
+GMAT FM3body.PrimaryBodies = {Earth};
+GMAT FM3body.GravityField.Earth.Degree = 0;
+GMAT FM3body.GravityField.Earth.Order = 0;
+GMAT FM3body.PointMasses = {Sun};
+GMAT FM3body.Drag = None;
+GMAT FM3body.SRP = Off;
+
+Create Propagator Prop3body;
+GMAT Prop3body.FM = FM3body;
+GMAT Prop3body.Type = RungeKutta89;
+GMAT Prop3body.InitialStepSize = 10;
+GMAT Prop3body.Accuracy = 1e-13;
+GMAT Prop3body.MaxStep = 60;
+
+Create ReportFile Rep3body;
+GMAT Rep3body.Filename = 'crosscheck_3body_gmat.txt';
+GMAT Rep3body.Precision = 16;
+GMAT Rep3body.WriteHeaders = true;
+
+BeginMissionSequence;
+
+Report Rep3body DefaultSC.UTCGregorian DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate Prop3body(DefaultSC) {DefaultSC.ElapsedSecs = 2495.634};
+Report Rep3body DefaultSC.UTCGregorian DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate Prop3body(DefaultSC) {DefaultSC.ElapsedSecs = 6310.587};
+Report Rep3body DefaultSC.UTCGregorian DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate Prop3body(DefaultSC) {DefaultSC.ElapsedSecs = 10125.540};
+Report Rep3body DefaultSC.UTCGregorian DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate Prop3body(DefaultSC) {DefaultSC.ElapsedSecs = 10125.539};
+Report Rep3body DefaultSC.UTCGregorian DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate Prop3body(DefaultSC) {DefaultSC.ElapsedSecs = 6310.587};
+Report Rep3body DefaultSC.UTCGregorian DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate Prop3body(DefaultSC) {DefaultSC.ElapsedSecs = 2495.635};
+Report Rep3body DefaultSC.UTCGregorian DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;

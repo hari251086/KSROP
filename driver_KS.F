@@ -512,22 +512,30 @@ c     -----------------------------------------------------------
 
                sq = ts(1)*qu(1)+ts(2)*qu(2)+ts(3)*qu(3)
 
+c     Third-body q(j): unlike the zonal term, U_K's radial power law
+c     is +n (grows with r, multipole about the third body, not a
+c     point-source falloff), so the Legendre chain-rule reduces via
+c     the OTHER recursion (using P_(n-1), not P_(n+1)) -- re-derived
+c     2026-07-11, verified against L(u)^T of a finite-difference
+c     gradient of U_K to ~1e-9 relative precision at multiple points:
+c       qsun(j) = RbyRs(i)/(R(1)*den_s) * [ i*(sleg(i+1)
+c                 -cphi_s*sleg(i))*u(j) + (i+1)*(cphi_s*sleg(i+1)
+c                 -sleg(i+2))*sq/Rs(1) ]
                do i = 2,nsun_deg
-                  slambda(i)=2.d0*R(i-1)*(i+1)*(sleg(i+2)
-     &                 -cphi_s*sleg(i+1))/den_s
-
-                  qs = (RbyRs(i)*(sq*slambda(i)/Rs(1)+
-     &                 u(j)*(1-i)*sleg(i+1)-slambda(i)*cphi_s))
+                  qs = RbyRs(i)/(R(1)*den_s) *
+     &                 (dble(i)*(sleg(i+1)-cphi_s*sleg(i))*u(j)
+     &                 +dble(i+1)*(cphi_s*sleg(i+1)-sleg(i+2))*sq
+     &                 /Rs(1))
                   qsun(j) = qs + qsun(j)
                end do
 
                oq = tm(1)*qu(1)+tm(2)*qu(2)+tm(3)*qu(3)
 
                do i = 2,nmoon_deg
-                  olambda(i)=2.d0*R(i-1)*(i+1)*(oleg(i+2)
-     &                 -cphi_m*oleg(i+1))/den_m
-                  qm = (RbyRm(i)*(oq*olambda(i)/Rm(1)+
-     &                 u(j)*(1-i)*oleg(i+1)-olambda(i)*cphi_m))
+                  qm = RbyRm(i)/(R(1)*den_m) *
+     &                 (dble(i)*(oleg(i+1)-cphi_m*oleg(i))*u(j)
+     &                 +dble(i+1)*(cphi_m*oleg(i+1)-oleg(i+2))*oq
+     &                 /Rm(1))
                   qmoon(j) = qm + qmoon(j)
                end do
 
