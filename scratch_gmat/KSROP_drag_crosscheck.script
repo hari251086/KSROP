@@ -1,0 +1,63 @@
+%General Mission Analysis Tool(GMAT) Script
+%  Drag decay-rate cross-check vs driver_KS.F (Phase 3, issue #21).
+%  KSROP: Jacchia-70 static table (F10.7=72, Kp=1.0), Sharma oblate
+%  co-rotating perigee-referenced model, BN=50 kg/m2.
+%  GMAT: JacchiaRoberts at the SAME constant flux (F107=72, F107A=72,
+%  Kp=1.0), Cd=2.2 * 1 m2 / 110 kg = BN 50 kg/m2.
+%  Different density models by design -- comparing secular SMA decay
+%  rate (order/trend), not meter-level position.
+%  Sampling: at PERIAPSIS each rev (phase-locked) to avoid aliasing the
+%  J2 short-period oscillation in osculating SMA (~km amplitude at LEO).
+
+Create Spacecraft DefaultSC;
+GMAT DefaultSC.DateFormat = UTCGregorian;
+GMAT DefaultSC.Epoch = '20 Sep 2016 00:00:00.000';
+GMAT DefaultSC.CoordinateSystem = EarthMJ2000Eq;
+GMAT DefaultSC.DisplayStateType = Cartesian;
+GMAT DefaultSC.X = 6621.372000;
+GMAT DefaultSC.Y = 0.000000;
+GMAT DefaultSC.Z = 0.000000;
+GMAT DefaultSC.VX = 0.000000000;
+GMAT DefaultSC.VY = 4.821774213;
+GMAT DefaultSC.VZ = 6.083565012;
+GMAT DefaultSC.DryMass = 110;
+GMAT DefaultSC.Cd = 2.2;
+GMAT DefaultSC.DragArea = 1.0;
+GMAT DefaultSC.Cr = 1.2;
+GMAT DefaultSC.SRPArea = 1.0;
+
+Create ForceModel FMdrag;
+GMAT FMdrag.CentralBody = Earth;
+GMAT FMdrag.PrimaryBodies = {Earth};
+GMAT FMdrag.GravityField.Earth.Degree = 2;
+GMAT FMdrag.GravityField.Earth.Order = 0;
+GMAT FMdrag.GravityField.Earth.PotentialFile = 'C:\Users\hari2\OneDrive\Documents\GitHub\KSROP\scratch_gmat\EGM2008_72x72.cof';
+GMAT FMdrag.Drag.AtmosphereModel = JacchiaRoberts;
+GMAT FMdrag.Drag.HistoricWeatherSource = 'ConstantFluxAndGeoMag';
+GMAT FMdrag.Drag.PredictedWeatherSource = 'ConstantFluxAndGeoMag';
+GMAT FMdrag.Drag.F107 = 72;
+GMAT FMdrag.Drag.F107A = 72;
+GMAT FMdrag.Drag.MagneticIndex = 1.0;
+GMAT FMdrag.SRP = Off;
+
+Create Propagator PropDrag;
+GMAT PropDrag.FM = FMdrag;
+GMAT PropDrag.Type = RungeKutta89;
+GMAT PropDrag.InitialStepSize = 10;
+GMAT PropDrag.Accuracy = 1e-12;
+GMAT PropDrag.MaxStep = 60;
+
+Create ReportFile RepDrag;
+GMAT RepDrag.Filename = 'crosscheck_drag_gmat.txt';
+GMAT RepDrag.Precision = 16;
+GMAT RepDrag.WriteHeaders = true;
+
+Create Variable I;
+
+BeginMissionSequence;
+
+Report RepDrag DefaultSC.ElapsedSecs DefaultSC.Earth.SMA DefaultSC.Earth.RadPer;
+For I = 1:1:16;
+   Propagate PropDrag(DefaultSC) {DefaultSC.Earth.Periapsis};
+   Report RepDrag DefaultSC.ElapsedSecs DefaultSC.Earth.SMA DefaultSC.Earth.RadPer;
+EndFor;
