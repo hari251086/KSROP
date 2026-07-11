@@ -1,0 +1,45 @@
+%General Mission Analysis Tool(GMAT) Script
+%  Isolate: pure J2 (Degree=2 Order=0) KSROP vs GMAT
+
+Create Spacecraft DefaultSC;
+GMAT DefaultSC.DateFormat = UTCGregorian;
+GMAT DefaultSC.Epoch = '20 Sep 2016 00:00:00.000';
+GMAT DefaultSC.CoordinateSystem = EarthMJ2000Eq;
+GMAT DefaultSC.DisplayStateType = Cartesian;
+GMAT DefaultSC.X = 0.000000;
+GMAT DefaultSC.Y = -5888.972700;
+GMAT DefaultSC.Z = -3400.000000;
+GMAT DefaultSC.VX = 9.500000000;
+GMAT DefaultSC.VY = 0.000000000;
+GMAT DefaultSC.VZ = 0.000000000;
+
+Create ForceModel FMJ2;
+GMAT FMJ2.CentralBody = Earth;
+GMAT FMJ2.PrimaryBodies = {Earth};
+GMAT FMJ2.GravityField.Earth.Degree = 2;
+GMAT FMJ2.GravityField.Earth.Order = 0;
+GMAT FMJ2.GravityField.Earth.PotentialFile = 'C:\Users\hari2\OneDrive\Documents\GitHub\KSROP\scratch_gmat\EGM2008_72x72.cof';
+GMAT FMJ2.Drag = None;
+GMAT FMJ2.SRP = Off;
+
+Create Propagator PropJ2;
+GMAT PropJ2.FM = FMJ2;
+GMAT PropJ2.Type = RungeKutta89;
+GMAT PropJ2.InitialStepSize = 10;
+GMAT PropJ2.Accuracy = 1e-13;
+GMAT PropJ2.MaxStep = 60;
+
+Create ReportFile RepJ2;
+GMAT RepJ2.Filename = 'crosscheck_j2only_gmat.txt';
+GMAT RepJ2.Precision = 16;
+GMAT RepJ2.WriteHeaders = true;
+
+BeginMissionSequence;
+
+Report RepJ2 DefaultSC.UTCGregorian DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate PropJ2(DefaultSC) {DefaultSC.ElapsedSecs = 885.202};
+Report RepJ2 DefaultSC.UTCGregorian DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate PropJ2(DefaultSC) {DefaultSC.ElapsedSecs = 8047.214};
+Report RepJ2 DefaultSC.UTCGregorian DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate PropJ2(DefaultSC) {DefaultSC.ElapsedSecs = 8934.455};
+Report RepJ2 DefaultSC.UTCGregorian DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;

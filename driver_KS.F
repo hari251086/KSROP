@@ -228,9 +228,12 @@ c     -----------------------------------------------------------
 
       V_pot = 0.d0
 
-      call aLegP(ngeo_deg,ZbyR(1),aleg)
-      call aLegP(nsun_deg,cphi_s,sleg)
-      call aLegP(nmoon_deg,cphi_m,oleg)
+c     +1: the force/time-element formulas below need aleg(i+2)
+c     (degree i+1) for i up to ngeo_deg, i.e. one degree beyond
+c     the requested ngeo_deg itself (same for sleg/oleg).
+      call aLegP(ngeo_deg+1,ZbyR(1),aleg)
+      call aLegP(nsun_deg+1,cphi_s,sleg)
+      call aLegP(nmoon_deg+1,cphi_m,oleg)
 
       do i = 2,ngeo_deg
          cn_j(i) = amue*Re(i)*c_j(i)*ObyR(i+1)
@@ -470,9 +473,9 @@ c     -----------------------------------------------------------
      &             + R(1)*(dotp4(u,qdrag)+dotp4(u,qsrp)))/(8.d0*w*w*w)
      &             - z(10)*(2.d0/(w*w))*dotp4(u,us)
 
-            if (ngeo_deg  .gt. 1) call aLegP(ngeo_deg, ZbyR(1), aleg)
-            if (nsun_deg  .gt. 1) call aLegP(nsun_deg, cphi_s,  sleg)
-            if (nmoon_deg .gt. 1) call aLegP(nmoon_deg,cphi_m,  oleg)
+            if (ngeo_deg  .gt. 1) call aLegP(ngeo_deg+1, ZbyR(1), aleg)
+            if (nsun_deg  .gt. 1) call aLegP(nsun_deg+1, cphi_s,  sleg)
+            if (nmoon_deg .gt. 1) call aLegP(nmoon_deg+1,cphi_m,  oleg)
 
             do j = 1,4
                q(j) = 0.d0
@@ -483,15 +486,13 @@ c     -----------------------------------------------------------
             do j = 1,4
 
 !     oblateness terms
-c     q(j) = -(n+1)*D_n/z2mR2 * [(R*P_n - z*P_n+1)*u(j)
-c                                +(R*P_n+1 - z*P_n)*uu(j)]
-c     where D_n = ObyR(n+1)*Re(n)*c_j(n), P_n=aleg(n+1), P_n+1=aleg(n+2)
                z2mR2=x(3)**2-R(1)**2
                qj=0.d0
                do i = 2,ngeo_deg
-                  qj = -dble(ObyR(i+1)*Re(i)*c_j(i)*dble(i+1)*
-     &                 ((R(1)*aleg(i+1)-x(3)*aleg(i+2))*u(j)
-     &                 +(R(1)*aleg(i+2)-x(3)*aleg(i+1))*uu(j))/z2mR2)
+                  qj = dble(ObyR(i+1)*Re(i)*c_j(i)*
+     &                 (R(1)*(i+1)*aleg(i+2)*(R(1)*uu(j)-x(3)*u(j))+
+     &                 (aleg(i+1)*(u(j)*(i*R(2)+x(3)**2)
+     &                 -uu(j)*(i+1)*R(1)*x(3))))/z2mR2)
                   q(j)=qj+q(j)
                end do
 

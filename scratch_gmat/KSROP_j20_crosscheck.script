@@ -1,0 +1,62 @@
+%General Mission Analysis Tool(GMAT) Script
+%  Cross-validation of driver_KS.F zonal J2-J20 test (ngeo_deg=20)
+%  against GMAT GravityField Degree=20 Order=0 using the SHARED
+%  EGM2008_72x72.cof file (same source coefficients as KSROP's
+%  input/EGM2008_to2190_TideFree, truncated to degree 72).
+
+Create Spacecraft DefaultSC;
+GMAT DefaultSC.DateFormat = UTCGregorian;
+GMAT DefaultSC.Epoch = '20 Sep 2016 00:00:00.000';
+GMAT DefaultSC.CoordinateSystem = EarthMJ2000Eq;
+GMAT DefaultSC.DisplayStateType = Cartesian;
+GMAT DefaultSC.X = 0.000000;
+GMAT DefaultSC.Y = -5888.972700;
+GMAT DefaultSC.Z = -3400.000000;
+GMAT DefaultSC.VX = 9.500000000;
+GMAT DefaultSC.VY = 0.000000000;
+GMAT DefaultSC.VZ = 0.000000000;
+
+Create ForceModel FM20;
+GMAT FM20.CentralBody = Earth;
+GMAT FM20.PrimaryBodies = {Earth};
+GMAT FM20.GravityField.Earth.Degree = 20;
+GMAT FM20.GravityField.Earth.Order = 0;
+GMAT FM20.GravityField.Earth.PotentialFile = 'C:\Users\hari2\OneDrive\Documents\GitHub\KSROP\scratch_gmat\EGM2008_72x72.cof';
+GMAT FM20.Drag = None;
+GMAT FM20.SRP = Off;
+
+Create Propagator Prop20;
+GMAT Prop20.FM = FM20;
+GMAT Prop20.Type = RungeKutta89;
+GMAT Prop20.InitialStepSize = 10;
+GMAT Prop20.Accuracy = 1e-13;
+GMAT Prop20.MaxStep = 60;
+
+Create ReportFile Rep20;
+GMAT Rep20.Filename = 'crosscheck_j20_gmat.txt';
+GMAT Rep20.Precision = 16;
+GMAT Rep20.WriteHeaders = true;
+
+BeginMissionSequence;
+
+Report Rep20 DefaultSC.UTCGregorian DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate Prop20(DefaultSC) {DefaultSC.ElapsedSecs = 884.976};
+Report Rep20 DefaultSC.UTCGregorian DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate Prop20(DefaultSC) {DefaultSC.ElapsedSecs = 1229.207};
+Report Rep20 DefaultSC.UTCGregorian DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate Prop20(DefaultSC) {DefaultSC.ElapsedSecs = 1785.841};
+Report Rep20 DefaultSC.UTCGregorian DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate Prop20(DefaultSC) {DefaultSC.ElapsedSecs = 2342.530};
+Report Rep20 DefaultSC.UTCGregorian DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate Prop20(DefaultSC) {DefaultSC.ElapsedSecs = 2686.477};
+Report Rep20 DefaultSC.UTCGregorian DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate Prop20(DefaultSC) {DefaultSC.ElapsedSecs = 2686.196};
+Report Rep20 DefaultSC.UTCGregorian DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate Prop20(DefaultSC) {DefaultSC.ElapsedSecs = 2341.793};
+Report Rep20 DefaultSC.UTCGregorian DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate Prop20(DefaultSC) {DefaultSC.ElapsedSecs = 1784.930};
+Report Rep20 DefaultSC.UTCGregorian DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate Prop20(DefaultSC) {DefaultSC.ElapsedSecs = 1228.470};
+Report Rep20 DefaultSC.UTCGregorian DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate Prop20(DefaultSC) {DefaultSC.ElapsedSecs = 884.692};
+Report Rep20 DefaultSC.UTCGregorian DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
