@@ -512,30 +512,32 @@ c     -----------------------------------------------------------
 
                sq = ts(1)*qu(1)+ts(2)*qu(2)+ts(3)*qu(3)
 
-c     Third-body q(j): unlike the zonal term, U_K's radial power law
-c     is +n (grows with r, multipole about the third body, not a
-c     point-source falloff), so the Legendre chain-rule reduces via
-c     the OTHER recursion (using P_(n-1), not P_(n+1)) -- re-derived
-c     2026-07-11, verified against L(u)^T of a finite-difference
-c     gradient of U_K to ~1e-9 relative precision at multiple points:
-c       qsun(j) = RbyRs(i)/(R(1)*den_s) * [ i*(sleg(i+1)
-c                 -cphi_s*sleg(i))*u(j) + (i+1)*(cphi_s*sleg(i+1)
-c                 -sleg(i+2))*sq/Rs(1) ]
+c     Third-body q(j) in the KS-elements EOM convention (thesis eq.
+c     2.55/2.59): the paren consumed by z(j+1)/z(j+5) equals
+c     2*[U/2*u + (r/4)*dU/du], so per degree i (shape=(r/RK)^i*P_i):
+c       qsun(j) = RbyRs(i)*[ P_i*u(j) - ( i*(P_i - cphi*P_(i-1))*u(j)
+c                 + (i+1)*(cphi*P_i - P_(i+1))*sq/Rs )/den_s ]
+c     Verified 2026-07-12: matches the independently validated
+c     KSJLSDNP.F n=2 sun term (CNTS1/CNTS2 form) to machine precision
+c     and a finite-difference gradient of shape*u + r*L(u)^T(grad)
+c     to ~1e-8 at n=2,3. The 2026-07-11 version (commit 963968f) used
+c     the wrong convention, L(u)^T(-grad shape) alone -- missing the
+c     factor r and the U*u term, ~1e4 too small at GTO scale.
                do i = 2,nsun_deg
-                  qs = RbyRs(i)/(R(1)*den_s) *
-     &                 (dble(i)*(sleg(i+1)-cphi_s*sleg(i))*u(j)
+                  qs = RbyRs(i)*(sleg(i+1)*u(j)
+     &                 -(dble(i)*(sleg(i+1)-cphi_s*sleg(i))*u(j)
      &                 +dble(i+1)*(cphi_s*sleg(i+1)-sleg(i+2))*sq
-     &                 /Rs(1))
+     &                 /Rs(1))/den_s)
                   qsun(j) = qs + qsun(j)
                end do
 
                oq = tm(1)*qu(1)+tm(2)*qu(2)+tm(3)*qu(3)
 
                do i = 2,nmoon_deg
-                  qm = RbyRm(i)/(R(1)*den_m) *
-     &                 (dble(i)*(oleg(i+1)-cphi_m*oleg(i))*u(j)
+                  qm = RbyRm(i)*(oleg(i+1)*u(j)
+     &                 -(dble(i)*(oleg(i+1)-cphi_m*oleg(i))*u(j)
      &                 +dble(i+1)*(cphi_m*oleg(i+1)-oleg(i+2))*oq
-     &                 /Rm(1))
+     &                 /Rm(1))/den_m)
                   qmoon(j) = qm + qmoon(j)
                end do
 

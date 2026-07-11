@@ -373,7 +373,15 @@ c     cosine for one third body (sun or moon) at the satellite's
 c     current position. Shared by driver_KS's initial setup and
 c     per-step refresh so both use one consistent sign convention
 c     for first_tb.
+c     deg MUST be declared integer: callers pass nsun_deg/nmoon_deg
+c     (integers). Under implicit typing 'd' made it double precision,
+c     so the integer bit pattern read as a denormal ~1e-323 and the
+c     power-series do-loop below ran ZERO times -- RbyRtb(2..) stayed
+c     0.0 and the entire third-body force silently vanished from the
+c     dynamics (2026-06-07 refactor until found 2026-07-12 via GMAT
+c     ON/OFF sensitivity test, issue #23).
       implicit double precision (a-h,o-z)
+      integer deg
       dimension x(3), tb(3), RbyRtb(*)
 
       Rtb1 = vmn(tb)
@@ -640,51 +648,44 @@ c     ============================================================
 c     ============================================================      
       subroutine solarnpv(dj,s)
 c     Compute sun position vector in inertial geo-centric frame
+c     (EME2000). Low-precision analytic series per Montenbruck &
+c     Gill, "Satellite Orbits" (2000) sect. 3.3.2, precessed from
+c     equinox-of-date to J2000. Includes the elliptic distance
+c     variation -- the pre-2026-07-12 version used a FIXED 1 AU
+c     distance, a +/-1.67 percent seasonal error that dominated
+c     the ephemeris gap vs DE405.
       implicit double precision(a-h,o-z,m)
       dimension s(3)
 c     dj = Julian day
 c     s = sun position vector (x_s, y_s, z_s) in km
-      common /xy/ pi,d2r,r2d,amue,AU,R_Earth     
-c     ============================================================     
+      common /xy/ pi,d2r,r2d,amue,AU,R_Earth
+c     ============================================================
 
-c     Data files
-c      open (unit = 1, file = 'const_new.dat')
-c      read(1,*) amue,R_Earth,AU
-      
-c     julian day
-      djn=(dj-2451545.0d0)
+c     julian centuries since J2000
+      tc=(dj-2451545.0d0)/36525.0d0
 
-c     omega
-      omega=2.1429d0-0.0010394594d0*djn
+c     mean anomaly of the sun (deg)
+      am=dmod(357.5256d0+35999.049d0*tc,360.0d0)
+      amr=am*d2r
 
-c     mean longitude of the sun
-      tlam=(4.8950630d0+0.017202791698d0*djn)
+c     ecliptic longitude (deg). NOTE: unlike the lunar series, this
+c     M&G solar series is already J2000-referenced -- adding the
+c     -1.3972*T precession term here produces a constant ~0.4
+c     percent offset vs DE405 (verified empirically 2026-07-12).
+      tlon=282.9400d0+am+(6892.0d0*dsin(amr)
+     &     +72.0d0*dsin(2.0d0*amr))/3600.0d0
+      tlonr=dmod(tlon,360.0d0)*d2r
 
-c     mean anomaly of the sun
-      tmmm=(6.24006d0+0.0172019699d0*djn)
+c     geocentric distance (km)
+      rsun=(149.619d0-2.499d0*dcos(amr)
+     &     -0.021d0*dcos(2.0d0*amr))*1.0d6
 
-c     ecliptic longitude
-      tecl=tlam+0.03341607d0*dsin(tmmm)+0.00034894d0*dsin(2*tmmm)
-     &     -0.0001134d0-0.0000203d0*dsin(omega)
+c     mean obliquity of the ecliptic (J2000)
+      tobl=23.43929111d0*d2r
 
-c     obliquity of the ecliptic
-      tobl=0.4090928d0-(6.214d-09)*djn+0.0000396d0*dcos(omega)
-
-c     right ascension and declination
-      deo=dsin(tecl)*dcos(tobl)
-      dec=dcos(tecl)
-      ralfa = atan2(deo,dec)
-      if(ralfa.lt.0.0d0) ralfa=ralfa+2.0d0*pi
-      rdecl=dasin(dsin(tobl)*dsin(tecl))
-
-      sralfa = dsin(ralfa)
-      cralfa = dcos(ralfa)
-      srdecl = dsin(rdecl)
-      crdecl = dcos(rdecl)
-!      AU = 1.495978707d08
-      s(1) = AU*cralfa*crdecl
-      s(2) = AU*sralfa*crdecl
-      s(3) = AU*srdecl
+      s(1) = rsun*dcos(tlonr)
+      s(2) = rsun*dsin(tlonr)*dcos(tobl)
+      s(3) = rsun*dsin(tlonr)*dsin(tobl)
 
       return
       end
@@ -822,48 +823,78 @@ c     penumbra
       return
       end
 
-      subroutine lunarpv(dj,tm)  
-c     lunar vector computation
-c     1999 gsfc issfd paper
+      subroutine lunarpv(dj,tm)
+c     Compute moon position vector in inertial geo-centric frame
+c     (EME2000). Truncated Brown lunar theory per Montenbruck &
+c     Gill, "Satellite Orbits" (2000) sect. 3.3.2, precessed from
+c     equinox-of-date to J2000. Replaces the 7-term-per-coordinate
+c     Cartesian series (1999 GSFC ISSFD paper) which differed from
+c     DE405 by up to ~3.6 percent -- the dominant full-force-model
+c     error source vs GMAT (issue #23).
       implicit double precision(a-h,o-z)
       dimension tm(3)
       common /xy/ pi,d2r,r2d,amue,AU,R_Earth
-   
-c     time in julian centuries
-      tlun=(dj-2451545.0d0)/36525.0d0
 
-c     x coordinate
-      a11=383.0d0*dsin(8399.685d0*tlun+5.381d0)
-      a12=31.5d0*dsin(70.99d0*tlun+6.619d0)
-      a13=10.6d0*dsin(16728.377d0*tlun+1.453d0)
-      a14=6.2d0*dsin(1185.622d0*tlun+0.481d0)
-      a15=3.2d0*dsin(7143.070d0*tlun+5.017d0)
-      a16=2.3d0*dsin(15613.745d0*tlun+0.857d0)
-      a17=0.8d0*dsin(8467.263d0*tlun+1.01d0)
+c     time in julian centuries since J2000
+      tc=(dj-2451545.0d0)/36525.0d0
 
-      tm(1)=(a11+a12+a13+a14+a15+a16+a17)*1000.0d0
+c     mean elements of the lunar orbit (deg)
+      al0=dmod(218.31617d0+481267.88088d0*tc,360.0d0)
+      al =dmod(134.96292d0+477198.86753d0*tc,360.0d0)
+      alp=dmod(357.52543d0+ 35999.04944d0*tc,360.0d0)
+      af =dmod( 93.27283d0+483202.01873d0*tc,360.0d0)
+      ad =dmod(297.85027d0+445267.11135d0*tc,360.0d0)
+      alr=al*d2r
+      alpr=alp*d2r
+      afr=af*d2r
+      adr=ad*d2r
 
-c     y coordinate
-      a21=351.0d0*dsin(8399.687d0*tlun+3.811d0)
-      a22=28.9d0*dsin(70.997d0*tlun+4.596d0)
-      a23=13.7d0*dsin(8433.466d0*tlun+4.766d0)
-      a24=9.7d0*dsin(16728.380d0*tlun+6.165d0)
-      a25=5.7d0*dsin(1185.667d0*tlun+5.164d0)
-      a26=2.9d0*dsin(7143.058d0*tlun+0.3d0)
-      a27=2.1d0*dsin(15613.755d0*tlun+5.565d0)
+c     ecliptic longitude perturbation (arcsec)
+      dlam=22640.0d0*dsin(alr)+769.0d0*dsin(2.0d0*alr)
+     &     -4586.0d0*dsin(alr-2.0d0*adr)+2370.0d0*dsin(2.0d0*adr)
+     &     -668.0d0*dsin(alpr)-412.0d0*dsin(2.0d0*afr)
+     &     -212.0d0*dsin(2.0d0*alr-2.0d0*adr)
+     &     -206.0d0*dsin(alr+alpr-2.0d0*adr)
+     &     +192.0d0*dsin(alr+2.0d0*adr)
+     &     -165.0d0*dsin(alpr-2.0d0*adr)
+     &     +148.0d0*dsin(alr-alpr)-125.0d0*dsin(adr)
+     &     -110.0d0*dsin(alr+alpr)
+     &     -55.0d0*dsin(2.0d0*afr-2.0d0*adr)
 
-      tm(2)=(a21+a22+a23+a24+a25+a26+a27)*1000.0d0
+c     ecliptic longitude of date (deg), precessed to J2000
+      tlam=al0+dlam/3600.0d0
+      tlam=tlam-1.3972d0*tc
+      tlamr=dmod(tlam,360.0d0)*d2r
 
-c     z coordinate
-      a31=153.2d0*dsin(8399.672d0*tlun+3.807d0)
-      a32=31.5d0*dsin(8433.464d0*tlun+1.629d0)
-      a33=12.5d0*dsin(70.996d0*tlun+4.595d0)
-      a34=4.2d0*dsin(16728.364d0*tlun+6.162d0)
-      a35=2.5d0*dsin(1185.645d0*tlun+5.167d0)
-      a36=3.0d0*dsin(104.881d0*tlun+2.555d0)
-      a37=1.8d0*dsin(8399.116d0*tlun+6.248d0)
+c     ecliptic latitude (arcsec -> rad)
+      ah=(af+(dlam+412.0d0*dsin(2.0d0*afr)
+     &   +541.0d0*dsin(alpr))/3600.0d0)*d2r
+      beta=18520.0d0*dsin(ah)-526.0d0*dsin(afr-2.0d0*adr)
+     &     +44.0d0*dsin(alr+afr-2.0d0*adr)
+     &     -31.0d0*dsin(-alr+afr-2.0d0*adr)
+     &     -25.0d0*dsin(-2.0d0*alr+afr)
+     &     -23.0d0*dsin(alpr+afr-2.0d0*adr)
+     &     +21.0d0*dsin(-alr+afr)
+     &     +11.0d0*dsin(-alpr+afr-2.0d0*adr)
+      betar=beta/3600.0d0*d2r
 
-      tm(3)=(a31+a32+a33+a34+a35+a36+a37)*1000.0d0
+c     geocentric distance (km)
+      rmoon=385000.0d0-20905.0d0*dcos(alr)
+     &     -3699.0d0*dcos(2.0d0*adr-alr)-2956.0d0*dcos(2.0d0*adr)
+     &     -570.0d0*dcos(2.0d0*alr)
+     &     +246.0d0*dcos(2.0d0*alr-2.0d0*adr)
+     &     -205.0d0*dcos(alpr-2.0d0*adr)
+     &     -171.0d0*dcos(alr+2.0d0*adr)
+     &     -152.0d0*dcos(alr+alpr-2.0d0*adr)
+
+c     ecliptic -> equatorial (mean obliquity J2000)
+      tobl=23.43929111d0*d2r
+      xe=rmoon*dcos(tlamr)*dcos(betar)
+      ye=rmoon*dsin(tlamr)*dcos(betar)
+      ze=rmoon*dsin(betar)
+      tm(1)=xe
+      tm(2)=ye*dcos(tobl)-ze*dsin(tobl)
+      tm(3)=ye*dsin(tobl)+ze*dcos(tobl)
 
       return
       end

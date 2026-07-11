@@ -59,20 +59,19 @@ GMAT RepAll.WriteHeaders = true;
 
 BeginMissionSequence;
 
-Report RepAll DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
 Propagate PropAll(DefaultSC) {DefaultSC.ElapsedSecs = 5054.811};
 Report RepAll DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
-Propagate PropAll(DefaultSC) {DefaultSC.ElapsedSecs = 13827.074};
+Propagate PropAll(DefaultSC) {DefaultSC.ElapsedSecs = 13827.051};
 Report RepAll DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
-Propagate PropAll(DefaultSC) {DefaultSC.ElapsedSecs = 13776.719};
+Propagate PropAll(DefaultSC) {DefaultSC.ElapsedSecs = 13777.011};
 Report RepAll DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
-Propagate PropAll(DefaultSC) {DefaultSC.ElapsedSecs = 5004.760};
+Propagate PropAll(DefaultSC) {DefaultSC.ElapsedSecs = 5005.431};
 Report RepAll DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
-Propagate PropAll(DefaultSC) {DefaultSC.ElapsedSecs = 5104.975};
+Propagate PropAll(DefaultSC) {DefaultSC.ElapsedSecs = 5104.841};
 Report RepAll DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
-Propagate PropAll(DefaultSC) {DefaultSC.ElapsedSecs = 13875.094};
+Propagate PropAll(DefaultSC) {DefaultSC.ElapsedSecs = 13874.448};
 Report RepAll DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
-Propagate PropAll(DefaultSC) {DefaultSC.ElapsedSecs = 13724.061};
+Propagate PropAll(DefaultSC) {DefaultSC.ElapsedSecs = 13724.439};
 Report RepAll DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
-Propagate PropAll(DefaultSC) {DefaultSC.ElapsedSecs = 4954.841};
+Propagate PropAll(DefaultSC) {DefaultSC.ElapsedSecs = 4956.063};
 Report RepAll DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
