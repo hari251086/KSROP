@@ -324,13 +324,19 @@ c     -----------------------------------------------------------
          EC_dg    = pek(2)
          AI_dg    = pek(3)*d2r        ! inclination: deg -> rad
          SOMGA_dg = pek(5)*d2r        ! argument of perigee: deg -> rad
-         EA_dg    = pek(7)*d2r        ! eccentric anomaly: deg -> rad
 
-c     Eccentric-anomaly step that advances EA_dg to the next
-c     perigee/apogee crossing over the revolution's istep steps
-         VIPP_dg = 4.d0
-         if (EA_dg .lt. pi) VIPP_dg = 2.d0
-         DE_dg = (VIPP_dg*pi - EA_dg)/istep
+c     Issue #24 (ported from OREM v1.18): the eccentric anomaly used
+c     by the drag density is read from the true state (pek(7),
+c     refreshed by the per-stage car2oe below), not advanced
+c     analytically. The old sweep DE_dg = (VIPP*pi - EA0)/istep
+c     half-rates the density phase whenever a revolution starts past
+c     EA=pi (VIPP=4 targets 4pi over one rev's steps), intermittently
+c     dephasing the density peak from the true perigee passage along
+c     long decay arcs -- a geometry-dependent error a fitted BN
+c     cannot absorb. Bit-identical on perigee-anchored windows;
+c     on OREM's re-entry arcs it moved RPE from -70..-97% to
+c     bracketing zero. Validated ~1% vs exact RK4 integration of the
+c     same model (OREM/scratch_gmat/drag_ref.py).
 
          SI_dg     = dsin(AI_dg)
          CSI_dg    = dcos(AI_dg)
@@ -377,6 +383,11 @@ c     -----------------------------------------------------------
             if (IDRAG .eq. 1 .and.
      &          HSQ_dg .ge. ALT_atm(1) .and.
      &          HSQ_dg .le. ALT_atm(ndim_atm)) then
+c              Issue #24: density at the TRUE eccentric anomaly of
+c              the current (stage) state -- stage-accurate, covers
+c              both wings of the perigee density bump.
+               EA_dg   = pek(7)*d2r
+               EC_dg   = pek(2)
                SEA_dg  = dsin(EA_dg)
                CEA_dg  = dcos(EA_dg)
                TER_dg  = 1.d0 - EC_dg*CEA_dg
@@ -597,12 +608,6 @@ c     -----------------------------------------------------------
      &                          Rm(1), RbyRm, first_m, cphi_m, cphi_m2)
 
             if (I_rkg .le. 1) goto 60
-c     Refresh the drag-model eccentricity from the latest osculating
-c     elements (pek, just recomputed above for the converged state)
-c     and advance the eccentric anomaly by the fixed per-revolution
-c     step -- mirrors KSJLSDNP2.F's "EAR=EA; ...; EA=EAR+DE"
-            EC_dg = pek(2)
-            EA_dg = EA_dg + DE_dg
 
             E_0 = E_0+dE_0
             iE = dint(E_0*r2d)
