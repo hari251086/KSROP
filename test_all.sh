@@ -39,8 +39,11 @@ echo "====== Phase 2: Unit & Regression Tests ======"
 TESTS="test_subrouts test_bugs test_tle test_tle2sv test_tle2opm"
 
 for t in $TESTS; do
-    EXE="./${t}.exe"
-    if [ ! -f "$EXE" ]; then
+    if [ -f "./${t}.exe" ]; then
+        EXE="./${t}.exe"
+    elif [ -f "./${t}" ]; then
+        EXE="./${t}"
+    else
         echo "  [SKIP]  $t — executable not found"
         continue
     fi
@@ -74,13 +77,21 @@ echo ""
 echo "====== Phase 3: Integration Tests ======"
 
 if [ -f "driver_KS.exe" ]; then
+    DRIVER="driver_KS.exe"
+elif [ -f "driver_KS" ]; then
+    DRIVER="driver_KS"
+else
+    DRIVER=""
+fi
+
+if [ -n "$DRIVER" ]; then
     if command -v python &>/dev/null || command -v python3 &>/dev/null; then
         PY=$(command -v python3 || command -v python)
         for ptest in test_driver.py test_initial_conditions.py; do
             if [ -f "$ptest" ]; then
                 echo ""
                 echo "  --- $ptest ---"
-                OUTPUT=$($PY "$ptest" driver_KS.exe 2>&1) || true
+                OUTPUT=$($PY "$ptest" "$DRIVER" 2>&1) || true
                 P=$(echo "$OUTPUT" | grep -o 'Passed: *[0-9]*' | grep -o '[0-9]*')
                 F=$(echo "$OUTPUT" | grep -o 'Failed: *[0-9]*' | grep -o '[0-9]*')
                 T=$(echo "$OUTPUT" | grep -o 'Total[: ]*[0-9]*' | grep -o '[0-9]*' | head -1)

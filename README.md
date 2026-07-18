@@ -31,7 +31,7 @@ KSROP/
 ├── input/
 │   ├── const_new.dat                    Physical constants (single source of truth)
 │   ├── input.opm                        Initial state for driver_KS (CCSDS OPM v2.0)
-│   ├── input.DAT                        Simulation parameters
+│   ├── input.dat                        Simulation parameters
 │   ├── tle2opm.cfg                      TLE-to-OPM configuration
 │   ├── KSROP_20250501T200802_47944.opm  Generated OPM (NORAD 47944, 2025-05-01)
 │   ├── ATM.DAT                          Atmosphere density table (60–630 km)
@@ -122,7 +122,7 @@ gfortran test_tle2opm.F Subrouts.F TLEread.F Legendre.F -o test_tle2opm.exe
 ./driver_KS.exe
 ```
 
-Reads `input/input.opm` (initial state), `input/input.DAT` (parameters), `input/const_new.dat` (constants). Writes trajectory to `output/KSROP_*.oem`.
+Reads `input/input.opm` (initial state), `input/input.dat` (parameters), `input/const_new.dat` (constants). Writes trajectory to `output/KSROP_*.oem`.
 
 ### TLE-to-OPM conversion
 
@@ -202,7 +202,7 @@ Z_DOT          =      7.623865946 [km/s]
 
 > Output `ksrop.opm` uses the same format — can be fed back as `input.opm` for chained runs.
 
-### `input.DAT` — Simulation parameters
+### `input.dat` — Simulation parameters
 
 ```
 nrev  istep  tole               ! Revolutions, steps/revolution, integrator tolerance
