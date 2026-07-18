@@ -15,15 +15,6 @@ jobs:
       - name: Install gfortran
         run: sudo apt-get update && sudo apt-get install -y gfortran
 
-      - name: DEBUG line-length probe
-        run: |
-          git rev-parse HEAD
-          sha256sum Legendre.F Subrouts.F
-          awk --version | head -1
-          sed -n '302p' Subrouts.F | od -c | tail -3
-          sed -n '302p' Subrouts.F | awk '{print length}'
-          locale
-
       - name: Build propagator, tools, and test binaries
         run: make all tools tests
 

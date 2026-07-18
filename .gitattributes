@@ -1,0 +1,12 @@
+# Force LF for fixed-format Fortran and shell/build tooling regardless
+# of the checking-out machine's core.autocrlf setting -- the F77
+# 72-column lint rule is column-sensitive, and a CRLF checkout adds a
+# 73rd byte per line that the rule (correctly) rejects. All source
+# files are already stored as LF; this just keeps checkouts that way
+# (some CI runner images default to autocrlf-style conversion).
+*.F      text eol=lf
+*.f      text eol=lf
+*.F90    text eol=lf
+*.py     text eol=lf
+*.sh     text eol=lf
+Makefile text eol=lf
