@@ -63,6 +63,9 @@ __pycache__/
 *.pyo
 .pytest_cache/
 
+# ------- Local release-packaging staging area -------
+dist/
+
 # ------- Editor and OS noise -------
 *.swp
 *.swo
