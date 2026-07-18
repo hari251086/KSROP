@@ -15,14 +15,8 @@ jobs:
       - name: Install gfortran
         run: sudo apt-get update && sudo apt-get install -y gfortran
 
-      - name: DEBUG attr probe
-        run: |
-          git config --get core.autocrlf || echo "core.autocrlf: (unset)"
-          git config --system --get core.autocrlf || echo "system core.autocrlf: (unset)"
-          git config --global --get core.autocrlf || echo "global core.autocrlf: (unset)"
-          cat .gitattributes
-          git check-attr eol text -- Subrouts.F
-          sed -n '302p' Subrouts.F | od -c | tail -3
+      - name: Normalize line endings (CRLF -> LF)
+        run: sed -i 's/\r$//' *.F Makefile *.sh
 
       - name: Build propagator, tools, and test binaries
         run: make all tools tests
