@@ -92,10 +92,10 @@ if [ -n "$DRIVER" ]; then
                 echo ""
                 echo "  --- $ptest ---"
                 OUTPUT=$($PY "$ptest" "$DRIVER" 2>&1) || true
-                P=$(echo "$OUTPUT" | grep -o 'Passed: *[0-9]*' | grep -o '[0-9]*')
-                F=$(echo "$OUTPUT" | grep -o 'Failed: *[0-9]*' | grep -o '[0-9]*')
-                T=$(echo "$OUTPUT" | grep -o 'Total[: ]*[0-9]*' | grep -o '[0-9]*' | head -1)
-                if [ -n "$P" ] && [ -n "$F" ]; then
+                P=$(echo "$OUTPUT" | grep -o 'Passed: *[0-9]*' | grep -o '[0-9]*' | tail -1)
+                F=$(echo "$OUTPUT" | grep -o 'Failed: *[0-9]*' | grep -o '[0-9]*' | tail -1)
+                T=$(echo "$OUTPUT" | grep -o 'Total[a-z ]*: *[0-9]*' | grep -o '[0-9]*' | tail -1)
+                if [ -n "$P" ] && [ -n "$F" ] && [ -n "$T" ]; then
                     TOTAL_PASS=$((TOTAL_PASS + P))
                     TOTAL_FAIL=$((TOTAL_FAIL + F))
                     TOTAL_TESTS=$((TOTAL_TESTS + T))
@@ -105,7 +105,9 @@ if [ -n "$DRIVER" ]; then
                         echo "  >> $ptest: $T checks, $F FAILED"
                     fi
                 else
-                    echo "  >> $ptest: SKIPPED (parse error)"
+                    echo "  >> $ptest: FAILED (could not parse output)"
+                    echo "$OUTPUT" | tail -20
+                    TOTAL_FAIL=$((TOTAL_FAIL + 1))
                 fi
             fi
         done
