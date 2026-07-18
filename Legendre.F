@@ -143,7 +143,7 @@ c     as v(i+1) = P_i(x) for i = 0..n.
 c     Author: Harishkumar Sellamuthu, 2021
 c     ============================================================
       implicit double precision (a-h,o-z)
-      dimension v(*),plg(1,0:2190)
+      dimension v(*),plg(1,0:2190),x(1)
       call p_polynomial_value ( 1, n, x, plg)
       do k = 1, n+1
          v(k) = plg(1,k-1)

@@ -57,6 +57,7 @@ c     geo_coeff,car2ks,ks2car,aLegP,car2oe,ks2ksr,INTPOL
 c     -------------------------------------------------------------c
 
       implicit double precision (a-h, o-z)
+      integer cn0
       parameter(n = 10, cn0 = 2190)
       parameter(ndim_atm = 291)
 c     Value of pi, degree to radians and radians to degree

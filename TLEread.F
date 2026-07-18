@@ -1526,6 +1526,7 @@ c     ============================================================
       double precision ee2,ee3,xi2,xi3,xl2,xl3,xl4
       double precision xgh2,xgh3,xgh4,xh2,xh3
       double precision zm, zf, sinzf, coszf, f2, f3
+      double precision mp
 
       pi    = 3.14159265358979324d0
       twopi = 2.d0 * pi
