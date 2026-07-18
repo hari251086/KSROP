@@ -2,6 +2,8 @@
 
 Orbit propagation using **Kustaanheimo–Stiefel (KS) regular elements** with a Runge–Kutta–Gill 4th-order numerical integrator for Earth-orbiting satellites.
 
+[![CI](https://github.com/hari251086/KSROP/actions/workflows/ci.yml/badge.svg)](https://github.com/hari251086/KSROP/actions/workflows/ci.yml)
+
 **Author:** Harishkumar Sellamuthu · hari251086@gmail.com  
 **Copyright:** 2018, Harishkumar Sellamuthu, All Rights Reserved
 
@@ -45,7 +47,7 @@ KSROP/
 │   ├── KSROP_YYYYMMDDTHHMMSS_Regular.out  KS elements debug dump
 │   └── ksrop.opm                        Initial Keplerian elements (OPM)
 │
-├── test_subrouts.F                      Unit tests (57 checks)
+├── test_subrouts.F                      Unit tests (67 checks)
 ├── test_tle.F                           TLE reader tests (147 checks)
 ├── test_tle2sv.F                        SGP4/SDP4/frame tests (156 checks)
 ├── test_tle2opm.F                       TLE-to-OPM pipeline tests (21 checks)
@@ -61,7 +63,99 @@ KSROP/
 
 ---
 
-## 3. Building
+## 3. Quick Start (User Manual)
+
+This section is a guided walkthrough for a first-time user. For full detail on any
+step, follow the link to its reference section below.
+
+### Prerequisites
+
+- A Fortran compiler: **GNU Fortran** (`gfortran`, free, any OS) or **Intel oneAPI
+  Fortran** (`ifx`, Windows/Linux). See [Building](#4-building).
+- **Python 3** (standard library only, no packages to install) -- only needed to run
+  the integration tests, not to build or run the propagator itself.
+- Optional: the **EGM2008** geopotential coefficient file if you want oblateness
+  degrees above point-mass -- see the note under [Step 2](#step-2-run-a-propagation)
+  below. It is not bundled with this repository (~231 MB).
+
+### Step 1: Build
+
+```bash
+make            # Unix/Linux/macOS, gfortran -- see section 4 for Windows/ifx
+```
+
+This produces `driver_KS` (the propagator) in the repository root. `make tools`
+additionally builds `tle2opm` (the TLE-to-OPM converter).
+
+### Step 2: Run a propagation
+
+```bash
+./driver_KS
+```
+
+The tracked `input/input.opm` (initial state), `input/input.dat` (simulation
+parameters), and `input/const_new.dat` (physical constants) are read as-is, so this
+runs immediately with no editing required -- **except** that the tracked
+`input/const_new.dat` requests `ngeo_deg = 50` (degree-50 EGM2008 gravity), and the
+EGM2008 coefficient file itself is not part of this repository. Before your first
+run, either:
+
+- **Download EGM2008** and place it at `input/EGM2008_to2190_TideFree` (see
+  [Known Issues](#12-known-issues) for the expected format), or
+- **Edit `input/const_new.dat`** and set the second line's first value (`ngeo_deg`)
+  to `0` for point-mass gravity (fastest way to confirm the build works).
+
+A successful run prints progress to the console and writes two files to `output/`:
+a CCSDS OEM trajectory (`KSROP_<timestamp>.oem`) and a KS-elements debug dump
+(`KSROP_<timestamp>_Regular.out`) -- see [Output Files](#7-output-files).
+
+### Step 3: Verify with the test suite
+
+```bash
+make test       # build everything + run test_all.sh (528 checks + 5 lint rules)
+```
+
+If this passes, your build is behaving identically to the one verified in CI (see
+the badge at the top of this file).
+
+### Step 4: Common customizations
+
+All simulation parameters live in `input/input.dat` (4 lines: revolutions/step count,
+force-model on/off flags, drag parameters, SRP parameters) -- see
+[Input Files](#6-input-files) for the full field-by-field reference. A few common
+edits:
+
+| I want to... | Edit |
+|---|---|
+| Change how many orbits are propagated | `input.dat` line 1, first value (`nrev`) |
+| Turn atmospheric drag off | `input.dat` line 3, second value (`IDRAG`) to `0` |
+| Turn solar radiation pressure off | `input.dat` line 4, third value (`IPSR`) to `0` |
+| Change the ballistic coefficient | `input.dat` line 3, first value (`BN`, kg/m²) |
+| Run a pure two-body case (no perturbations) | `const_new.dat` line 2 all zeros, `input.dat` line 3/4 `IDRAG=0 IPSR=0` |
+| Start from a different orbit | Edit the `X/Y/Z/X_DOT/Y_DOT/Z_DOT` state vector in `input/input.opm` |
+| Start from a real satellite's TLE | See below |
+
+### Step 5: Propagate from a real TLE
+
+```bash
+./tle2opm     # reads input/tle2opm.cfg (TLE file, NORAD ID, target epoch)
+./driver_KS   # tle2opm already wrote a fresh input/input.opm for you
+```
+
+See [Running](#5-running) for the full TLE-to-OPM pipeline description.
+
+### Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `forrtl`/runtime error opening `EGM2008_to2190_TideFree` | `ngeo_deg > 1` but the file isn't present | Set `ngeo_deg = 0` in `const_new.dat`, or supply the file (see Step 2) |
+| `list-directed I/O syntax error` on startup | A stray BOM or non-ASCII byte at the start of an input file | Re-save the file as plain ASCII/UTF-8 without a byte-order mark |
+| Build errors on Linux mentioning `Rank mismatch` / `Expecting a scalar INTEGER` | You're building an older checkout predating the gfortran portability fixes (v2.0.0+) | Pull the latest `master`/tag |
+| Nothing happens / no `output/` files | You're running from the wrong directory | All paths are relative to the repository root -- run `driver_KS`/`tle2opm` from there |
+
+---
+
+## 4. Building
 
 Requires **Intel oneAPI Fortran** (`ifx`) or **GNU Fortran** (`gfortran`), plus a C/C++ linker (MSVC on Windows).
 
@@ -94,11 +188,14 @@ ifx test_tle2opm.F Subrouts.F TLEread.F Legendre.F /exe:test_tle2opm.exe
 ### Unix / Linux / macOS
 
 ```bash
-make            # build driver_KS
+make            # build driver_KS (FC=gfortran by default)
+make tools      # build tle2opm
 make tests      # build all test executables
-make test       # build + run all tests
+make test       # build everything + run test_all.sh (lint + all tests)
 make clean      # remove build artefacts
 ```
+
+CI builds and runs the full suite on every push using this exact path (`.github/workflows/ci.yml`) -- see the badge at the top of this file.
 
 ### Manual (gfortran)
 
@@ -114,7 +211,7 @@ gfortran test_tle2opm.F Subrouts.F TLEread.F Legendre.F -o test_tle2opm.exe
 
 ---
 
-## 4. Running
+## 5. Running
 
 ### Propagation
 
@@ -135,7 +232,7 @@ Reads `input/tle2opm.cfg`, selects closest TLE entry by NORAD/epoch, converts vi
 ### Tests
 
 ```bash
-./test_subrouts.exe                          # 47 unit tests
+./test_subrouts.exe                          # 67 unit tests
 ./test_bugs.exe                              # 17 regression tests
 ./test_tle.exe                               # 147 TLE reader tests
 ./test_tle2sv.exe                            # 156 SGP4/SDP4/frame tests
@@ -144,15 +241,15 @@ python test_driver.py driver_KS.exe          # 10 integration tests
 python test_initial_conditions.py driver_KS.exe  # 110 multi-orbit tests
 
 # Lint + all tests in one command
-bash test_all.sh                             # lint + 388 Fortran + integration
+bash test_all.sh                             # lint + 408 Fortran + 120 integration
 bash lint_check.sh                           # lint only (line length, precision, common blocks)
 ```
 
-**Total: 508 automated checks + 5 lint rules.**
+**Total: 528 automated checks + 5 lint rules.**
 
 ---
 
-## 5. Input Files
+## 6. Input Files
 
 ### `const_new.dat` — Physical constants
 
@@ -240,7 +337,7 @@ Replaces `gen_atm_j70.F`, whose hand-rolled single-exponential temperature profi
 
 ---
 
-## 6. Output Files
+## 7. Output Files
 
 ### `KSROP_YYYYMMDDTHHMMSS.oem` — Trajectory (CCSDS OEM v2.0)
 
@@ -254,7 +351,7 @@ Written once at run start with the epoch state vector and osculating elements (a
 
 ---
 
-## 7. Force Model Configuration
+## 8. Force Model Configuration
 
 | Flag | Effect |
 |---|---|
@@ -268,7 +365,7 @@ Written once at run start with the epoch state vector and osculating elements (a
 
 ---
 
-## 8. Method
+## 9. Method
 
 The propagator uses **KS regularisation** to remove the 1/r singularity. The 3D equations of motion are lifted to a 4D harmonic oscillator in KS space, integrated with **Runge–Kutta–Gill 4th order** using the generalised eccentric anomaly E as the independent variable.
 
@@ -282,7 +379,7 @@ Step size is scaled by Γ = ω/ω_Kep to maintain accuracy across eccentricities
 
 ---
 
-## 9. Subroutines Reference
+## 10. Subroutines Reference
 
 ### Constants and initialisation
 
@@ -379,7 +476,7 @@ Step size is scaled by Γ = ω/ω_Kep to maintain accuracy across eccentricities
 
 ---
 
-## 10. Performance
+## 11. Performance
 
 | Configuration | Throughput | Wall time (10 rev × 360 steps) |
 |---|---|---|
@@ -392,7 +489,7 @@ EGM2008 streaming read: O(n²) lines for degree n (J2 = 3 lines, not 2.4M).
 
 ---
 
-## 11. Known Issues
+## 12. Known Issues
 
 - EGM2008 file (~231 MB) not included; set `ngeo_deg = 0` for point-mass gravity.
 - SRP is cannonball only; no tesseral harmonics or geometry-dependent variations.
@@ -408,7 +505,7 @@ EGM2008 streaming read: O(n²) lines for degree n (J2 = 3 lines, not 2.4M).
 
 ---
 
-## 12. Revision History
+## 13. Revision History
 
 | Date | Change |
 |---|---|
@@ -448,3 +545,4 @@ EGM2008 streaming read: O(n²) lines for degree n (J2 = 3 lines, not 2.4M).
 | 2026-07-12 | Re-validated third-body + full force vs GMAT after the fixes: **Sun-only GTO 1 rev: 1.2 m** (was 6.5 km); **Moon-only 1 rev: 0.46 km** (bounded by lunar ephemeris ~0.11% + n=3 truncation); **full conservative (J2-J20 + Sun + Moon + SRP), 2 revs: 1.9 km** (was effectively ~76 km); full force with drag: 55.9 km at the Hp≈178 km perigee — ~96% of which is the Jacchia-70-vs-JacchiaRoberts drag-model difference (documented model choice, see issue #21), not a code defect. Regression: 528/528. Scripts: `scratch_gmat/KSROP_sunonly_crosscheck.script`, `KSROP_moononly_crosscheck.script`, `KSROP_nodrag_crosscheck.script`. |
 | 2026-07-14 | **Issue #24 fixed**: ported OREM v1.18's drag-phase fix to `driver_KS.F` — the drag density's eccentric anomaly is now read from the true state (`pek(7)`, per-stage `car2oe`) instead of the analytic sweep `DE_dg=(VIPP·π−EA₀)/istep`, whose `VIPP=4` branch half-rated the density phase whenever a revolution started past EA=π, dephasing the density peak from the true perigee along long decay arcs. Bit-identical on perigee-anchored windows (why the Phase-3 GMAT drag validation never saw it); on OREM's re-entry arcs the same fix moved RPE from −70..−97% to bracketing zero. Full suite passes (67+17+147+156+21). |
 | 2026-07-14 | Replaced `gen_atm_j70.F` with `gen_atm_jr71.F` and regenerated `input/ATM.DAT`: the old generator's single-exponential temperature profile ran ~127 K too warm through 90–125 km, making the table **3.3–3.5× denser than GMAT's JacchiaRoberts across the 140–200 km perigee band** (quantified by OREM's GMAT density probe; drove OREM's re-entry predictions ~4–5× early — OREM issues #12/#14). New generator implements the real Jacchia-71 profile with the Roberts-1971 polynomial anchors; generated table tracks GMAT JR at 0.80–0.95 over 102–300 km at matched static conditions. SCH column now = local −dz/d ln ρ. No propagator source changed; the KSROP test suites do not read ATM.DAT (only `driver_KS` does at runtime), so test counts are unaffected. Follow-up (updated same day): the suspected "~2× drag-model deficit" (OREM #25) was an incommensurate-duration test comparison — the revolution-level drag model is validated to ~1% vs exact integration. However a real **arc-level drag-phase defect** was found: the analytic EA sweep's `VIPP=4` branch half-rates the density phase whenever a revolution starts past EA=π, dephasing the density peak from the true perigee along decay arcs. Fixed in OREM's `propagate_ks` (RPE −70..−97% → ensemble +11%); `driver_KS.F` carries the identical code — port tracked as **issue #24**. |
+| 2026-07-18 | **Packaged for production (v2.0.0)**: added GitHub Actions CI (`ci.yml`, gfortran build + full 528-check suite on every push) and a release workflow (`release.yml`, builds and publishes Linux binaries on `v*.*.*` tags). Bringing the build up on gfortran/Linux (previously only ever compiled with Intel `ifx` on Windows) surfaced and fixed 4 real portability/correctness bugs, all the same "implicit-typing trap" class as earlier fixes: `cn0` (array-size parameter silently DOUBLE PRECISION, `driver_KS.F`), `aLegP`'s scalar/rank-1 argument mismatch (`Legendre.F`), `tle_ds_lpper`'s `mp` (mean anomaly) silently INTEGER across a call boundary where the caller declares it `double precision` (`TLEread.F`), and `iE` silently INTEGER against a REAL-format debug-dump write that crashed `driver_KS.exe` outright on gfortran (`driver_KS.F`). Also fixed a real Linux-only bug: `input/const_new.DAT`/`input.DAT` were tracked with uppercase extensions while every `open()` call (and both Python integration tests) has always addressed them lowercase -- silently masked by Windows/NTFS case-insensitivity; fresh Linux checkouts renamed to match. Repo hygiene: fixed `.gitignore` (the old `output/regular.out` pattern never matched the actual `output/KSROP_*_Regular.out` naming), removed ~80 accumulated untracked run-output files and orphaned scratch work, fixed the `Makefile` (default `FC=gfortran`, added missing `tle2opm`/`test_bugs`/`test_tle2opm` targets), and fixed `test_all.sh`'s hardcoded `.exe` executable detection and Python-integration-test summary parsing, both of which silently reported 0 tests run as "ALL TESTS PASSED" prior to this fix. |
