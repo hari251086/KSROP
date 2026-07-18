@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install gfortran
+        run: sudo apt-get update && sudo apt-get install -y gfortran
+
+      - name: Build propagator and tools
+        run: make all tools
+
+      - name: Run test suite
+        run: make tests && bash test_all.sh
+
+      - name: Package Linux binaries
+        run: |
+          VER="${GITHUB_REF_NAME}"
+          STAGE="KSROP-${VER}-linux-x64"
+          mkdir -p "dist/${STAGE}"
+          cp driver_KS tle2opm "dist/${STAGE}/"
+          cp -r input "dist/${STAGE}/input"
+          cp README.md LICENSE "dist/${STAGE}/"
+          cd dist && tar czf "${STAGE}.tar.gz" "${STAGE}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ksrop-linux-x64
+          path: dist/*.tar.gz
+
+  publish-release:
+    needs: build-linux
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ksrop-linux-x64
+          path: dist
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: dist/*.tar.gz
