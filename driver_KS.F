@@ -58,6 +58,7 @@ c     -------------------------------------------------------------c
 
       implicit double precision (a-h, o-z)
       integer cn0
+      double precision iE
       parameter(n = 10, cn0 = 2190)
       parameter(ndim_atm = 291)
 c     Value of pi, degree to radians and radians to degree
