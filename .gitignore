@@ -72,3 +72,10 @@ dist/
 *~
 .DS_Store
 Thumbs.db
+
+# Credentials -- never commit these
+.env
+.env.*
+*.netrc
+*_credentials.*
+secrets.*
