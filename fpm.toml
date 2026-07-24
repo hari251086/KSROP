@@ -9,6 +9,8 @@ source-dir = "src"
 
 [fortran]
 source-form = "fixed"
+implicit-typing = true
+implicit-external = true
 
 [[executable]]
 name = "driver_KS"

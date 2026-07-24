@@ -42,7 +42,7 @@ jobs:
           sudo mv fpm /usr/local/bin/fpm
 
       - name: fpm build (validates the package as consumers will resolve it)
-        run: fpm build --compiler gfortran --flag "-Wno-error=implicit-interface"
+        run: fpm build --compiler gfortran
 
       - name: fpm test
-        run: fpm test --compiler gfortran --flag "-Wno-error=implicit-interface"
+        run: fpm test --compiler gfortran
