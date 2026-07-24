@@ -15,7 +15,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y gfortran
 
       - name: Normalize line endings (CRLF -> LF)
-        run: sed -i 's/\r$//' *.F Makefile *.sh
+        run: sed -i 's/\r$//' src/*.F app/*.F test/*.F Makefile *.sh
 
       - name: Build propagator and tools
         run: make all tools

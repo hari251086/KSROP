@@ -12,25 +12,25 @@
 FC      = gfortran
 FFLAGS  = -O2 -Wall
 
-SRC     = driver_KS.F Subrouts.F Legendre.F TLEread.F
+SRC     = app/driver_KS.F src/Subrouts.F src/Legendre.F src/TLEread.F
 TARGET  = driver_KS
 
-TLE2OPM_SRC = tle2opm.F Subrouts.F TLEread.F Legendre.F
+TLE2OPM_SRC = app/tle2opm.F src/Subrouts.F src/TLEread.F src/Legendre.F
 TLE2OPM_BIN = tle2opm
 
-TEST_SRC  = test_subrouts.F Subrouts.F Legendre.F
+TEST_SRC  = test/test_subrouts.F src/Subrouts.F src/Legendre.F
 TEST_BIN  = test_subrouts
 
-TEST_BUGS_SRC = test_bugs.F Subrouts.F Legendre.F
+TEST_BUGS_SRC = test/test_bugs.F src/Subrouts.F src/Legendre.F
 TEST_BUGS_BIN = test_bugs
 
-TEST_TLE_SRC  = test_tle.F Subrouts.F TLEread.F Legendre.F
+TEST_TLE_SRC  = test/test_tle.F src/Subrouts.F src/TLEread.F src/Legendre.F
 TEST_TLE_BIN  = test_tle
 
-TEST_TLE2SV_SRC = test_tle2sv.F Subrouts.F TLEread.F Legendre.F
+TEST_TLE2SV_SRC = test/test_tle2sv.F src/Subrouts.F src/TLEread.F src/Legendre.F
 TEST_TLE2SV_BIN = test_tle2sv
 
-TEST_TLE2OPM_SRC = test_tle2opm.F Subrouts.F TLEread.F Legendre.F
+TEST_TLE2OPM_SRC = test/test_tle2opm.F src/Subrouts.F src/TLEread.F src/Legendre.F
 TEST_TLE2OPM_BIN = test_tle2opm
 
 ALL_TEST_BINS = $(TEST_BIN) $(TEST_BUGS_BIN) $(TEST_TLE_BIN) \

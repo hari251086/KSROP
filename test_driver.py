@@ -109,7 +109,7 @@ def main():
     exe = os.path.abspath(exe)
     if not os.path.isfile(exe):
         print(f'ERROR: executable not found: {exe}')
-        print('  Compile: ifort driver_KS.F Subrouts.F Legendre.F -o driver_KS.exe')
+        print('  Compile: ifort app/driver_KS.F src/Subrouts.F src/Legendre.F -o driver_KS.exe')
         sys.exit(1)
 
     # --------------------------------------------------------

@@ -16,10 +16,33 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y gfortran
 
       - name: Normalize line endings (CRLF -> LF)
-        run: sed -i 's/\r$//' *.F Makefile *.sh
+        run: sed -i 's/\r$//' src/*.F app/*.F test/*.F Makefile *.sh
 
       - name: Build propagator, tools, and test binaries
         run: make all tools tests
 
       - name: Run full test suite (lint + unit + integration)
         run: bash test_all.sh
+
+  fpm-package-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install gfortran
+        run: sudo apt-get update && sudo apt-get install -y gfortran
+
+      - name: Normalize line endings (CRLF -> LF)
+        run: sed -i 's/\r$//' src/*.F app/*.F test/*.F Makefile *.sh
+
+      - name: Install fpm
+        run: |
+          curl -L -o fpm https://github.com/fortran-lang/fpm/releases/download/v0.13.0/fpm-0.13.0-linux-x86_64-gcc-12
+          chmod +x fpm
+          sudo mv fpm /usr/local/bin/fpm
+
+      - name: fpm build (validates the package as consumers will resolve it)
+        run: fpm build --compiler gfortran
+
+      - name: fpm test
+        run: fpm test --compiler gfortran

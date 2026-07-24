@@ -55,8 +55,11 @@ C     ==================================================================
       double precision function rhoj71(z, Tinf)
       implicit none
       double precision z, Tinf
-      double precision tempz
-      external tempz
+      interface
+        double precision function tempz(z, Tinf)
+        double precision z, Tinf
+        end function tempz
+      end interface
 
       double precision Rstar, Av, Ra, g0, M0, T1, z1, M1, rho1
       double precision z2, zx
