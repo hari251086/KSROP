@@ -24,11 +24,17 @@ Orbit propagation using **Kustaanheimo–Stiefel (KS) regular elements** with a 
 
 ```
 KSROP/
-├── driver_KS.F                          Main propagator program
-├── Subrouts.F                           Shared subroutines (transforms, I/O, force models)
-├── Legendre.F                           Zonal Legendre polynomial evaluation
-├── TLEread.F                            TLE reader + SGP4 + TEME→J2000 conversion
-├── tle2opm.F                            TLE-to-OPM converter tool
+├── fpm.toml                              fpm package manifest (src/app/test layout below)
+├── src/
+│   ├── Subrouts.F                        Shared subroutines (transforms, I/O, force models)
+│   ├── Legendre.F                        Zonal Legendre polynomial evaluation
+│   ├── TLEread.F                         TLE reader + SGP4 + TEME→J2000 conversion
+│   └── jr71_profile.F                    Jacchia-71 atmosphere profile (shared by gen_atm* tools)
+├── app/
+│   ├── driver_KS.F                       Main propagator program
+│   ├── tle2opm.F                         TLE-to-OPM converter tool
+│   ├── gen_atm_jr71.F                    1-D Jacchia-71 table generator
+│   └── gen_atm2d_jr71.F                  2-D T-inf-gridded generator (issue #26)
 │
 ├── input/
 │   ├── const_new.dat                    Physical constants (single source of truth)
@@ -47,11 +53,12 @@ KSROP/
 │   ├── KSROP_YYYYMMDDTHHMMSS_Regular.out  KS elements debug dump
 │   └── ksrop.opm                        Initial Keplerian elements (OPM)
 │
-├── test_subrouts.F                      Unit tests (67 checks)
-├── test_tle.F                           TLE reader tests (147 checks)
-├── test_tle2sv.F                        SGP4/SDP4/frame tests (156 checks)
-├── test_tle2opm.F                       TLE-to-OPM pipeline tests (21 checks)
-├── test_bugs.F                          Bug regression tests (17 checks)
+├── test/
+│   ├── test_subrouts.F                   Unit tests (67 checks)
+│   ├── test_tle.F                        TLE reader tests (147 checks)
+│   ├── test_tle2sv.F                     SGP4/SDP4/frame tests (156 checks)
+│   ├── test_tle2opm.F                    TLE-to-OPM pipeline tests (21 checks)
+│   └── test_bugs.F                       Bug regression tests (17 checks)
 ├── test_driver.py                       Integration test (10 checks)
 ├── test_initial_conditions.py           Multi-orbit test (110 checks)
 ├── benchmark.py                         Performance profiler
@@ -159,7 +166,27 @@ See [Running](#5-running) for the full TLE-to-OPM pipeline description.
 
 Requires **Intel oneAPI Fortran** (`ifx`) or **GNU Fortran** (`gfortran`), plus a C/C++ linker (MSVC on Windows).
 
-### Windows — Intel oneAPI ifx 2025.0
+### fpm (Fortran Package Manager) — recommended, and the only way to consume KSROP as a dependency
+
+```bash
+fpm build --compiler ifx        # or --compiler gfortran
+fpm test  --compiler ifx
+fpm run driver_KS --compiler ifx
+```
+
+To depend on KSROP from another fpm project (e.g. OREM), add to that project's `fpm.toml`:
+
+```toml
+[dependencies]
+ksrop = { git = "https://github.com/hari251086/KSROP", tag = "v2.1.0" }
+```
+
+`fpm.toml` sets `[fortran] source-form = "fixed"` (fpm defaults `.F` to free-form, which breaks
+this codebase's column-1 comments) and `implicit-typing = true` / `implicit-external = true`
+(this is 50-year-old-style F77 that relies on implicit typing and external-function declarations
+in several places — fpm's stricter modern defaults otherwise reject valid code).
+
+### Windows — Intel oneAPI ifx 2025.0 (manual, without fpm)
 
 The Intel compiler requires both the Visual Studio and Intel environments to be initialised in the same shell session:
 
@@ -170,17 +197,17 @@ call "C:\Program Files (x86)\Intel\Fortran\compiler\2025.0\env\vars.bat"
 cd /d "C:\Users\hari2\OneDrive\Documents\GitHub\KSROP"
 
 :: Propagator
-ifx driver_KS.F Subrouts.F Legendre.F TLEread.F /exe:driver_KS.exe
+ifx app\driver_KS.F src\Subrouts.F src\Legendre.F src\TLEread.F /exe:driver_KS.exe
 
 :: TLE-to-OPM converter
-ifx tle2opm.F Subrouts.F TLEread.F Legendre.F /exe:tle2opm.exe
+ifx app\tle2opm.F src\Subrouts.F src\TLEread.F src\Legendre.F /exe:tle2opm.exe
 
 :: Tests
-ifx test_subrouts.F Subrouts.F Legendre.F /exe:test_subrouts.exe
-ifx test_bugs.F Subrouts.F Legendre.F /exe:test_bugs.exe
-ifx test_tle.F Subrouts.F TLEread.F Legendre.F /exe:test_tle.exe
-ifx test_tle2sv.F Subrouts.F TLEread.F Legendre.F /exe:test_tle2sv.exe
-ifx test_tle2opm.F Subrouts.F TLEread.F Legendre.F /exe:test_tle2opm.exe
+ifx test\test_subrouts.F src\Subrouts.F src\Legendre.F /exe:test_subrouts.exe
+ifx test\test_bugs.F src\Subrouts.F src\Legendre.F /exe:test_bugs.exe
+ifx test\test_tle.F src\Subrouts.F src\TLEread.F src\Legendre.F /exe:test_tle.exe
+ifx test\test_tle2sv.F src\Subrouts.F src\TLEread.F src\Legendre.F /exe:test_tle2sv.exe
+ifx test\test_tle2opm.F src\Subrouts.F src\TLEread.F src\Legendre.F /exe:test_tle2opm.exe
 ```
 
 > **Note:** Use `/exe:name.exe` (not `-o`) for the output flag with `ifx` on Windows.
@@ -200,13 +227,13 @@ CI builds and runs the full suite on every push using this exact path (`.github/
 ### Manual (gfortran)
 
 ```bash
-gfortran driver_KS.F Subrouts.F Legendre.F TLEread.F -o driver_KS.exe
-gfortran tle2opm.F Subrouts.F TLEread.F Legendre.F -o tle2opm.exe
-gfortran test_subrouts.F Subrouts.F Legendre.F -o test_subrouts.exe
-gfortran test_bugs.F Subrouts.F Legendre.F -o test_bugs.exe
-gfortran test_tle.F Subrouts.F TLEread.F Legendre.F -o test_tle.exe
-gfortran test_tle2sv.F Subrouts.F TLEread.F Legendre.F -o test_tle2sv.exe
-gfortran test_tle2opm.F Subrouts.F TLEread.F Legendre.F -o test_tle2opm.exe
+gfortran app/driver_KS.F src/Subrouts.F src/Legendre.F src/TLEread.F -o driver_KS.exe
+gfortran app/tle2opm.F src/Subrouts.F src/TLEread.F src/Legendre.F -o tle2opm.exe
+gfortran test/test_subrouts.F src/Subrouts.F src/Legendre.F -o test_subrouts.exe
+gfortran test/test_bugs.F src/Subrouts.F src/Legendre.F -o test_bugs.exe
+gfortran test/test_tle.F src/Subrouts.F src/TLEread.F src/Legendre.F -o test_tle.exe
+gfortran test/test_tle2sv.F src/Subrouts.F src/TLEread.F src/Legendre.F -o test_tle2sv.exe
+gfortran test/test_tle2opm.F src/Subrouts.F src/TLEread.F src/Legendre.F -o test_tle2opm.exe
 ```
 
 ---
