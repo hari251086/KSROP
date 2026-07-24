@@ -1,0 +1,56 @@
+name = "ksrop"
+version = "2.1.0"
+license = "license"
+author = "Harishkumar Sellamuthu"
+description = "KS-regularized orbit propagator, TLE/SGP4-SDP4, gravity + drag + third-body force model"
+
+[library]
+source-dir = "src"
+
+[fortran]
+source-form = "fixed"
+
+[[executable]]
+name = "driver_KS"
+source-dir = "app"
+main = "driver_KS.F"
+
+[[executable]]
+name = "tle2opm"
+source-dir = "app"
+main = "tle2opm.F"
+
+[[executable]]
+name = "gen_atm_jr71"
+source-dir = "app"
+main = "gen_atm_jr71.F"
+
+[[executable]]
+name = "gen_atm2d_jr71"
+source-dir = "app"
+main = "gen_atm2d_jr71.F"
+
+[[test]]
+name = "test_subrouts"
+source-dir = "test"
+main = "test_subrouts.F"
+
+[[test]]
+name = "test_bugs"
+source-dir = "test"
+main = "test_bugs.F"
+
+[[test]]
+name = "test_tle"
+source-dir = "test"
+main = "test_tle.F"
+
+[[test]]
+name = "test_tle2sv"
+source-dir = "test"
+main = "test_tle2sv.F"
+
+[[test]]
+name = "test_tle2opm"
+source-dir = "test"
+main = "test_tle2opm.F"
