@@ -12,7 +12,8 @@
 FC      = gfortran
 FFLAGS  = -O2 -Wall
 
-SRC     = app/driver_KS.F src/Subrouts.F src/Legendre.F src/TLEread.F
+SRC     = app/driver_KS.F src/Subrouts.F src/Legendre.F src/TLEread.F \
+          src/swx.F
 TARGET  = driver_KS
 
 TLE2OPM_SRC = app/tle2opm.F src/Subrouts.F src/TLEread.F src/Legendre.F
@@ -33,8 +34,11 @@ TEST_TLE2SV_BIN = test_tle2sv
 TEST_TLE2OPM_SRC = test/test_tle2opm.F src/Subrouts.F src/TLEread.F src/Legendre.F
 TEST_TLE2OPM_BIN = test_tle2opm
 
+TEST_SW_SRC = test/test_sw.F src/swx.F src/Subrouts.F src/Legendre.F
+TEST_SW_BIN = test_sw
+
 ALL_TEST_BINS = $(TEST_BIN) $(TEST_BUGS_BIN) $(TEST_TLE_BIN) \
-                $(TEST_TLE2SV_BIN) $(TEST_TLE2OPM_BIN)
+                $(TEST_TLE2SV_BIN) $(TEST_TLE2OPM_BIN) $(TEST_SW_BIN)
 
 .PHONY: all tools tests run test clean
 
@@ -64,6 +68,9 @@ $(TEST_TLE2SV_BIN): $(TEST_TLE2SV_SRC)
 
 $(TEST_TLE2OPM_BIN): $(TEST_TLE2OPM_SRC)
 	$(FC) $(FFLAGS) $(TEST_TLE2OPM_SRC) -o $(TEST_TLE2OPM_BIN)
+
+$(TEST_SW_BIN): $(TEST_SW_SRC)
+	$(FC) $(FFLAGS) $(TEST_SW_SRC) -o $(TEST_SW_BIN)
 
 run: $(TARGET)
 	./$(TARGET)

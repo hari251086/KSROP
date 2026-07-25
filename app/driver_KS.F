@@ -101,6 +101,13 @@ c     Trajectory buffer: allocated once nrev is known; written after run
       double precision, allocatable :: traj_jd(:)
       double precision, allocatable :: traj_x(:,:)
       double precision, allocatable :: traj_xd(:,:)
+c     Epoch-resolved space weather (ported from OREM issue #26):
+c     auto-detected at startup, no config flag -- absent input files
+c     mean the legacy static-table path runs unchanged.
+      logical sw_exists, atm2d_exists
+      integer ierr_sw, ierr_a2
+      double precision tinf_wx
+      integer ist_wx
 
       pi=4.d0*datan(1.d0)
       d2r=pi/180.d0
@@ -166,6 +173,28 @@ c     -----------------------------------------------------------
          SCH_atm(i) = SCH_atm(i) * 1000.d0   ! km to m
          DEN_atm(i) = DEN_atm(i) * 1.0d10    ! file units to kg/m3
       end do
+
+c     -----------------------------------------------------------
+c     Epoch-resolved space weather (ported from OREM issue #26):
+c     auto-detect both input files, load if present, run the
+c     legacy static ATM.DAT path unchanged if either is absent.
+c     -----------------------------------------------------------
+      inquire(file='input/SW-All.csv', exist=sw_exists)
+      inquire(file='input/ATM2D.DAT', exist=atm2d_exists)
+      if (sw_exists .and. atm2d_exists) then
+         call sw_load('input/SW-All.csv', ierr_sw)
+         call atm2d_load('input/ATM2D.DAT', ierr_a2)
+         if (ierr_sw .eq. 0 .and. ierr_a2 .eq. 0) then
+            write(*,'(A)') ' [SW] epoch-resolved density: ENABLED'
+         else
+            write(*,'(A)')
+     &         ' [SW] epoch-resolved density: load failed, '//
+     &         'using static ATM.DAT'
+         end if
+      else
+         write(*,'(A)') ' [SW] epoch-resolved density: DISABLED '//
+     &      '(input/SW-All.csv or input/ATM2D.DAT not found)'
+      end if
 
       call car2oe(x,xd,pek)
       call oe2car(pek,x,xd,tole)
@@ -355,9 +384,24 @@ c     the revolution only when this is below 500 km)
      &       HSQ_dg .le. ALT_atm(ndim_atm)) then
 c     Reference density/scale-height at perigee, the rotating-
 c     atmosphere correction factor F_dg, and the oblateness/
-c     eccentricity exponent terms C_dg, XXX_dg used each step
-            call INTPOL(ALT_atm, DEN_atm, ndim_atm, HSQ_dg, RHOPI_dg)
-            call INTPOL(ALT_atm, SCH_atm, ndim_atm, HSQ_dg, H_dg)
+c     eccentricity exponent terms C_dg, XXX_dg used each step.
+c     Ported from OREM issue #26: when a space-weather history and
+c     2-D atmosphere table are loaded (auto-detected at startup),
+c     the reference is evaluated at the exospheric temperature for
+c     THIS revolution's epoch instead of the static table. With
+c     nothing loaded (the default), sw_tinf returns 0 and the
+c     legacy path below runs unchanged.
+            call sw_tinf(djulian + T/86400.d0, tinf_wx)
+            ist_wx = 2
+            if (tinf_wx .gt. 0.d0)
+     &         call atm2d_interp(HSQ_dg, tinf_wx,
+     &                           RHOPI_dg, H_dg, ist_wx)
+            if (ist_wx .ne. 0) then
+               call INTPOL(ALT_atm, DEN_atm, ndim_atm,
+     &                     HSQ_dg, RHOPI_dg)
+               call INTPOL(ALT_atm, SCH_atm, ndim_atm,
+     &                     HSQ_dg, H_dg)
+            end if
             if (H_dg .le. 0.d0) H_dg = 1.d0
             BETA_dg = 1.d0/H_dg
             RPO_dg  = SQ_dg

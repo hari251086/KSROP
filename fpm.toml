@@ -56,3 +56,8 @@ main = "test_tle2sv.F"
 name = "test_tle2opm"
 source-dir = "test"
 main = "test_tle2opm.F"
+
+[[test]]
+name = "test_sw"
+source-dir = "test"
+main = "test_sw.F"

@@ -50,6 +50,13 @@ Read from `input.dat` (via `driver_KS.F`) in this fixed order:
   shadow model).
 - `ATM.DAT`: tabulated atmospheric density/scale-height vs. altitude
   (60-630 km), read once at startup.
+- **Optional** `input/SW-All.csv` (CelesTrak solar/geomagnetic history)
+  and `input/ATM2D.DAT` (2-D density/scale-height table over altitude ×
+  exospheric temperature, `gen_atm2d_jr71.F`): auto-detected at startup
+  (no config flag). When both are present, per-revolution drag uses the
+  real historical F10.7/Kp for that epoch instead of the static `ATM.DAT`
+  table; absent either file, the legacy static-table path runs unchanged.
+  See §9 Known Limitations and `src/swx.F`.
 - Alternatively, `tle2opm.F` accepts a real TLE (via `TLEread.F`'s SGP4/SDP4
   implementation) and converts to a CCSDS OPM initial state, so a run can
   start from real catalog data instead of a hand-specified Cartesian state.
@@ -103,8 +110,12 @@ Read from `input.dat` (via `driver_KS.F`) in this fixed order:
    accurate than the literal analytical King-Hele/Sharma theory this model
    descends from). Reference altitude is oblateness-corrected:
    $R_{REQ} = R_{Earth}(1 - \sin^2 i\,\sin^2\omega\,\varepsilon_f)$. Density
-   is looked up from `ATM.DAT`/computed as exponential decay from the
-   perigee reference: $\rho \propto \exp(-(r-r_0)/H)$. Drag acceleration
+   is looked up from `ATM.DAT` (static table) **or, when `input/SW-All.csv`
+   and `input/ATM2D.DAT` are both present (auto-detected at startup, see
+   §9), from a 2-D table indexed by the real historical exospheric
+   temperature at that revolution's own epoch** (`src/swx.F`, ported from
+   OREM issue #26) — computed as exponential decay from the perigee
+   reference either way: $\rho \propto \exp(-(r-r_0)/H)$. Drag acceleration
    $\propto \rho\,V_{rel}^2/(2\,BN)$, in the co-rotating relative-velocity
    direction. **No diurnal (local-solar-time) density bulge term is
    modeled** — this is a confirmed, documented gap (see project memory
@@ -180,11 +191,13 @@ relevant one level up, in `OREM`'s RSM step, which runs 9 independent
 aren't (run sequentially).
 
 ## 8. Validation & Accuracy
-528 total checks across 5 Fortran test programs, run via `test_all.sh`
+539 total checks across 6 Fortran test programs, run via `test_all.sh`
 (lint + all suites): `test_subrouts.F` (67, coordinate transforms/utility
 subroutines), `test_tle.F` (147, TLE parsing), `test_tle2sv.F` (156,
 SGP4/SDP4 + frame conversions), `test_tle2opm.F` (21, TLE-to-OPM pipeline),
-`test_bugs.F` (17, regression tests for specific historical bugs), plus
+`test_bugs.F` (17, regression tests for specific historical bugs),
+`test_sw.F` (11, epoch-resolved space weather — loader/interpolation
+correctness including a hand-verified exospheric-temperature value), plus
 `test_driver.py` (10) and `test_initial_conditions.py` (110, multi-orbit
 sweep) in Python. CI (`ci.yml`) runs the full suite on every push/PR to
 `main`/`HS-dev` via `gfortran` on Ubuntu. Cross-validated against GMAT
@@ -202,6 +215,22 @@ identified as the dominant remaining source of that residual.
   confirmed absent from the drag model; a specified, literature-validated
   fix exists (Sharma 1997a's Santora-1975-based term) but is not
   implemented. See project memory `reference_orem_reentry_literature`.
+- **Density model form is exponential/scale-height referenced to perigee**
+  (King-Hele/Sharma lineage), not a full empirical atmosphere model like
+  MSIS2000 or Jacchia-Bowman. Per a direct comparison against the ISO/CD
+  27852 orbit-lifetime draft standard's own model tiering (2026-07-25,
+  `OREM`'s Phase 5 investigation), this places KSROP in that standard's
+  acceptable-but-not-best-fidelity tier ("not ideal, [but] can work well"
+  — the standard's own words for the Jacchia-1971-class lineage this model
+  descends from), not its explicitly-named "avoid" category. A real
+  accuracy ceiling, but a much larger undertaking than the diurnal-bulge
+  gap above (a new atmosphere model, not a missing term).
+- ~~Epoch-resolved space weather~~ — **fixed 2026-07-25**: `driver_KS.F`
+  now auto-detects `input/SW-All.csv`/`input/ATM2D.DAT` and uses real
+  historical F10.7/Kp per revolution when present (ported from OREM issue
+  #26; see §10 Dependencies and the README Revision History). The
+  generator (`gen_atm2d_jr71.F`) had existed here since before the port,
+  but nothing consumed its output at runtime until now.
 - Re-entry altitude threshold (80 km) is hardcoded, not configurable.
 - No adaptive step size — deliberate (KS regularization itself provides the
   numerical stability an adaptive scheme would otherwise be needed for),
@@ -212,10 +241,6 @@ identified as the dominant remaining source of that residual.
   issues, TLE mean-motion parsing, an `iE` implicit-typing trap; these are
   fixed, but are a reminder that this codebase's Fortran dialect
   compatibility isn't automatic across compilers.
-- Issue #13 (RPE — re-entry prediction error, tracked historically in this
-  project's issue trackers across repos) remains an open, actively
-  investigated problem one level up in `OREM`, which depends on this
-  propagator's fidelity but adds its own TLE-fitting error sources on top.
 
 ## 10. Dependencies
 - **Standalone** — KSROP has no dependency on any other repo under
