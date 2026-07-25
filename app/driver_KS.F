@@ -108,6 +108,16 @@ c     mean the legacy static-table path runs unchanged.
       integer ierr_sw, ierr_a2
       double precision tinf_wx
       integer ist_wx
+c     Issue #32 Phase 5 follow-up (OREM): diurnal density bulge (only
+c     computable when weather mode is active, since it needs the
+c     atm2d T-to-density mapping). f_bulge refreshed once per
+c     revolution; cosphi_dg refreshed every step since the
+c     satellite's own position relative to the bulge direction
+c     changes fast.
+      double precision tmax_wx, tmin_wx, decl_sun_dg
+      double precision rho_max_wx, rho_min_wx, h_dum_wx
+      double precision f_bulge, cosphi_dg
+      integer ist_bulge
 
       pi=4.d0*datan(1.d0)
       d2r=pi/180.d0
@@ -403,6 +413,35 @@ c     legacy path below runs unchanged.
      &                     HSQ_dg, H_dg)
             end if
             if (H_dg .le. 0.d0) H_dg = 1.d0
+
+c           Issue #32 Phase 5 follow-up (OREM): diurnal density
+c           bulge amplitude, only derivable when weather mode
+c           succeeded (needs the atm2d T-to-density mapping at this
+c           same perigee altitude, from the same table already
+c           loaded). Inactive (f_bulge=0, a pure no-op) whenever
+c           weather mode is off or either extremum lookup falls
+c           outside the loaded table -- same auto-detect philosophy
+c           as issue #26 itself. Refreshed once per revolution (Sun
+c           declination barely changes within one orbit); the
+c           geometric factor that multiplies it (cosphi_dg) is
+c           refreshed every step.
+            f_bulge = 0.d0
+            if (tinf_wx .gt. 0.d0 .and. ist_wx .eq. 0) then
+               decl_sun_dg = dasin(ts(3)/dsqrt(ts(1)**2+ts(2)**2
+     &                       +ts(3)**2)) * r2d
+               call jacchia_bulge_extrema(tinf_wx, decl_sun_dg,
+     &                                    tmax_wx, tmin_wx)
+               call atm2d_interp(HSQ_dg, tmax_wx,
+     &                           rho_max_wx, h_dum_wx, ist_bulge)
+               if (ist_bulge .eq. 0) then
+                  call atm2d_interp(HSQ_dg, tmin_wx,
+     &                              rho_min_wx, h_dum_wx, ist_bulge)
+                  if (ist_bulge .eq. 0 .and. rho_min_wx .gt. 0.d0)
+     &               f_bulge = (rho_max_wx/rho_min_wx - 1.d0)
+     &                       / (rho_max_wx/rho_min_wx + 1.d0)
+               end if
+            end if
+
             BETA_dg = 1.d0/H_dg
             RPO_dg  = SQ_dg
             VPO_dg  = dsqrt(amue*1.d9*(2.d0/RPO_dg - 1.d0/A_dg))
@@ -450,7 +489,19 @@ c              both wings of the perigee density bump.
                else
                   TER_dg = dexp(exp_arg)
                end if
-               DENS = -F_dg*RHOPI_dg*TER_dg*V/(BN*2.d0)*1.d-7
+c              Issue #32 Phase 5 follow-up (OREM): diurnal density
+c              bulge -- geometric factor evaluated at the
+c              satellite's CURRENT stage position (unlike f_bulge,
+c              this genuinely varies fast within one revolution,
+c              since that's the whole point of a day/night bulge).
+c              f_bulge=0 (weather mode off, the common case) makes
+c              this an exact no-op regardless of cosphi_dg's value.
+               cosphi_dg = 0.d0
+               if (f_bulge .ne. 0.d0)
+     &            call bulge_cosphi(x, ts, 37.d0, cosphi_dg)
+
+               DENS = -F_dg*RHOPI_dg*(1.d0 + f_bulge*cosphi_dg)
+     &              *TER_dg*V/(BN*2.d0)*1.d-7
                do i = 1,3
                   p_drag(i) = DENS * xd(i)
                end do

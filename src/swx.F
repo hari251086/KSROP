@@ -311,3 +311,87 @@ c     ============================================================
 
       return
       end
+
+c     ============================================================
+c     jacchia_bulge_extrema — exospheric temperature extrema.
+c     Ported from OREM's src/propagate_ks.F (issue #32 Phase 5
+c     diurnal-bulge follow-up there). Implements Swinerd & Boulton
+c     1983 eq. (28)-(29) (their own real-tracking best fit against
+c     satellite 1963-27A found k_F=1.02 vs this J77-lineage formula,
+c     i.e. the real diurnal amplitude is within 2% of what this
+c     predicts): given the mean exospheric temperature (from
+c     sw_tinf) and the Sun's current declination, returns the
+c     GLOBAL max/min of the diurnal temperature distribution — the
+c     inputs to the diurnal density bulge amplitude (mapped through
+c     atm2d_interp by the caller; see bulge_cosphi for the separate
+c     geometric factor). K_max/K_min and the 0.15/0.24 coefficients
+c     are the paper's own literature-cited constants, not fitted
+c     here.
+c
+c     tmean       : mean exospheric temperature, K (sw_tinf output)
+c     decl_sun_deg: Sun declination, degrees
+c     tmax, tmin  : output temperature extrema, K
+c     ============================================================
+      subroutine jacchia_bulge_extrema(tmean, decl_sun_deg,
+     &                                  tmax, tmin)
+      implicit none
+      double precision tmean, decl_sun_deg, tmax, tmin
+
+      double precision eps_ecl, ratio, kmax, kmin
+      double precision phi_max, phi_min
+      parameter (eps_ecl = 23.439d0)
+      parameter (kmax = 0.5458d0, kmin = -0.5722d0)
+
+      ratio = decl_sun_deg / eps_ecl
+
+      phi_max = datan((5.d0/8.d0)*ratio/kmax)
+      tmax = tmean*(1.d0 + 0.15d0*ratio*dsin(phi_max)
+     &     + 0.24d0*kmax*dcos(phi_max))
+
+      phi_min = datan((5.d0/8.d0)*ratio/kmin)
+      tmin = tmean*(1.d0 + 0.15d0*ratio*dsin(phi_min)
+     &     + 0.24d0*kmin*dcos(phi_min))
+
+      return
+      end
+
+c     ============================================================
+c     bulge_cosphi — geocentric angular factor for the diurnal
+c     density bulge. Ported from OREM's src/propagate_ks.F (issue
+c     #32 Phase 5 diurnal-bulge follow-up there). Returns cos(phi),
+c     phi = angular distance from the satellite's current position
+c     to the bulge-maximum direction: same declination as the Sun,
+c     right ascension lagging the Sun by lam_deg (Swinerd & Boulton
+c     1983's real-tracking fit, lam=37deg, matching CIRA 1972's
+c     independent 14.1h local-solar-time estimate almost exactly).
+c
+c     x(3)    : satellite geocentric position (any consistent units)
+c     ts(3)   : Sun geocentric position (same frame as x — already
+c               computed via solarnpv for third-body/SRP physics)
+c     lam_deg : bulge lag angle, degrees
+c     ============================================================
+      subroutine bulge_cosphi(x, ts, lam_deg, cosphi)
+      implicit none
+      double precision x(3), ts(3), lam_deg, cosphi
+
+      double precision d2r_loc
+      parameter (d2r_loc = 0.017453292519943295d0)
+
+      double precision r_sat, r_sun, dec_sat, ra_sat
+      double precision dec_sun, ra_sun, ra_bulge
+
+      r_sat = dsqrt(x(1)**2 + x(2)**2 + x(3)**2)
+      r_sun = dsqrt(ts(1)**2 + ts(2)**2 + ts(3)**2)
+
+      dec_sat = dasin(x(3)/r_sat)
+      ra_sat  = datan2(x(2), x(1))
+
+      dec_sun = dasin(ts(3)/r_sun)
+      ra_sun  = datan2(ts(2), ts(1))
+      ra_bulge = ra_sun + lam_deg*d2r_loc
+
+      cosphi = dsin(dec_sat)*dsin(dec_sun)
+     &       + dcos(dec_sat)*dcos(dec_sun)*dcos(ra_sat - ra_bulge)
+
+      return
+      end

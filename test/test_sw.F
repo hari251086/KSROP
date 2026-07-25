@@ -14,6 +14,8 @@ c     -------------------------------------------------------
       double precision cal(6), jd, tinf
       double precision rho, hs, rho72, hs72, rho_hi
       integer ist
+c     Issue #32 Phase 5 follow-up: diurnal density bulge
+      double precision tbmax, tbmin, ts_bulge(3), xb(3), cphi
 
       call init_constants()
       npass = 0
@@ -119,6 +121,61 @@ c     monotonicity in Tinf at 300 km (scaled units)
 c     altitude out of range -> istat=1 (drag-inactive contract)
       call atm2d_interp(550.d3, 700.d0, rho, hs, ist)
       call assert_i('W11 h>500km istat=1', ist, 1, npass, nfail)
+
+c     ---------------------------------------------------------
+c     W12-W17: diurnal density bulge (issue #32 Phase 5 follow-up,
+c     ported from OREM's test/test_sw.F). At the equinox
+c     (decl_sun=0), phi_max=phi_min=0 exactly (atan(0)=0), so the
+c     extrema formula collapses to an exact closed form with no
+c     transcendental-function rounding risk:
+c       Tmax = Tmean*(1 + 0.24*Kmax) = Tmean*1.130992
+c       Tmin = Tmean*(1 + 0.24*Kmin) = Tmean*0.862672
+c     ---------------------------------------------------------
+      call jacchia_bulge_extrema(1000.d0, 0.d0, tbmax, tbmin)
+      call assert_d('W12 bulge extrema: equinox Tmax',
+     &              tbmax, 1130.992d0, 1.d-3, npass, nfail)
+      call assert_d('W13 bulge extrema: equinox Tmin',
+     &              tbmin, 862.672d0, 1.d-3, npass, nfail)
+
+c     At any nonzero declination the extrema must still bracket the
+c     mean (qualitative sanity, not a specific transcendental value)
+      call jacchia_bulge_extrema(1000.d0, 23.439d0, tbmax, tbmin)
+      if (tbmax .gt. 1000.d0 .and. tbmin .lt. 1000.d0) then
+         call assert_i('W14 bulge extrema: solstice brackets mean',
+     &                 1, 1, npass, nfail)
+      else
+         call assert_i('W14 bulge extrema: solstice brackets mean',
+     &                 0, 1, npass, nfail)
+      end if
+
+c     Sun fixed on the equatorial x-axis (dec_sun=0, ra_sun=0) ->
+c     bulge direction is dec=0, ra=37deg exactly. Three exact
+c     geometric cases: satellite AT the bulge direction, at its
+c     antipode, and 90deg away.
+      ts_bulge(1) = 1.d0
+      ts_bulge(2) = 0.d0
+      ts_bulge(3) = 0.d0
+
+      xb(1) = dcos(37.d0*d2r)
+      xb(2) = dsin(37.d0*d2r)
+      xb(3) = 0.d0
+      call bulge_cosphi(xb, ts_bulge, 37.d0, cphi)
+      call assert_d('W15 bulge_cosphi: at bulge direction',
+     &              cphi, 1.d0, 1.d-10, npass, nfail)
+
+      xb(1) = -dcos(37.d0*d2r)
+      xb(2) = -dsin(37.d0*d2r)
+      xb(3) = 0.d0
+      call bulge_cosphi(xb, ts_bulge, 37.d0, cphi)
+      call assert_d('W16 bulge_cosphi: antipodal',
+     &              cphi, -1.d0, 1.d-10, npass, nfail)
+
+      xb(1) = dcos(127.d0*d2r)
+      xb(2) = dsin(127.d0*d2r)
+      xb(3) = 0.d0
+      call bulge_cosphi(xb, ts_bulge, 37.d0, cphi)
+      call assert_d('W17 bulge_cosphi: 90deg away',
+     &              cphi, 0.d0, 1.d-10, npass, nfail)
 
       write(*,*) ''
       write(*,*) '=============================================='
