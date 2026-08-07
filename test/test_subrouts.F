@@ -33,6 +33,7 @@ c     --- declarations ---
       dimension x2(3), xd2(3), cov2(6,6)
       dimension tca_cal2(6), x1b(3), xd1b(3), cov1b(6,6)
       dimension x2b(3), xd2b(3), cov2b(6,6)
+      dimension cj4(4)
       character*23 creation_str, tca_str
       integer npass, nfail, iall_ok, iq1, iq2, iq3, iq4
 c     'm' is implicitly INTEGER (outside a-h, o-z) -- declare explicitly
@@ -596,6 +597,37 @@ c     Just verify finite result in [0, 2pi)
          write(*,*) '  [FAIL]  SA20 Case A finite azimuth'
          nfail = nfail + 1
       end if
+
+c     ==============================================================
+c     geo_coeff_body: file-parameterized gravity coefficient loader
+c     (generalization added for non-Earth central bodies, e.g. a
+c     lunar/Mars-centered driver depending on KSROP as a library --
+c     verifies the file-path argument, order-0 (zonal) filtering,
+c     and c_j indexing all work against a fixture distinct from the
+c     231 MB EGM2008 file the default geo_coeff() wrapper reads).
+c     ==============================================================
+      write(*,*) ''
+      write(*,*) '  --- geo_coeff_body (parameterized gravity file) ---'
+
+      call geo_coeff_body(4, cj4,
+     &     'test/fixture_geo_coeff.dat')
+
+c     Fixture row "2 0  -0.108262617385222D-02 ..." -> c_j(2)
+      call assert('GC1 c_j(2) from degree-2 zonal row',
+     &            cj4(2), -dsqrt(5.d0)*(-0.108262617385222d-2),
+     &            eps10, npass, nfail)
+
+c     Fixture row "3 0   0.253243187000000D-05 ..." -> c_j(3)
+c     (order-1/order-2 rows at degree 2 and order-1 at degree 3 must
+c     be skipped, not mistaken for the next zonal term)
+      call assert('GC2 c_j(3) from degree-3 zonal row',
+     &            cj4(3), -dsqrt(7.d0)*(0.253243187d-5),
+     &            eps10, npass, nfail)
+
+c     Fixture row "4 0  -0.162351800000000D-05 ..." -> c_j(4)
+      call assert('GC3 c_j(4) from degree-4 zonal row',
+     &            cj4(4), -dsqrt(9.d0)*(-0.1623518d-5),
+     &            eps10, npass, nfail)
 
 c     ==============================================================
 c     Summary

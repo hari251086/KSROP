@@ -1,5 +1,5 @@
 name = "ksrop"
-version = "2.2.0"
+version = "2.3.0"
 license = "license"
 author = "Harishkumar Sellamuthu"
 description = "KS-regularized orbit propagator, TLE/SGP4-SDP4, gravity + drag + third-body force model"

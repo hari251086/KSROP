@@ -615,20 +615,39 @@ c     ----------------------------------------
 c     ============================================================
       subroutine geo_coeff(n,c_j)
 c     Reads zonal harmonic coefficients Jn from EGM2008_to2190_TideFree.
+c     Thin wrapper over geo_coeff_body with the Earth default file
+c     path, kept for backward compatibility with existing callers.
+c     ============================================================
+      implicit double precision (a-h,o-z)
+      dimension c_j(n)
+
+      call geo_coeff_body(n, c_j,
+     &   'input/EGM2008_to2190_TideFree')
+      return
+      end
+
+c     ============================================================
+      subroutine geo_coeff_body(n,c_j,fname)
+c     Reads zonal harmonic coefficients Jn from an arbitrary
+c     central-body gravity-coefficient file (same row format as
+c     EGM2008). Lets a consumer (e.g. a lunar- or Mars-centered
+c     driver depending on KSROP as a library) supply its own
+c     coefficient file without duplicating this parsing logic.
 c     Streams row-by-row and stops as soon as the n-1 required zonal
 c     (m=0) terms for degrees 2..n have been collected.
 c
 c     Performance: reads only O(n^2) lines instead of all 2 401 333.
 c     For n=2 (J2 only): 3 lines.  For n=10: 63 lines.  For n=100: 5148.
 c
-c     EGM2008 file format per line:
+c     File format per line:
 c       degree  order  Cnm  Snm  sigma_Cnm  sigma_Snm
 c     ============================================================
       implicit double precision (a-h,o-z)
       dimension c_j(n)
       integer ideg, iord
+      character*(*) fname
 
-      open (unit = 7, file = 'input/EGM2008_to2190_TideFree')
+      open (unit = 7, file = fname)
 
       j = 2
  20   continue
