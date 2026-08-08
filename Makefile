@@ -13,7 +13,7 @@ FC      = gfortran
 FFLAGS  = -O2 -Wall
 
 SRC     = app/driver_KS.F src/Subrouts.F src/Legendre.F src/TLEread.F \
-          src/swx.F
+          src/swx.F src/Cunningham.F
 TARGET  = driver_KS
 
 TLE2OPM_SRC = app/tle2opm.F src/Subrouts.F src/TLEread.F src/Legendre.F

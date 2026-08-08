@@ -104,6 +104,10 @@ c     ---------------------------------------------------------
      &              c22_ref, 1.d-14, npass, nfail)
       call assert_d('CG2 S22 matches geo_coeff_tess22', Snm(2,2),
      &              s22_ref, 1.d-14, npass, nfail)
+      call assert_d('CG3 C20 skipped (m=0 not loaded)', Cnm(2,0),
+     &              0.d0, 1.d-14, npass, nfail)
+      call assert_d('CG4 C30 skipped (m=0 not loaded)', Cnm(3,0),
+     &              0.d0, 1.d-14, npass, nfail)
 
 c     ---------------------------------------------------------
 c     CF1-CF5: tess_general_force at n=m=2 reproduces the
