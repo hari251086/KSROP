@@ -137,6 +137,32 @@ c     ==============================================================
      &            vleg(5), -0.2890625d0, eps10, npass, nfail)
 
 c     ==============================================================
+c     aLegendreP: associated Legendre P_l^m(x) at x = 0.5, verified
+c     directly against closed forms (geodesy convention -- no
+c     Condon-Shortley (-1)^m phase factor) for the (l=2,m=0..2) set
+c     needed by tesseral-harmonic degree 2 (issue #29). Not a new
+c     subroutine -- aLegendreP already existed (used by sun_azimuth)
+c     but had no direct unit test; this locks in that it is correct
+c     for the (2,2) sectorial term the tesseral force derivation
+c     will consume, rather than trusting the XJR thesis's own
+c     (possibly OCR-garbled) recurrence transcription.
+c
+c     Analytic values at x=0.5:
+c       P2^0(0.5) = (3*0.25-1)/2               = -0.125  (= P2(0.5))
+c       P2^1(0.5) = 3*0.5*sqrt(1-0.25)         =  1.299038105676658
+c       P2^2(0.5) = 3*(1-0.25)                 =  2.25
+c     ==============================================================
+      call assert('aLegendreP P2^0(0.5) = -0.125',
+     &            aLegendreP(2,0,0.5d0), -0.125d0, eps10,
+     &            npass, nfail)
+      call assert('aLegendreP P2^1(0.5) = 1.299038105677',
+     &            aLegendreP(2,1,0.5d0), 1.299038105676658d0, eps10,
+     &            npass, nfail)
+      call assert('aLegendreP P2^2(0.5) = 2.25',
+     &            aLegendreP(2,2,0.5d0), 2.25d0, eps10,
+     &            npass, nfail)
+
+c     ==============================================================
 c     10-15. car2ks -> ks2car roundtrip
 c     Orbit at r=7000 km along x-axis, v=7.5 km/s along y-axis
 c     (slightly sub-circular elliptic orbit in the equatorial plane)
