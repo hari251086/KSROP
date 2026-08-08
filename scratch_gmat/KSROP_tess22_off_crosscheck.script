@@ -1,0 +1,45 @@
+%General Mission Analysis Tool(GMAT) Script
+%  KSROP issue #29 Phase 5 GMAT cross-check: tesseral OFF (Degree=2 Order=0,
+%  J2 zonal only) -- companion to KSROP_tess22_on_crosscheck.script which
+%  adds Order=2 (includes the (2,2) sectorial term). Same LEO initial
+%  condition and elapsed time as the internal KSROP off/on comparison run
+%  (driver_KS.F, 3 revs, ngeo_deg=2, sun/moon/drag/SRP off).
+
+Create Spacecraft DefaultSC;
+GMAT DefaultSC.DateFormat = UTCGregorian;
+GMAT DefaultSC.Epoch = '08 Aug 2026 00:00:00.000';
+GMAT DefaultSC.CoordinateSystem = EarthMJ2000Eq;
+GMAT DefaultSC.DisplayStateType = Cartesian;
+GMAT DefaultSC.X = 6878.000000000;
+GMAT DefaultSC.Y = 0.000000000;
+GMAT DefaultSC.Z = 0.000000000;
+GMAT DefaultSC.VX = 0.000000000;
+GMAT DefaultSC.VY = 5.400000000;
+GMAT DefaultSC.VZ = 4.800000000;
+
+Create ForceModel FMoff;
+GMAT FMoff.CentralBody = Earth;
+GMAT FMoff.PrimaryBodies = {Earth};
+GMAT FMoff.GravityField.Earth.Degree = 2;
+GMAT FMoff.GravityField.Earth.Order = 0;
+GMAT FMoff.GravityField.Earth.PotentialFile = 'C:\Users\hari2\OneDrive\Documents\GitHub\KSROP\scratch_gmat\EGM2008_72x72.cof';
+GMAT FMoff.Drag = None;
+GMAT FMoff.SRP = Off;
+
+Create Propagator PropOff;
+GMAT PropOff.FM = FMoff;
+GMAT PropOff.Type = RungeKutta89;
+GMAT PropOff.InitialStepSize = 10;
+GMAT PropOff.Accuracy = 1e-13;
+GMAT PropOff.MaxStep = 60;
+
+Create ReportFile RepOff;
+GMAT RepOff.Filename = 'crosscheck_tess22_off_gmat.txt';
+GMAT RepOff.Precision = 16;
+GMAT RepOff.WriteHeaders = true;
+
+BeginMissionSequence;
+
+Report RepOff DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate PropOff(DefaultSC) {DefaultSC.ElapsedSecs = 1044.687};
+Report RepOff DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
