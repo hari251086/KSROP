@@ -71,6 +71,14 @@ c     Value of pi, degree to radians and radians to degree
       dimension cal(6),ts(3),tm(3),opt(3),n_force(3)
       dimension RbyRs(cn0),RbyRm(cn0),cn_m(cn0),cn_s(cn0),Rm(n*2)
       dimension qsun(4),qmoon(4),slambda(cn0),olambda(cn0),Rs(n*2)
+c     Tesseral (2,2) term (issue #29): q22 is the KS-element force
+c     contribution, amue-free like q(j) itself; tau22_tess likewise
+c     amue-free (amue applied explicitly when added to Tau_geo,
+c     matching Tau_geo's own convention). c22_tess/s22_tess default
+c     to 0 (auto-detect: absent (2,2) row in the gravity file, or
+c     ngeo_deg<=1, means this term contributes exactly zero -- see
+c     initialization below).
+      dimension q22(4)
 c     Drag: atmosphere tables and KS drag perturbation vectors
       dimension ALT_atm(ndim_atm),DEN_atm(ndim_atm),SCH_atm(ndim_atm)
       dimension qdrag(4),p_drag(3)
@@ -217,6 +225,15 @@ c     -----------------------------------------------------------
 
       write(*,*) '=============================================='
 
+c     Tesseral (2,2) coefficients (issue #29): default off; only
+c     attempted when ngeo_deg>1 (same guard as geo_coeff below),
+c     since ngeo_deg<=1 users may not have the EGM2008 file at all.
+c     geo_coeff_tess22 itself leaves these at 0 if no (2,2) row is
+c     present, so this is a genuine auto-detect, not a hard
+c     dependency on the row existing.
+      c22_tess = 0.d0
+      s22_tess = 0.d0
+
       if(ngeo_deg.eq.0.or.ngeo_deg.eq.1) then
          do i = 1,cn0
             c_j(i) = 0.d0
@@ -224,6 +241,8 @@ c     -----------------------------------------------------------
       else
 !     compute j_n values
          call geo_coeff(ngeo_deg,c_j)
+         call geo_coeff_tess22('input/EGM2008_to2190_TideFree',
+     &        c22_tess, s22_tess)
       end if
 
 !     Initialization
@@ -238,6 +257,16 @@ c     -----------------------------------------------------------
 
       call solarnpv(djulian,ts)
       call lunarpv(djulian,tm)
+
+c     Tesseral (2,2): Earth's rotation angle at this epoch, and the
+c     resulting time-dependent (not position-dependent) A/B
+c     coefficients tess22_force needs -- see gmst_deg/tess22_force
+c     header comments (KSROP issue #29).
+      call gmst_deg(djulian, theta_tess)
+      A_tess = c22_tess*dcos(2.d0*theta_tess*d2r)
+     &       - s22_tess*dsin(2.d0*theta_tess*d2r)
+      B_tess = c22_tess*dsin(2.d0*theta_tess*d2r)
+     &       + s22_tess*dcos(2.d0*theta_tess*d2r)
 
       R(1) = vmn(x)
       V = vmn(xd)
@@ -560,6 +589,15 @@ c     form to 9 significant digits).
      &                   *ObyR(i)
             end do
 
+c     Tesseral (2,2) contribution (issue #29): q22/tau22_tess are
+c     amue-free, like q(j)/Tau_geo's own zonal accumulation, so
+c     amue is applied here exactly as it already is for Tau_geo
+c     above. A_tess=B_tess=0 (no (2,2) data loaded) makes q22 and
+c     tau22_tess identically zero -- see tess22_force/gmst_deg.
+            call tess22_force(u, R_Earth, A_tess, B_tess, q22,
+     &                        tau22_tess)
+            Tau_geo = Tau_geo + amue*tau22_tess
+
             Tau_3body1 = 0.d0
             do i = 2,nsun_deg
                Tau_3body1=Tau_3body1
@@ -611,6 +649,12 @@ c     -----------------------------------------------------------
      &                 -uu(j)*(i+1)*R(1)*x(3))))/z2mR2)
                   q(j)=qj+q(j)
                end do
+
+c     Tesseral (2,2) contribution, computed once (all 4 components
+c     together) above -- amue-free like the zonal q(j) sum, so it
+c     is picked up automatically by the same "q(j)*amue" in
+c     z(j+1)/z(j+5) below.
+               q(j) = q(j) + q22(j)
 
 !     third-body terms
                call u2qu(u,qu,j)
@@ -698,6 +742,15 @@ c     -----------------------------------------------------------
             djulian1 = djulian + FracJd
             call solarnpv(djulian1, ts)
             call lunarpv(djulian1, tm)
+
+c     Tesseral (2,2): refresh at the same cadence as the third-body
+c     ephemerides above, since GMST (unlike A_tess/B_tess's own
+c     C22/S22 inputs) changes with time, not position.
+            call gmst_deg(djulian1, theta_tess)
+            A_tess = c22_tess*dcos(2.d0*theta_tess*d2r)
+     &             - s22_tess*dsin(2.d0*theta_tess*d2r)
+            B_tess = c22_tess*dsin(2.d0*theta_tess*d2r)
+     &             + s22_tess*dcos(2.d0*theta_tess*d2r)
 
             call third_body_aux(nsun_deg,  x, ts, R(1), amuS,
      &                          Rs(1), RbyRs, first_s, cphi_s, cphi_s2)
