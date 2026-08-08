@@ -17,6 +17,7 @@ c     -------------------------------------------------------
       dimension Vr(0:nw,0:nw), Vi(0:nw,0:nw)
       dimension u(4), q_gen(4), q_ref(4)
       dimension Cnm(0:4,0:4), Snm(0:4,0:4)
+      dimension Cnm2(0:4,0:4), Snm2(0:4,0:4)
 
       npass = 0
       nfail = 0
@@ -140,6 +141,44 @@ c     ---------------------------------------------------------
      &              q_ref(4), 1.d-9, npass, nfail)
       call assert_d('CF5 tau matches tess22_force', tau_gen,
      &              tau_ref, 1.d-9, npass, nfail)
+
+c     ---------------------------------------------------------
+c     CR1-CR4: rotate_tess_coeffs reduces exactly to the (2,2)-
+c     specific A_tess/B_tess formula (issue #29) at m=2, and
+c     correctly leaves m=0 (zonal) terms unrotated
+c     ---------------------------------------------------------
+      theta_test = 37.284d0
+      c22raw = 1.7d0
+      s22raw = -0.9d0
+      c20raw = 3.3d0
+
+      do n = 0, 4
+         do m = 0, 4
+            Cnm(n,m) = 0.d0
+            Snm(n,m) = 0.d0
+         end do
+      end do
+      Cnm(2,2) = c22raw
+      Snm(2,2) = s22raw
+      Cnm(2,0) = c20raw
+
+      call rotate_tess_coeffs(4, Cnm, Snm, theta_test, Cnm2, Snm2)
+
+      pi_t = 4.d0*datan(1.d0)
+      d2r_t = pi_t/180.d0
+      A_ref = c22raw*dcos(2.d0*theta_test*d2r_t)
+     &      - s22raw*dsin(2.d0*theta_test*d2r_t)
+      B_ref = c22raw*dsin(2.d0*theta_test*d2r_t)
+     &      + s22raw*dcos(2.d0*theta_test*d2r_t)
+
+      call assert_d('CR1 C22 rot matches A_tess formula', Cnm2(2,2),
+     &              A_ref, 1.d-12, npass, nfail)
+      call assert_d('CR2 S22 rot matches B_tess formula', Snm2(2,2),
+     &              B_ref, 1.d-12, npass, nfail)
+      call assert_d('CR3 C20 unrotated (m=0)', Cnm2(2,0), c20raw,
+     &              1.d-14, npass, nfail)
+      call assert_d('CR4 S20 unrotated (m=0)', Snm2(2,0), 0.d0,
+     &              1.d-14, npass, nfail)
 
       write(*,*) ''
       write(*,*) '=============================================='

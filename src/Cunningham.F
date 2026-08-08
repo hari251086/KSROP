@@ -253,3 +253,46 @@ c     ============================================================
 
       return
       end
+
+c     ============================================================
+      subroutine rotate_tess_coeffs(nmax, Cnm, Snm, theta_deg,
+     &                               Cnm_rot, Snm_rot)
+c     KSROP issue #30: generalizes the (2,2)-specific GMST-rotation
+c     trick already used for A_tess/B_tess (issue #29) to every
+c     loaded (n,m) term. tess_general_force operates on inertial
+c     x,y,z (from the KS bilinear map, same as tess22_force always
+c     has), not body-fixed coordinates, so each order-m coefficient
+c     pair needs its own m*theta rotation -- not the fixed 2*theta
+c     the (2,2)-only case used -- to compensate for using inertial
+c     longitude instead of body-fixed longitude lambda_body =
+c     lambda_inertial - theta:
+c       C'_{n,m} = C_{n,m}*cos(m*theta) - S_{n,m}*sin(m*theta)
+c       S'_{n,m} = C_{n,m}*sin(m*theta) + S_{n,m}*cos(m*theta)
+c     Verified (2026-08-08, KSROP#30) by direct trigonometric
+c     expansion that this exactly reproduces
+c     C_{n,m}*cos(m*lambda_body)+S_{n,m}*sin(m*lambda_body) when
+c     evaluated at inertial longitude -- the same identity the
+c     (2,2)-only A_tess/B_tess formula already relies on, here
+c     generalized to arbitrary m (m=0 zonal terms are correctly
+c     left unrotated: cos(0)=1, sin(0)=0, identity transform).
+c     ============================================================
+      implicit double precision (a-h,o-z)
+      double precision mth
+      dimension Cnm(0:nmax,0:nmax), Snm(0:nmax,0:nmax)
+      dimension Cnm_rot(0:nmax,0:nmax), Snm_rot(0:nmax,0:nmax)
+
+      pi = 4.d0*datan(1.d0)
+      d2r = pi/180.d0
+
+      do n = 0, nmax
+         do m = 0, n
+            mth = dble(m)*theta_deg*d2r
+            cm = dcos(mth)
+            sm = dsin(mth)
+            Cnm_rot(n,m) = Cnm(n,m)*cm - Snm(n,m)*sm
+            Snm_rot(n,m) = Cnm(n,m)*sm + Snm(n,m)*cm
+         end do
+      end do
+
+      return
+      end
