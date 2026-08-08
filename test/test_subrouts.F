@@ -630,6 +630,49 @@ c     Fixture row "4 0  -0.162351800000000D-05 ..." -> c_j(4)
      &            eps10, npass, nfail)
 
 c     ==============================================================
+c     gmst_deg: Greenwich Mean Sidereal Time (issue #29, tesseral
+c     harmonics -- body-fixed rotation angle for longitude lambda)
+c     ==============================================================
+      write(*,*) ''
+      write(*,*) '  --- gmst_deg (Greenwich Mean Sidereal Time) ---'
+
+c     GM1: at J2000.0 exactly (djd=2451545.0), dtt=0 and t=0, so the
+c     formula reduces to its own leading constant -- a direct
+c     identity check on the constant term.
+      call gmst_deg(2451545.0d0, theta_gm)
+      call assert('GM1 GMST at J2000.0 = leading constant',
+     &            theta_gm, 280.46061837d0, eps10, npass, nfail)
+
+c     GM2: range check across several epochs spanning decades --
+c     result must always be normalized to [0,360).
+      iall_ok = 1
+      do i = 0, 20
+         djd_gm = 2400000.5d0 + dble(i)*2000.d0
+         call gmst_deg(djd_gm, theta_gm)
+         if (theta_gm .lt. 0.d0 .or. theta_gm .ge. 360.d0)
+     &      iall_ok = 0
+      end do
+      if (iall_ok .eq. 1) then
+         write(*,*) '  [PASS]  GM2 range in [0,360) across 21 epochs'
+         npass = npass + 1
+      else
+         write(*,*) '  [FAIL]  GM2 range in [0,360) across 21 epochs'
+         nfail = nfail + 1
+      end if
+
+c     GM3: self-consistency -- advancing by exactly 1 solar day must
+c     advance GMST by the formula's own linear rate coefficient
+c     (360.98564736629 deg/day), modulo 360, independent of any
+c     external reference value.
+      call gmst_deg(2451545.0d0, theta_a)
+      call gmst_deg(2451546.0d0, theta_b)
+      dtheta_gm = theta_b - theta_a
+      if (dtheta_gm .lt. 0.d0) dtheta_gm = dtheta_gm + 360.d0
+      call assert('GM3 one-day advance matches linear rate mod 360',
+     &            dtheta_gm, dmod(360.98564736629d0, 360.d0),
+     &            1.d-8, npass, nfail)
+
+c     ==============================================================
 c     Summary
 c     ==============================================================
       write(*,*) '=============================================='

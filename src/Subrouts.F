@@ -545,6 +545,39 @@ c     ============================================================
       return
       end
 
+c     ============================================================
+      subroutine gmst_deg(djd, theta)
+c     Greenwich Mean Sidereal Time (IAU 1982 / Meeus, "Astronomical
+c     Algorithms" 2nd ed.), degrees, normalized to [0,360). This is
+c     the Earth's prime-meridian rotation angle at Julian date djd,
+c     for use as the body-fixed reference angle in tesseral-harmonic
+c     longitude (KSROP issue #29): geographic longitude
+c       lambda = atan2(x(2),x(1)) - theta
+c     (KSROP's own x(1)/x(2)=X/Y equatorial convention -- confirmed
+c     against car2oe/solarnpv -- not to be confused with the XJR
+c     thesis's own tan(alpha)=x2/x3 notation, which uses a different
+c     internal axis labeling and does not transfer directly).
+c
+c     Evaluated directly at the current epoch rather than split into
+c     a fixed reference angle plus a separate linear rate term from
+c     t0 -- GMST already is exactly that angle as a function of time
+c     (including its own quadratic precession-rate correction), so
+c     this is both simpler and more accurate than propagating a
+c     rate from a stored epoch.
+c     ============================================================
+      implicit double precision (a-h,o-z)
+
+      dtt = djd - 2451545.0d0
+      t = dtt/36525.0d0
+
+      theta = 280.46061837d0 + 360.98564736629d0*dtt
+     &      + 0.000387933d0*t*t - t*t*t/38710000.0d0
+
+      theta = dmod(theta, 360.0d0)
+      if (theta .lt. 0.0d0) theta = theta + 360.0d0
+
+      return
+      end
 
       function atan3(a,b)
       implicit double precision (a-h,o-z)
