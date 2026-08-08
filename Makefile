@@ -37,8 +37,13 @@ TEST_TLE2OPM_BIN = test_tle2opm
 TEST_SW_SRC = test/test_sw.F src/swx.F src/Subrouts.F src/Legendre.F
 TEST_SW_BIN = test_sw
 
+TEST_CUNNINGHAM_SRC = test/test_cunningham.F src/Cunningham.F \
+                      src/Subrouts.F src/Legendre.F
+TEST_CUNNINGHAM_BIN = test_cunningham
+
 ALL_TEST_BINS = $(TEST_BIN) $(TEST_BUGS_BIN) $(TEST_TLE_BIN) \
-                $(TEST_TLE2SV_BIN) $(TEST_TLE2OPM_BIN) $(TEST_SW_BIN)
+                $(TEST_TLE2SV_BIN) $(TEST_TLE2OPM_BIN) $(TEST_SW_BIN) \
+                $(TEST_CUNNINGHAM_BIN)
 
 .PHONY: all tools tests run test clean
 
@@ -71,6 +76,9 @@ $(TEST_TLE2OPM_BIN): $(TEST_TLE2OPM_SRC)
 
 $(TEST_SW_BIN): $(TEST_SW_SRC)
 	$(FC) $(FFLAGS) $(TEST_SW_SRC) -o $(TEST_SW_BIN)
+
+$(TEST_CUNNINGHAM_BIN): $(TEST_CUNNINGHAM_SRC)
+	$(FC) $(FFLAGS) $(TEST_CUNNINGHAM_SRC) -o $(TEST_CUNNINGHAM_BIN)
 
 run: $(TARGET)
 	./$(TARGET)

@@ -1,5 +1,5 @@
 name = "ksrop"
-version = "2.6.0"
+version = "2.7.0"
 license = "license"
 author = "Harishkumar Sellamuthu"
 description = "KS-regularized orbit propagator, TLE/SGP4-SDP4, gravity + drag + third-body force model"
@@ -61,3 +61,8 @@ main = "test_tle2opm.F"
 name = "test_sw"
 source-dir = "test"
 main = "test_sw.F"
+
+[[test]]
+name = "test_cunningham"
+source-dir = "test"
+main = "test_cunningham.F"
