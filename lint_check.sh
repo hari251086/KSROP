@@ -13,8 +13,8 @@
 #
 # Exit code: 0 = all clean, 1 = issues found
 
-SRCFILES="app/driver_KS.F src/Subrouts.F src/TLEread.F src/Legendre.F app/tle2opm.F src/swx.F"
-TESTFILES="test/test_subrouts.F test/test_bugs.F test/test_tle.F test/test_tle2sv.F test/test_tle2opm.F test/test_sw.F"
+SRCFILES="app/driver_KS.F src/Subrouts.F src/TLEread.F src/Legendre.F app/tle2opm.F src/swx.F src/Cunningham.F"
+TESTFILES="test/test_subrouts.F test/test_bugs.F test/test_tle.F test/test_tle2sv.F test/test_tle2opm.F test/test_sw.F test/test_cunningham.F"
 ALLFILES="$SRCFILES $TESTFILES"
 
 STRICT=0
