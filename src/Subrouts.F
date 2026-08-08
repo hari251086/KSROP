@@ -697,6 +697,49 @@ c     ============================================================
       return
       end
 
+c     ============================================================
+      subroutine geo_coeff_tess22(fname, c22, s22)
+c     Reads the degree-2 order-2 (sectorial) tesseral gravity
+c     coefficients from a gravity-coefficient file (same EGM2008
+c     row format as geo_coeff_body), converting the file's
+c     normalized C-bar/S-bar to the unnormalized C22/S22 this
+c     repo's force-model convention uses -- generalizing
+c     geo_coeff_body's own zonal "-sqrt(2n+1)" normalization to the
+c     full (n,m) factor N_{n,m} = sqrt[(n-m)!(2n+1)(2-delta_0m)/
+c     (n+m)!] (XJR thesis eq. 3.3.1-3.3.2), which for (2,2) reduces
+c     to sqrt(5/12). Verified against known Earth literature values
+c     (C22~1.5745e-6, S22~-0.9038e-6) before trusting this factor.
+c
+c     Phase 3 of issue #29 (tesseral harmonics) -- (2,2) only, not a
+c     general (n,m) loader; extend if/when a further term is needed.
+c
+c     Sets c22=s22=0 if no (2,2) row is found (e.g. a zonal-only
+c     file), so a caller can treat that as "tesseral term off"
+c     without a separate not-found flag.
+c     ============================================================
+      implicit double precision (a-h,o-z)
+      character*(*) fname
+      integer ideg, iord
+
+      open (unit = 7, file = fname)
+
+      c22 = 0.d0
+      s22 = 0.d0
+ 20   continue
+         read(7,*,end=10) ideg, iord, cnm, snm, sg1, sg2
+         if (ideg .eq. 2 .and. iord .eq. 2) then
+            xnorm = dsqrt(5.d0/12.d0)
+            c22 = xnorm*cnm
+            s22 = xnorm*snm
+            goto 10
+         end if
+      goto 20
+ 10   continue
+
+      close(7)
+      return
+      end
+
 c     ============================================================      
       subroutine solarnpv(dj,s)
 c     Compute sun position vector in inertial geo-centric frame

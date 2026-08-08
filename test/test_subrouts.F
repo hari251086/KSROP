@@ -656,6 +656,31 @@ c     Fixture row "4 0  -0.162351800000000D-05 ..." -> c_j(4)
      &            eps10, npass, nfail)
 
 c     ==============================================================
+c     geo_coeff_tess22: (2,2) tesseral coefficient loader (issue #29,
+c     Phase 3). The fixture's "2 2" row carries Earth's own real
+c     EGM2008 C-bar22/S-bar22 values, so this also cross-checks the
+c     sqrt(5/12) normalization factor against known literature
+c     magnitudes (unnormalized C22~1.5745e-6, S22~-0.9038e-6), not
+c     just internal self-consistency.
+c     ==============================================================
+      write(*,*) ''
+      write(*,*) '  --- geo_coeff_tess22 (degree-2 tesseral) ---'
+
+      call geo_coeff_tess22('test/fixture_geo_coeff.dat', c22_t,
+     &                      s22_t)
+
+      call assert('GT1 C22 from fixture (2,2) row',
+     &            c22_t, dsqrt(5.d0/12.d0)*0.243938357328313d-5,
+     &            eps10, npass, nfail)
+      call assert('GT2 S22 from fixture (2,2) row',
+     &            s22_t, dsqrt(5.d0/12.d0)*(-0.140027370385934d-5),
+     &            eps10, npass, nfail)
+      call assert('GT3 C22 near known Earth literature value',
+     &            c22_t, 1.5745d-6, 5.d-10, npass, nfail)
+      call assert('GT4 S22 near known Earth literature value',
+     &            s22_t, -0.9038d-6, 5.d-10, npass, nfail)
+
+c     ==============================================================
 c     gmst_deg: Greenwich Mean Sidereal Time (issue #29, tesseral
 c     harmonics -- body-fixed rotation angle for longitude lambda)
 c     ==============================================================
