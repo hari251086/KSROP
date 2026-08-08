@@ -113,16 +113,18 @@ c     as a running product over the 2m-term ratio (n+m)!/(n-m)!
 c     rather than separate factorials, to stay numerically stable at
 c     higher degree.
 c
-c     Sign convention (KSROP#30, resolved 2026-08-08 -- see issue for
-c     the full derivation): m=0 (zonal) rows get an extra minus sign,
-c     matching geo_coeff_body's own "-sqrt(2n+1)*Cnm" convention (the
-c     traditional J_n = -C_n0 relabeling universal to zonal-only
-c     literature); m>0 (tesseral/sectorial) rows do not, matching
-c     geo_coeff_tess22's own convention directly. Both are already
-c     independently validated (zonal via GMAT; (2,2) via #29 Phase 5
-c     and the Cunningham cross-check in #30) -- this is not a new
-c     assumption, it is what makes the general formula below
-c     reproduce both already-correct special cases exactly.
+c     Scope is deliberately m>0 (tesseral/sectorial) only -- m=0
+c     (zonal) rows are always skipped, even if present in the file.
+c     KSROP's existing geo_coeff/aleg pathway already handles zonal
+c     terms; loading them here too would double-count them once this
+c     loader's output is summed into the same force alongside that
+c     existing path (a real bug caught 2026-08-08 via the
+c     driver_KS.F integration test -- an unexpectedly large
+c     perturbation traced directly to a first version of this loader
+c     that did not skip m=0). No sign flip is needed for m>0 rows,
+c     matching geo_coeff_tess22's own convention directly -- already
+c     independently validated ((2,2) via #29 Phase 5 and the
+c     Cunningham cross-check in #30).
 c
 c     Missing (n,m) rows are left at zero (auto-detect: a zonal-only
 c     or lower-degree file leaves the corresponding entries inert,
@@ -142,24 +144,25 @@ c     ============================================================
 
       open (unit = 7, file = fname)
 
+c     m=0 (zonal) rows are deliberately skipped -- KSROP's existing
+c     geo_coeff/aleg pathway already handles zonal terms; loading
+c     them here too would double-count them when this loader's
+c     output is summed into the same force alongside that existing
+c     path (caught 2026-08-08 via the driver_KS.F integration test:
+c     an unexpectedly large perturbation traced directly to this).
+c     This loader's scope is genuinely m>0 tesseral/sectorial terms
+c     only, matching geo_coeff_tess22's own original (2,2) scope.
  20   continue
          read(7,*,end=10) ideg, iord, cnmv, snmv, sg1, sg2
          if (ideg .ge. 2 .and. ideg .le. nmax
-     &       .and. iord .ge. 0 .and. iord .le. ideg) then
+     &       .and. iord .ge. 1 .and. iord .le. ideg) then
             ratio_fact = 1.d0
             do k = ideg-iord+1, ideg+iord
                ratio_fact = ratio_fact * dble(k)
             end do
-            if (iord .eq. 0) then
-               del0m = 1.d0
-               sgn = -1.d0
-            else
-               del0m = 2.d0
-               sgn = 1.d0
-            end if
-            xnorm = dsqrt(dble(2*ideg+1)*del0m/ratio_fact)
-            Cnm(ideg,iord) = sgn*xnorm*cnmv
-            Snm(ideg,iord) = sgn*xnorm*snmv
+            xnorm = dsqrt(dble(2*ideg+1)*2.d0/ratio_fact)
+            Cnm(ideg,iord) = xnorm*cnmv
+            Snm(ideg,iord) = xnorm*snmv
          end if
       goto 20
  10   continue

@@ -71,14 +71,29 @@ c     Value of pi, degree to radians and radians to degree
       dimension cal(6),ts(3),tm(3),opt(3),n_force(3)
       dimension RbyRs(cn0),RbyRm(cn0),cn_m(cn0),cn_s(cn0),Rm(n*2)
       dimension qsun(4),qmoon(4),slambda(cn0),olambda(cn0),Rs(n*2)
-c     Tesseral (2,2) term (issue #29): q22 is the KS-element force
-c     contribution, amue-free like q(j) itself; tau22_tess likewise
-c     amue-free (amue applied explicitly when added to Tau_geo,
-c     matching Tau_geo's own convention). c22_tess/s22_tess default
-c     to 0 (auto-detect: absent (2,2) row in the gravity file, or
-c     ngeo_deg<=1, means this term contributes exactly zero -- see
-c     initialization below).
-      dimension q22(4)
+c     General (n,m) tesseral/mascon harmonics (issue #30, replacing
+c     issue #29's (2,2)-only q22/tess22_force): q_gen is the
+c     KS-element force contribution, amue-free like q(j) itself;
+c     tau_gen likewise amue-free (amue applied explicitly when added
+c     to Tau_geo, matching Tau_geo's own convention). Cnm_tess/
+c     Snm_tess/Cnm_rot/Snm_rot are allocated once degree ntess_use is
+c     known (below); a missing (n,m) row in the gravity file, or
+c     ngeo_deg<=1, means that term's contribution is exactly zero --
+c     the same auto-detect convention #29 already used.
+c     ntess_cap bounds the general tesseral degree independently of
+c     ngeo_deg (which can legitimately run to 2190 for zonal-only
+c     precision): the Cunningham recursion is O(n^2) per step, not
+c     O(n) like the zonal aLegP path, so reusing ngeo_deg directly
+c     would make already-expensive high-degree zonal-only runs far
+c     more expensive for no benefit -- real tesseral/mascon tables
+c     (this issue's own Mars/Lunar motivation) don't need high
+c     degree. Revisit this constant if a future consumer genuinely
+c     needs more.
+      integer ntess_cap, ntess_use
+      parameter (ntess_cap = 10)
+      dimension q_gen(4)
+      double precision, allocatable :: Cnm_tess(:,:), Snm_tess(:,:)
+      double precision, allocatable :: Cnm_rot(:,:), Snm_rot(:,:)
 c     Drag: atmosphere tables and KS drag perturbation vectors
       dimension ALT_atm(ndim_atm),DEN_atm(ndim_atm),SCH_atm(ndim_atm)
       dimension qdrag(4),p_drag(3)
@@ -225,24 +240,38 @@ c     -----------------------------------------------------------
 
       write(*,*) '=============================================='
 
-c     Tesseral (2,2) coefficients (issue #29): default off; only
-c     attempted when ngeo_deg>1 (same guard as geo_coeff below),
-c     since ngeo_deg<=1 users may not have the EGM2008 file at all.
-c     geo_coeff_tess22 itself leaves these at 0 if no (2,2) row is
-c     present, so this is a genuine auto-detect, not a hard
-c     dependency on the row existing.
-      c22_tess = 0.d0
-      s22_tess = 0.d0
+c     General (n,m) tesseral/mascon coefficients (issue #30):
+c     ntess_use<2 (from ngeo_deg<=1, or a large ngeo_deg clipped by
+c     ntess_cap only on its own -- ntess_use is always >=1 whenever
+c     ngeo_deg>1) means geo_coeff_tess_general's own load condition
+c     (ideg>=2) can never match, leaving these arrays all-zero --
+c     the same genuine auto-detect #29 already relied on, not a
+c     hard dependency on the row existing.
+      ntess_use = min(ngeo_deg, ntess_cap)
+      allocate(Cnm_tess(0:ntess_use,0:ntess_use),
+     &         Snm_tess(0:ntess_use,0:ntess_use),
+     &         Cnm_rot(0:ntess_use,0:ntess_use),
+     &         Snm_rot(0:ntess_use,0:ntess_use))
 
       if(ngeo_deg.eq.0.or.ngeo_deg.eq.1) then
          do i = 1,cn0
             c_j(i) = 0.d0
          end do
+c        No EGM2008 file guaranteed present in this regime (same
+c        reasoning as the zonal branch above) -- zero directly
+c        rather than calling geo_coeff_tess_general, which would
+c        open the file unconditionally.
+         do i = 0,ntess_use
+            do j = 0,ntess_use
+               Cnm_tess(i,j) = 0.d0
+               Snm_tess(i,j) = 0.d0
+            end do
+         end do
       else
 !     compute j_n values
          call geo_coeff(ngeo_deg,c_j)
-         call geo_coeff_tess22('input/EGM2008_to2190_TideFree',
-     &        c22_tess, s22_tess)
+         call geo_coeff_tess_general('input/EGM2008_to2190_TideFree',
+     &        ntess_use, Cnm_tess, Snm_tess)
       end if
 
 !     Initialization
@@ -258,15 +287,14 @@ c     dependency on the row existing.
       call solarnpv(djulian,ts)
       call lunarpv(djulian,tm)
 
-c     Tesseral (2,2): Earth's rotation angle at this epoch, and the
-c     resulting time-dependent (not position-dependent) A/B
-c     coefficients tess22_force needs -- see gmst_deg/tess22_force
-c     header comments (KSROP issue #29).
+c     General (n,m) tesseral (issue #30): Earth's rotation angle at
+c     this epoch, and the resulting time-dependent (not position-
+c     dependent) rotated coefficient table tess_general_force needs
+c     -- see gmst_deg/rotate_tess_coeffs/tess_general_force header
+c     comments.
       call gmst_deg(djulian, theta_tess)
-      A_tess = c22_tess*dcos(2.d0*theta_tess*d2r)
-     &       - s22_tess*dsin(2.d0*theta_tess*d2r)
-      B_tess = c22_tess*dsin(2.d0*theta_tess*d2r)
-     &       + s22_tess*dcos(2.d0*theta_tess*d2r)
+      call rotate_tess_coeffs(ntess_use, Cnm_tess, Snm_tess,
+     &                        theta_tess, Cnm_rot, Snm_rot)
 
       R(1) = vmn(x)
       V = vmn(xd)
@@ -589,14 +617,15 @@ c     form to 9 significant digits).
      &                   *ObyR(i)
             end do
 
-c     Tesseral (2,2) contribution (issue #29): q22/tau22_tess are
-c     amue-free, like q(j)/Tau_geo's own zonal accumulation, so
+c     General (n,m) tesseral contribution (issue #30): q_gen/tau_gen
+c     are amue-free, like q(j)/Tau_geo's own zonal accumulation, so
 c     amue is applied here exactly as it already is for Tau_geo
-c     above. A_tess=B_tess=0 (no (2,2) data loaded) makes q22 and
-c     tau22_tess identically zero -- see tess22_force/gmst_deg.
-            call tess22_force(u, R_Earth, A_tess, B_tess, q22,
-     &                        tau22_tess)
-            Tau_geo = Tau_geo + amue*tau22_tess
+c     above. All-zero Cnm_rot/Snm_rot (no tesseral data loaded)
+c     makes q_gen and tau_gen identically zero -- see
+c     tess_general_force/gmst_deg.
+            call tess_general_force(u, R_Earth, ntess_use, Cnm_rot,
+     &                               Snm_rot, q_gen, tau_gen)
+            Tau_geo = Tau_geo + amue*tau_gen
 
             Tau_3body1 = 0.d0
             do i = 2,nsun_deg
@@ -650,11 +679,11 @@ c     -----------------------------------------------------------
                   q(j)=qj+q(j)
                end do
 
-c     Tesseral (2,2) contribution, computed once (all 4 components
-c     together) above -- amue-free like the zonal q(j) sum, so it
-c     is picked up automatically by the same "q(j)*amue" in
-c     z(j+1)/z(j+5) below.
-               q(j) = q(j) + q22(j)
+c     General (n,m) tesseral contribution, computed once (all 4
+c     components together) above -- amue-free like the zonal q(j)
+c     sum, so it is picked up automatically by the same
+c     "q(j)*amue" in z(j+1)/z(j+5) below.
+               q(j) = q(j) + q_gen(j)
 
 !     third-body terms
                call u2qu(u,qu,j)
@@ -743,14 +772,12 @@ c     -----------------------------------------------------------
             call solarnpv(djulian1, ts)
             call lunarpv(djulian1, tm)
 
-c     Tesseral (2,2): refresh at the same cadence as the third-body
-c     ephemerides above, since GMST (unlike A_tess/B_tess's own
-c     C22/S22 inputs) changes with time, not position.
+c     General (n,m) tesseral: refresh at the same cadence as the
+c     third-body ephemerides above, since GMST (unlike Cnm_tess/
+c     Snm_tess's own C/S inputs) changes with time, not position.
             call gmst_deg(djulian1, theta_tess)
-            A_tess = c22_tess*dcos(2.d0*theta_tess*d2r)
-     &             - s22_tess*dsin(2.d0*theta_tess*d2r)
-            B_tess = c22_tess*dsin(2.d0*theta_tess*d2r)
-     &             + s22_tess*dcos(2.d0*theta_tess*d2r)
+            call rotate_tess_coeffs(ntess_use, Cnm_tess, Snm_tess,
+     &                              theta_tess, Cnm_rot, Snm_rot)
 
             call third_body_aux(nsun_deg,  x, ts, R(1), amuS,
      &                          Rs(1), RbyRs, first_s, cphi_s, cphi_s2)
