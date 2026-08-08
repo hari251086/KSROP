@@ -85,9 +85,14 @@ Read from `input.dat` (via `driver_KS.F`) in this fixed order:
      with its own configurable Legendre degree).
    - Evaluate the total perturbing-force right-hand-side in KS-element
      space: oblateness (zonal Legendre sum via `aLegP`, up to `ngeo_deg`),
-     luni-solar third-body terms, atmospheric drag (see step 5), and SRP
-     (see step 6) — all summed into one force vector consistent with the KS
-     equations of motion (the "shape·u + r·Lᵀ∇shape" convention, i.e. the
+     the (2,2) sectorial **tesseral** term (`tess22_force`, issue #29 —
+     auto-detected from a `(2,2)` row in the loaded gravity file, zero
+     contribution otherwise; body-fixed longitude alignment via
+     `gmst_deg`, refreshed at the same per-stage cadence as the third-body
+     ephemerides since GMST is time- not position-dependent), luni-solar
+     third-body terms, atmospheric drag (see step 5), and SRP (see step 6)
+     — all summed into one force vector consistent with the KS equations
+     of motion (the "shape·u + r·Lᵀ∇shape" convention, i.e. the
      $z$-equation of the KS system needs both the harmonic-oscillator shape
      term and the gradient-of-the-perturbing-potential term correctly
      combined — a convention this project got wrong once and fixed, see
@@ -162,6 +167,20 @@ flowchart TD
 - **Oblateness potential**: zonal harmonic sum via associated Legendre
   polynomials, $V_{oblate} = \sum_{n\ge2} \mu R_{Earth}^n
   c_n / r^{n+1}\, P_n(\sin\phi)$, configurable up to degree 2190 (EGM2008).
+- **(2,2) tesseral potential** (issue #29): $\hat V_{22} = 3R_{Earth}^2/r^5
+  \,[A(x_1^2-x_2^2) + 2Bx_1x_2]$ in inertial Cartesian coordinates, with
+  $A=C_{22}\cos2\theta - S_{22}\sin2\theta$, $B=C_{22}\sin2\theta +
+  S_{22}\cos2\theta$ and $\theta$ the GMST rotation angle — algebraically
+  identical (verified symbolically) to the standard body-fixed form
+  $-\mu/r\,(R/r)^2\,P_2^2(\sin\phi)\,[C_{22}\cos2\lambda + S_{22}\sin2\lambda]$
+  up to an overall sign consistent with this project's own $q(j)$/force
+  convention. KS-element force and time-element contributions derived via
+  $q(j) = V\cdot u(j) + (r/2)\,\partial V/\partial u_j$, $\tau = -2rV -
+  (r/2)\sum_j u(j)\,\partial V/\partial u_j$ — the same recipe already used
+  for the zonal terms above, verified to reproduce them exactly at
+  independent rational test points before being applied to this new term.
+  Only the sectorial $(2,2)$ term is implemented; general $(n,m)$ tesseral/
+  mascon support does not exist (see §9).
 - **Drag co-rotation factor**: $F_{dg} = \left(1 - \dfrac{R_{PO}\,\omega_E\,
   F_{rot}\cos\xi}{V_{PO}}\right)^2$, refreshed from the current revolution's
   own perigee state.
@@ -191,9 +210,10 @@ relevant one level up, in `OREM`'s RSM step, which runs 9 independent
 aren't (run sequentially).
 
 ## 8. Validation & Accuracy
-539 total checks across 6 Fortran test programs, run via `test_all.sh`
-(lint + all suites): `test_subrouts.F` (67, coordinate transforms/utility
-subroutines), `test_tle.F` (147, TLE parsing), `test_tle2sv.F` (156,
+554 total checks across 6 Fortran test programs, run via `test_all.sh`
+(lint + all suites): `test_subrouts.F` (82, coordinate transforms/utility
+subroutines, incl. `gmst_deg`/`geo_coeff_tess22`/`tess22_force`),
+`test_tle.F` (147, TLE parsing), `test_tle2sv.F` (156,
 SGP4/SDP4 + frame conversions), `test_tle2opm.F` (21, TLE-to-OPM pipeline),
 `test_bugs.F` (17, regression tests for specific historical bugs),
 `test_sw.F` (11, epoch-resolved space weather — loader/interpolation
@@ -210,7 +230,34 @@ full-force (drag+oblateness+third-body) agreement is 1.9 km over 2 GTO
 revolutions — with the drag model's own inherent spread (not a KSROP bug)
 identified as the dominant remaining source of that residual.
 
+**(2,2) tesseral term (issue #29, 2026-08-08)**: the KS-element force law
+itself was verified exactly twice — symbolically against this repo's own
+GMAT-validated zonal `q(j)`/`Tau_geo` formula (Phase 4, exact rational
+arithmetic), and symbolically against Alvarellos (2009)'s independently
+published Mars areopotential (2,2) term, which also reproduced that
+paper's own derived $\lambda_{22}$/$J_{22}$ values to stated precision.
+A direct GMAT cross-check (Degree=2/Order=2 vs. Order=0, same LEO case)
+gave an order-of-magnitude-consistent but phase-differing result —
+traced to `gmst_deg` being a mean (IAU 1982) sidereal-time formula versus
+GMAT's precise Earth-orientation kernels, not a force-law defect (see §9).
+Wiring into the live propagation loop confirmed genuinely active (not a
+silent no-op) via a controlled before/after run: ~27–35 m position
+divergence over 3 LEO revolutions with real vs. zeroed Earth (2,2)
+coefficients.
+
 ## 9. Known Limitations
+- **Tesseral gravity support is (2,2)-only**, not general $(n,m)$ — added
+  for issue #29 (motivated by a real Mars C₂₂/S₂₂ coefficient that a
+  zonal-only model couldn't represent), not a full tesseral/mascon field.
+  Extending to arbitrary $(n,m)$ would need a general force-law derivation
+  along the same lines, not just a loop bound change.
+- **`gmst_deg` is a mean (IAU 1982 polynomial) sidereal-time formula**, not
+  a true-rotation-angle model (no UT1-UTC, nutation, or polar-motion
+  correction). Confirmed via a GMAT cross-check (§8) to be precise enough
+  for the ~130-day timescales the (2,2) term's real motivating use case
+  (Mars areostationary libration, see KSROP-Mars) operates on, but not for
+  sub-day tesseral-phase accuracy — a future fix if that precision is ever
+  needed, not currently planned.
 - **No diurnal atmospheric density bulge** (day/night density variation) —
   confirmed absent from the drag model; a specified, literature-validated
   fix exists (Sharma 1997a's Santora-1975-based term) but is not
@@ -256,5 +303,6 @@ identified as the dominant remaining source of that residual.
   overlapping functionality (KS transforms, TLE reading) — not a shared
   source, a separate reimplementation (see `KSRENT-PY\ALGORITHM.md`).
 - **External data**: EGM2008 geopotential coefficients (`EGM2008_to2190_
-  TideFree`, ~231 MB, not committed in full — sourced separately), `ATM.DAT`
-  atmosphere table.
+  TideFree`, ~231 MB, not committed in full — sourced separately; its
+  `(2,2)` row also feeds `geo_coeff_tess22`, auto-detected — see §9),
+  `ATM.DAT` atmosphere table.
