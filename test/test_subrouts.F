@@ -34,10 +34,13 @@ c     --- declarations ---
       dimension tca_cal2(6), x1b(3), xd1b(3), cov1b(6,6)
       dimension x2b(3), xd2b(3), cov2b(6,6)
       dimension cj4(4)
+      dimension ut(4), upt(4), umt(4), q22t(4)
       character*23 creation_str, tca_str
       integer npass, nfail, iall_ok, iq1, iq2, iq3, iq4
 c     'm' is implicitly INTEGER (outside a-h, o-z) -- declare explicitly
       double precision miss_dist, miss_dist2
+c     max_err_q starts with 'm' -- same implicit-INTEGER trap
+      double precision max_err_q
 
 c     --- initialise common block from const_new.dat ---
       call init_constants()
@@ -135,6 +138,32 @@ c     ==============================================================
      &            vleg(4), -0.4375d0, eps10, npass, nfail)
       call assert('aLegP  P4(0.5) = -0.2890625',
      &            vleg(5), -0.2890625d0, eps10, npass, nfail)
+
+c     ==============================================================
+c     aLegendreP: associated Legendre P_l^m(x) at x = 0.5, verified
+c     directly against closed forms (geodesy convention -- no
+c     Condon-Shortley (-1)^m phase factor) for the (l=2,m=0..2) set
+c     needed by tesseral-harmonic degree 2 (issue #29). Not a new
+c     subroutine -- aLegendreP already existed (used by sun_azimuth)
+c     but had no direct unit test; this locks in that it is correct
+c     for the (2,2) sectorial term the tesseral force derivation
+c     will consume, rather than trusting the XJR thesis's own
+c     (possibly OCR-garbled) recurrence transcription.
+c
+c     Analytic values at x=0.5:
+c       P2^0(0.5) = (3*0.25-1)/2               = -0.125  (= P2(0.5))
+c       P2^1(0.5) = 3*0.5*sqrt(1-0.25)         =  1.299038105676658
+c       P2^2(0.5) = 3*(1-0.25)                 =  2.25
+c     ==============================================================
+      call assert('aLegendreP P2^0(0.5) = -0.125',
+     &            aLegendreP(2,0,0.5d0), -0.125d0, eps10,
+     &            npass, nfail)
+      call assert('aLegendreP P2^1(0.5) = 1.299038105677',
+     &            aLegendreP(2,1,0.5d0), 1.299038105676658d0, eps10,
+     &            npass, nfail)
+      call assert('aLegendreP P2^2(0.5) = 2.25',
+     &            aLegendreP(2,2,0.5d0), 2.25d0, eps10,
+     &            npass, nfail)
 
 c     ==============================================================
 c     10-15. car2ks -> ks2car roundtrip
@@ -630,6 +659,90 @@ c     Fixture row "4 0  -0.162351800000000D-05 ..." -> c_j(4)
      &            eps10, npass, nfail)
 
 c     ==============================================================
+c     geo_coeff_tess22: (2,2) tesseral coefficient loader (issue #29,
+c     Phase 3). The fixture's "2 2" row carries Earth's own real
+c     EGM2008 C-bar22/S-bar22 values, so this also cross-checks the
+c     sqrt(5/12) normalization factor against known literature
+c     magnitudes (unnormalized C22~1.5745e-6, S22~-0.9038e-6), not
+c     just internal self-consistency.
+c     ==============================================================
+      write(*,*) ''
+      write(*,*) '  --- geo_coeff_tess22 (degree-2 tesseral) ---'
+
+      call geo_coeff_tess22('test/fixture_geo_coeff.dat', c22_t,
+     &                      s22_t)
+
+      call assert('GT1 C22 from fixture (2,2) row',
+     &            c22_t, dsqrt(5.d0/12.d0)*0.243938357328313d-5,
+     &            eps10, npass, nfail)
+      call assert('GT2 S22 from fixture (2,2) row',
+     &            s22_t, dsqrt(5.d0/12.d0)*(-0.140027370385934d-5),
+     &            eps10, npass, nfail)
+      call assert('GT3 C22 near known Earth literature value',
+     &            c22_t, 1.5745d-6, 5.d-10, npass, nfail)
+      call assert('GT4 S22 near known Earth literature value',
+     &            s22_t, -0.9038d-6, 5.d-10, npass, nfail)
+
+c     ==============================================================
+c     tess22_force: (2,2) tesseral q(j)/tau contributions (issue
+c     #29, Phase 4). Cross-checked against a finite-difference
+c     gradient of the same Vhat22 potential (computed inline below,
+c     independent of tess22_force's own internals) -- the same
+c     check that caught two real errors during development (a wrong
+c     prefactor and a missing 1/r in the potential itself) before
+c     this formula was trusted.
+c     ==============================================================
+      write(*,*) ''
+      write(*,*) '  --- tess22_force (degree-2 tesseral q/tau) ---'
+
+      ut(1) = 3.1d0
+      ut(2) = -2.4d0
+      ut(3) = 5.2d0
+      ut(4) = 1.6d0
+      Rt_body = 2.3d0
+      At_coef = 0.31d0
+      Bt_coef = -0.17d0
+
+      call tess22_force(ut, Rt_body, At_coef, Bt_coef, q22t, tau22t)
+
+      rt = ut(1)**2+ut(2)**2+ut(3)**2+ut(4)**2
+      Vt = Vhat22_fd(ut, Rt_body, At_coef, Bt_coef)
+
+      ht = 1.0d-6
+      max_err_q = 0.d0
+      do j = 1,4
+         do k = 1,4
+            upt(k) = ut(k)
+            umt(k) = ut(k)
+         end do
+         upt(j) = upt(j) + ht
+         umt(j) = umt(j) - ht
+         dV_fd = (Vhat22_fd(upt,Rt_body,At_coef,Bt_coef)
+     &          - Vhat22_fd(umt,Rt_body,At_coef,Bt_coef)) / (2.d0*ht)
+         q_fd = Vt*ut(j) + 0.5d0*rt*dV_fd
+         err = dabs(q22t(j) - q_fd) / dabs(q_fd)
+         if (err .gt. max_err_q) max_err_q = err
+      end do
+      call assert('TZ1 q22(j) matches finite-difference gradient',
+     &            max_err_q, 0.d0, 1.d-6, npass, nfail)
+
+      tau_fd = -2.d0*rt*Vt
+      do j = 1,4
+         do k = 1,4
+            upt(k) = ut(k)
+            umt(k) = ut(k)
+         end do
+         upt(j) = upt(j) + ht
+         umt(j) = umt(j) - ht
+         dV_fd = (Vhat22_fd(upt,Rt_body,At_coef,Bt_coef)
+     &          - Vhat22_fd(umt,Rt_body,At_coef,Bt_coef)) / (2.d0*ht)
+         tau_fd = tau_fd - 0.5d0*rt*ut(j)*dV_fd
+      end do
+      err_tau = dabs(tau22t - tau_fd) / dabs(tau_fd)
+      call assert('TZ2 tau22 matches finite-difference gradient',
+     &            err_tau, 0.d0, 1.d-6, npass, nfail)
+
+c     ==============================================================
 c     gmst_deg: Greenwich Mean Sidereal Time (issue #29, tesseral
 c     harmonics -- body-fixed rotation angle for longitude lambda)
 c     ==============================================================
@@ -705,5 +818,26 @@ c     ============================================================
  20   format('  [',a4,']  ',a,/,
      &       '           got=',e20.13,'  exp=',e20.13,
      &       '  diff=',e10.3)
+      return
+      end
+
+c     ============================================================
+      function Vhat22_fd(uf, R_body, A_coef, B_coef)
+c     Standalone (independent of tess22_force) evaluation of the
+c     (2,2) tesseral potential, used only for the finite-difference
+c     cross-check test above -- deliberately NOT calling any
+c     production subroutine, so the test doesn't just check
+c     tess22_force against itself.
+c     ============================================================
+      implicit double precision (a-h,o-z)
+      dimension uf(4)
+
+      x1f = uf(1)**2 - uf(2)**2 - uf(3)**2 + uf(4)**2
+      x2f = 2.d0*(uf(1)*uf(2) - uf(3)*uf(4))
+      rf = uf(1)**2+uf(2)**2+uf(3)**2+uf(4)**2
+
+      Wf = A_coef*(x1f**2-x2f**2) + 2.d0*B_coef*x1f*x2f
+      Vhat22_fd = 3.d0*R_body**2/rf**5 * Wf
+
       return
       end

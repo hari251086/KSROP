@@ -697,7 +697,146 @@ c     ============================================================
       return
       end
 
-c     ============================================================      
+c     ============================================================
+      subroutine geo_coeff_tess22(fname, c22, s22)
+c     Reads the degree-2 order-2 (sectorial) tesseral gravity
+c     coefficients from a gravity-coefficient file (same EGM2008
+c     row format as geo_coeff_body), converting the file's
+c     normalized C-bar/S-bar to the unnormalized C22/S22 this
+c     repo's force-model convention uses -- generalizing
+c     geo_coeff_body's own zonal "-sqrt(2n+1)" normalization to the
+c     full (n,m) factor N_{n,m} = sqrt[(n-m)!(2n+1)(2-delta_0m)/
+c     (n+m)!] (XJR thesis eq. 3.3.1-3.3.2), which for (2,2) reduces
+c     to sqrt(5/12). Verified against known Earth literature values
+c     (C22~1.5745e-6, S22~-0.9038e-6) before trusting this factor.
+c
+c     Phase 3 of issue #29 (tesseral harmonics) -- (2,2) only, not a
+c     general (n,m) loader; extend if/when a further term is needed.
+c
+c     Sets c22=s22=0 if no (2,2) row is found (e.g. a zonal-only
+c     file), so a caller can treat that as "tesseral term off"
+c     without a separate not-found flag.
+c     ============================================================
+      implicit double precision (a-h,o-z)
+      character*(*) fname
+      integer ideg, iord
+
+      open (unit = 7, file = fname)
+
+      c22 = 0.d0
+      s22 = 0.d0
+ 20   continue
+         read(7,*,end=10) ideg, iord, cnm, snm, sg1, sg2
+         if (ideg .eq. 2 .and. iord .eq. 2) then
+            xnorm = dsqrt(5.d0/12.d0)
+            c22 = xnorm*cnm
+            s22 = xnorm*snm
+            goto 10
+         end if
+      goto 20
+ 10   continue
+
+      close(7)
+      return
+      end
+
+c     ============================================================
+      subroutine tess22_force(u, R_body, A_coef, B_coef, q22, tau22)
+c     KS-element force (q22) and time-element (tau22) contributions
+c     from the degree-2 order-2 (sectorial) tesseral gravity term,
+c     amue-free (matching this repo's own zonal q(j)/Tau_geo
+c     convention in driver_KS.F, where amue is applied externally).
+c     KSROP issue #29, Phase 4.
+c
+c     Potential (cross-checked against Alvarellos (2009), J. Astro-
+c     nautical Sciences 57(4):701-715, eq. 1's explicit mu/r leading
+c     factor -- the XJR thesis's own eq. 3.2.1, this repo's initial
+c     source for the general (n,m) geopotential form, turned out to
+c     be missing that factor in transcription; caught by this cross-
+c     check before it reached this formula, not trusted blindly):
+c       Vhat22 = 3*R_body^2/r^5 * W
+c       W = A_coef*(x1^2-x2^2) + 2*B_coef*x1*x2
+c     where A_coef = C22*cos(2*theta) - S22*sin(2*theta),
+c           B_coef = C22*sin(2*theta) + S22*cos(2*theta),
+c     theta = gmst_deg(t) (the caller's responsibility, once per
+c     force evaluation -- A_coef/B_coef are NOT functions of
+c     position, only of time via the body's rotation).
+c
+c     q(j) and tau22 are built from
+c       q(j) = V*u(j) + (r/2)*dV/du_j
+c       tau  = -2*r*V - (r/2)*sum_j(u(j)*dV/du_j)
+c     -- verified EXACTLY (symbolic substitution, not a numerical
+c     approximation) against this repo's own existing (GMAT-
+c     validated) zonal q(j) and Tau_geo formulas for degrees i=2 and
+c     i=3, at independent exact rational test points, before being
+c     trusted for this new term. The resulting q22/tau22 expressions
+c     were then further cross-checked against a Fortran-native
+c     finite-difference gradient of Vhat22 (independent of the
+c     symbolic derivation) to ~1e-9 relative agreement.
+c
+c     Generated via a computer-algebra system (common-subexpression
+c     form) rather than hand-transcribed, after hand-derivation
+c     attempts for this same formula produced several real errors
+c     during development (see KSROP issue #29 discussion) -- t0..t30
+c     are deliberately anonymous CSE temporaries, not meant to be
+c     individually meaningful; the physics is in the header above
+c     and in the q(j)/tau formulas it implements.
+c     ============================================================
+      implicit double precision (a-h,o-z)
+      dimension u(4), q22(4)
+
+      u1 = u(1)
+      u2 = u(2)
+      u3 = u(3)
+      u4 = u(4)
+
+      t0 = R_body**2
+      t1 = u2**2
+      t2 = u3**2
+      t3 = u1**2
+      t4 = u4**2
+      t5 = t3 + t4
+      t6 = t1 + t2 + t5
+      t7 = t6**(-5)
+      t8 = 3*t0*t7
+      t9 = 2*u1*u2 - 2*u3*u4
+      t10 = -t1 - t2 + t5
+      t11 = A_coef*(t10**2 - t9**2) + 2*B_coef*t10*t9
+      t12 = t11*u1
+      t13 = 0.5d0*t1 + 0.5d0*t2 + 0.5d0*t3 + 0.5d0*t4
+      t14 = 30*t0/t6**6
+      t15 = 4*t9
+      t16 = t15*u1
+      t17 = 4*t10
+      t18 = t17*u2
+      t19 = t15*u2
+      t20 = t17*u1
+      t21 = 3*t0*t7*(A_coef*(-t19 + t20) + B_coef*t16 + B_coef*t18)
+     &      - t12*t14
+      t22 = t11*u2
+      t23 = 3*t0*t7*(A_coef*(-t16 - t18) - B_coef*t19 + B_coef*t20)
+     &      - t14*t22
+      t24 = t11*u3
+      t25 = t15*u3
+      t26 = t17*u4
+      t27 = t17*u3
+      t28 = 3*t0*t7*(A_coef*(-t27 + 4*t9*u4) - B_coef*t25 - B_coef*t26)
+     &      - t14*t24
+      t29 = t11*u4
+      t30 = 3*t0*t7*(A_coef*(t25 + t26) + B_coef*t15*u4 - B_coef*t27)
+     &      - t14*t29
+
+      q22(1) = t12*t8 + t13*t21
+      q22(2) = t13*t23 + t22*t8
+      q22(3) = t13*t28 + t24*t8
+      q22(4) = t13*t30 + t29*t8
+      tau22 = t11*t8*(-2*t1 - 2*t2 - 2*t3 - 2*t4)
+     &      - t13*(t21*u1 + t23*u2 + t28*u3 + t30*u4)
+
+      return
+      end
+
+c     ============================================================
       subroutine solarnpv(dj,s)
 c     Compute sun position vector in inertial geo-centric frame
 c     (EME2000). Low-precision analytic series per Montenbruck &

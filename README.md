@@ -54,7 +54,7 @@ KSROP/
 │   └── ksrop.opm                        Initial Keplerian elements (OPM)
 │
 ├── test/
-│   ├── test_subrouts.F                   Unit tests (67 checks)
+│   ├── test_subrouts.F                   Unit tests (82 checks)
 │   ├── test_tle.F                        TLE reader tests (147 checks)
 │   ├── test_tle2sv.F                     SGP4/SDP4/frame tests (156 checks)
 │   ├── test_tle2opm.F                    TLE-to-OPM pipeline tests (21 checks)
@@ -119,7 +119,7 @@ a CCSDS OEM trajectory (`KSROP_<timestamp>.oem`) and a KS-elements debug dump
 ### Step 3: Verify with the test suite
 
 ```bash
-make test       # build everything + run test_all.sh (545 checks + 5 lint rules)
+make test       # build everything + run test_all.sh (554 checks + 5 lint rules)
 ```
 
 If this passes, your build is behaving identically to the one verified in CI (see
@@ -272,7 +272,7 @@ bash test_all.sh                             # lint + 419 Fortran + 120 integrat
 bash lint_check.sh                           # lint only (line length, precision, common blocks)
 ```
 
-**Total: 545 automated checks + 5 lint rules.**
+**Total: 554 automated checks + 5 lint rules.**
 
 ---
 
@@ -440,6 +440,8 @@ Step size is scaled by Γ = ω/ω_Kep to maintain accuracy across eccentricities
 |---|---|
 | `geo_coeff(n,c_j)` | Stream EGM2008 zonal harmonics up to degree n |
 | `geo_coeff_body(n,c_j,fname)` | Same, from an arbitrary gravity-coefficient file (non-Earth central bodies) |
+| `geo_coeff_tess22(fname,c22,s22)` | (2,2) tesseral coefficients, normalized→unnormalized (issue #29) |
+| `tess22_force(u,R,A,B,q22,tau22)` | KS-element force + time-element contribution from the (2,2) tesseral term (issue #29) |
 | `force_models(n_for,ngeo,s,amoon)` | Apply force model on/off flags |
 | `shadfncyl(x1,x2,x3,xs,ys,zs)` | Cylindrical shadow factor ν ∈ [0,1] |
 | `shadfncone(x1,x2,x3,xs,ys,zs)` | Conical shadow factor with penumbra |
@@ -586,4 +588,5 @@ EGM2008 streaming read: O(n²) lines for degree n (J2 = 3 lines, not 2.4M).
 | 2026-07-24 | **Migrated to fpm (Fortran Package Manager) packaging, v2.1.0**: restructured into `src/`(library)/`app/`(executables)/`test/`(test programs) with a new `fpm.toml` (`[fortran] source-form = "fixed"` — fpm defaults `.F` to free-form, which breaks column-1 comments immediately). Old Makefile/`test_all.sh`/`lint_check.sh`/`ci.yml` paths updated to match, not removed — both build paths work. Added a second CI job building+testing via `fpm`+gfortran on Linux, since that's the actual path any consumer resolving KSROP as a dependency (e.g. OREM) exercises. Tagged `v2.1.0`; OREM now depends on this tag via `fpm.toml`'s git dependency instead of hand-copied files. |
 | 2026-08-07 | Added `geo_coeff_body(n,c_j,fname)`: `geo_coeff` refactored into a thin Earth-default wrapper over a new file-parameterized entry point, so a consumer depending on KSROP as a library (e.g. a future lunar- or Mars-centered driver, see this repo's issues #26 and #27) can load its own gravity-coefficient file in the same EGM2008-row format without duplicating the parsing logic. No behavior change for existing callers. 3 new tests (`test/fixture_geo_coeff.dat`), 542/542 total. |
 | 2026-08-08 | **Tesseral harmonics, Phase 1 of 6 (issue #29, v2.4.0)**: added `gmst_deg(djd,theta)` (Greenwich Mean Sidereal Time, IAU 1982/Meeus) — the body-fixed rotation angle needed for tesseral-harmonic longitude (`λ = atan2(x(2),x(1)) − θ`), evaluated directly per-step from the already-tracked Julian date rather than propagated from a stored reference epoch. Grounded in M. Xavier James Raj's 2007 PhD thesis (Mahatma Gandhi University, supervisor Dr. R.K. Sharma) §3.2-3.3 for the geopotential/coordinate-chain physics only — not its §3.4 force-law derivation, which is canonical/Hamiltonian and does not match KSROP's own variation-of-parameters KS regular elements (Sellamuthu thesis eq. 2.55/2.56/2.59). 3 new tests, 545/545 total. Remaining phases (associated-Legendre grid, tesseral coefficient loader, force/time-element derivation, validation, KSROP-Lunar/Mars rollout) tracked in issue #29. |
+| 2026-08-08 | **Tesseral harmonics, Phases 2-4 of 6 (issue #29, v2.5.0)**: `aLegendreP` verified directly against closed forms for the (2,0)/(2,1)/(2,2) set (Phase 2, no code change — it was already correct); `geo_coeff_tess22(fname,c22,s22)` added, reading the (2,2) sectorial row and converting normalized to unnormalized coefficients via N₂,₂=√(5/12), cross-checked against known Earth literature values using the existing test fixture's real EGM2008 (2,2) row (Phase 3); `tess22_force(u,R,A,B,q22,tau22)` added — the KS-element force and time-element contributions from the (2,2) tesseral potential (Phase 4). The force-law derivation was genuinely hard: an initial recipe (from a paraphrased citation) was off by a large factor; reverse-engineering numerically from the existing zonal formula gave an inconsistent ratio; the published source (Sellamuthu & Sharma, *J. Spacecraft and Rockets* 55(5):1282-1288, 2018 — the actual primary source behind this repo's own KS regular-element equations) was located and read directly, but even its explicit J2 formula didn't reproduce cleanly by hand. Resolution: an exact symbolic (sympy) derivation, verified against KSROP's own existing zonal `q(j)`/`Tau_geo` at independent exact rational points for two different degrees, which also caught two real errors before they reached this formula — a wrong prefactor, and a missing `1/r` in the (2,2) potential itself (the thesis's own eq. 3.2.1 extraction was short one power of `r` relative to the standard geopotential form, caught by cross-checking against Alvarellos (2009), *J. Astronautical Sciences* 57(4):701-715, whose eq. 1 has an explicit `μ/r` leading factor). The resulting Fortran was further verified against a Fortran-native finite-difference gradient (~1e-9 relative agreement) before being trusted. Not yet wired into `driver_KS.F`'s propagation loop or GMAT-validated — that's Phases 5-6. 9 new tests, 554/554 total. |
 | 2026-07-25 | **Ported epoch-resolved space weather from OREM (issue #26 there)**: KSROP already had the `ATM2D.DAT` generator (`gen_atm2d_jr71.F`) but nothing in `driver_KS.F` ever consumed it at runtime — only OREM's downstream fork did. Added `src/swx.F` (`sw_load`/`atm2d_load`/`sw_tinf`/`atm2d_interp`, ported unchanged from OREM's already-validated code) and wired an auto-detect hook into `driver_KS.F`'s per-revolution drag setup: when `input/SW-All.csv` and `input/ATM2D.DAT` are both present, the reference density is evaluated at the real historical F10.7/Kp for that revolution's epoch instead of the static `ATM.DAT` table; absent either file, the legacy path runs unchanged. Kept the loader+consumer subroutines together in one `src/` file (unlike OREM's own split, which puts the consumers in `propagate_ks.F`) since `driver_KS.F` is a standalone `program` in `app/`, not a shared library file — fpm only auto-links `src/` into every target, so consumers placed in `app/driver_KS.F` would have been unreachable by `test_sw`'s separate executable. New `test/test_sw.F` (11 checks, ported from OREM's test suite, including a hand-verified exospheric-temperature value for the 2024-05-11 G5 storm), added to `fpm.toml`, `test_all.sh`, the `Makefile`, and `lint_check.sh`. 539/539 tests pass (528 existing + 11 new), confirmed on both `ifx` (full end-to-end run, `[SW] epoch-resolved density: ENABLED` fires correctly) and via lint. |
