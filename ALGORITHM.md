@@ -195,42 +195,72 @@ flowchart TD
   empirical verification.
 - **General $(n,m)$ geopotential — the sole geopotential model**
   (unified 2026-08-09, superseding both the separate zonal path and
-  issue #29's (2,2)-only formula): a classical spherical-coordinate
-  (latitude/longitude) associated-Legendre expansion substituted
-  directly into KS $u$-variables (`src/LegendreTess.F`,
-  `alfP_general`/`tess_legendre_force`, ported and corrected from an
-  external research derivation, 2026-08-09 — see §8), evaluated for
-  every loaded $0\le m\le n\le n_{max}$. **$m=0$ is not a distinct
-  "zonal" model — it is this same formula's own $m=0$ row** ($P_n^0=P_n$,
-  the classical zonal Legendre polynomial, via the identical three-term
-  recursion): $V = \sum_{n\ge2}\sum_{m=0}^{n} (R_{Earth}/r)^n
-  P_n^m(\sin\phi)\,[C_{nm}\cos(m\lambda)+S_{nm}\sin(m\lambda)]$, which
-  reduces exactly to the classical zonal sum at $m=0$ ($C_{n0}=-J_n$,
-  no $S_{n0}$ term). KS-element force and time-element contributions:
+  issue #29's (2,2)-only formula, and singularity-free reformulation
+  2026-08-09, superseding the original spherical-coordinate
+  derivation): evaluated for every loaded $0\le m\le n\le n_{max}$,
+  $V = \sum_{n\ge2}\sum_{m=0}^{n} (R_{Earth}/r)^n
+  P_n^m(\sin\phi)\,[C_{nm}\cos(m\lambda)+S_{nm}\sin(m\lambda)]$.
+  **$m=0$ is not a distinct "zonal" model — it is this same formula's
+  own $m=0$ row** ($P_n^0=P_n$, no $S_{n0}$ term, $C_{n0}=-J_n$).
+  KS-element force and time-element contributions:
   $q(j) = V\cdot u(j) + (r/2)\,\partial V/\partial u_j$, $\tau = -2rV -
-  (r/2)\sum_j u(j)\,\partial V/\partial u_j$, with $\partial
-  V/\partial u_j$ chain-ruled through $r$/$\phi$/$\lambda$ as
-  intermediate spherical coordinates (the standard geopotential-gradient
-  decomposition). Capped at `ntess_cap=72` (the standard truncated-
-  gravity-model resolution, e.g. EGM96 72x72, used throughout
-  operational precision orbit propagation) — **applies to the whole
-  geopotential now, including zonal-only runs**, a deliberate trade
-  (2026-08-09, user direction) for one unified model/cap instead of the
-  former split between a cheap $O(n)$ zonal-only path to degree 2190 and
-  a separate $O(n^2)$ tesseral path capped at 72; zonal-only precision
-  work above degree 72 is no longer supported by this driver.
+  (r/2)\sum_j u(j)\,\partial V/\partial u_j$.
+
+  **The gradient is now built entirely in Cartesian $(x,y,z,r)$ — not
+  chain-ruled through $\phi,\lambda$ at all.** The original derivation
+  (`alfP_general`/`cos_sin_mlambda`, spherical-coordinate) divided by
+  $\sqrt{x^2+y^2}$ in its $u$-derivatives of $\phi$/$\lambda$, a real
+  polar-latitude singularity (previously listed in §9). Motivated by
+  the user's own thesis (Ch. 3, eq. 3.4 — a hand-derived, degree-
+  specific zonal closed form whose denominator is a pure power of $r$,
+  with no $z$-dependent term, because it differentiates directly
+  through $z(u)$, $r(u)$ rather than through an intermediate $\phi$)
+  and generalized to the full $(n,m)$ case (not hardcoded per degree):
+  $P_n^m(\sin\phi)=\cos^m(\phi)\,G(n,m)(\sin\phi)$ and
+  $\cos(m\lambda),\sin(m\lambda)$ scaled by $(\sqrt{x^2+y^2})^m$ are
+  pure polynomials $X_m(x,y),Y_m(x,y)$ (De Moivre) — the
+  $\cos^m(\phi)$ factors cancel exactly between the two, leaving
+  $V_{n,m} = R_{Earth}^n/r^{n+m+1}\cdot G(n,m)(z/r)\cdot
+  [C_{nm}X_m(x,y)+S_{nm}Y_m(x,y)]$: a pure $r$-power denominator, no
+  singular factor anywhere. $G(n,m)$ (`G_general`) and $X_m/Y_m$
+  (`XY_general`) are each computed via their own new three-term
+  recursions (differentiating the classical associated-Legendre and
+  Chebyshev-type recursions directly, the same trick used for the
+  non-singular Legendre-derivative identity), replacing
+  `alfP_general`/`cos_sin_mlambda` (removed). Verified: (1)
+  symbolically (sympy) — $G(n,m)=P_n^m/\cos^m(\phi)$ and
+  $X_m/Y_m$/their partials match ground truth exactly, $n_{max}=6$,
+  every $(n,m)$; (2) numerically — reproduces Cunningham's independent
+  solid-harmonic recursion to machine precision ($\sim10^{-15}$–
+  $10^{-16}$) and an independent finite-difference gradient
+  ($\sim10^{-10}$–$10^{-11}$, truncation-error level), random $u$/
+  $C_{nm}$/$S_{nm}$/$n_{max}$; (3) a **decisive pole regression test**
+  (`test_legendre_tess.F`, PL1-PL4) evaluates at an exact polar point
+  ($\sqrt{x^2+y^2}=0$ identically) where the former formulation would
+  have produced NaN — confirmed finite and matching Cunningham exactly.
+  The energy-element rate ($dU/dt$, §7) was re-derived in the same
+  Cartesian terms too: $dV/d\lambda = x\,\partial V/\partial y -
+  y\,\partial V/\partial x$ (standard polar-to-Cartesian identity),
+  verified to reproduce the pre-reformulation `dvdt_leg` bit-for-bit on
+  a fixed test case with real $m>0$ coefficients.
+
+  Capped at `ntess_cap=72` (the standard truncated-gravity-model
+  resolution, e.g. EGM96 72x72, used throughout operational precision
+  orbit propagation) — **applies to the whole geopotential, including
+  zonal-only runs**, a deliberate trade (2026-08-09, user direction)
+  for one unified model/cap instead of the former split between a
+  cheap $O(n)$ zonal-only path to degree 2190 and a separate $O(n^2)$
+  tesseral path capped at 72; zonal-only precision work above degree
+  72 is no longer supported by this driver.
+
   Cunningham (1970)'s independent Cartesian solid-harmonic recursion
   (`src/Cunningham.F`, `cunningham_Vnm`/`tess_general_force`, the
   original #30 implementation) remains in the library, verified to
   reproduce this path to machine precision (worst case $5.6\times
   10^{-15}$, see §8), but is no longer called from `driver_KS.F` — kept
-  as a standing independent cross-check, and because it has no polar-
-  latitude singularity (the classical formulation's $\cos\phi=0$
-  denominator terms — see §9 — do not arise in Cartesian solid harmonics),
-  a real robustness property worth preserving in the library even while
-  unused. `LegendreTess.F` was chosen as the active path per explicit
-  user direction (2026-08-09), ported from the user's own KS-regularized
-  research derivation.
+  as a standing independent cross-check (both paths are now polar-
+  singularity-free, so this is redundancy for correctness assurance,
+  not a robustness fallback the way it was before the reformulation).
 - **Drag co-rotation factor**: $F_{dg} = \left(1 - \dfrac{R_{PO}\,\omega_E\,
   F_{rot}\cos\xi}{V_{PO}}\right)^2$, refreshed from the current revolution's
   own perigee state.
@@ -262,7 +292,7 @@ relevant one level up, in `OREM`'s RSM step, which runs 9 independent
 aren't (run sequentially).
 
 ## 8. Validation & Accuracy
-619 total checks across 9 Fortran test programs, run via `test_all.sh`
+625 total checks across 9 Fortran test programs, run via `test_all.sh`
 (lint + all suites): `test_subrouts.F` (82, coordinate transforms/utility
 subroutines, incl. `gmst_deg`/`geo_coeff_tess22`/`tess22_force`),
 `test_tle.F` (147, TLE parsing), `test_tle2sv.F` (156,
@@ -272,8 +302,9 @@ SGP4/SDP4 + frame conversions), `test_tle2opm.F` (21, TLE-to-OPM pipeline),
 correctness including a hand-verified exospheric-temperature value),
 `test_cunningham.F` (26, general $(n,m)$ tesseral harmonics incl. the
 $m=0$ geopotential-unification cross-check, issue #30),
-`test_legendre_tess.F` (26, independent classical-Legendre cross-check,
-2026-08-09 — see below), `test_dvdt_tess.F` (7, tesseral $dU/dt$
+`test_legendre_tess.F` (32, singularity-free general-$(n,m)$ closed
+form incl. a decisive exact-pole regression, 2026-08-09 — see below),
+`test_dvdt_tess.F` (7, tesseral $dU/dt$
 energy-element term, `feature/tesseral-energy-time-dependence` branch —
 see below), plus `test_driver.py` (10) and
 `test_initial_conditions.py` (110, multi-orbit sweep) in Python. CI
@@ -482,6 +513,75 @@ KSROP-Lunar/KSROP-Mars likely have the analogous separate-zonal-path
 structure in their own `tess_general_force`-based drivers — not
 investigated this session, separate follow-on work.
 
+**Singularity-free closed-form reformulation of the general $(n,m)$
+geopotential (2026-08-09, same branch)**: motivated by the user
+supplying a page from their own thesis (Ch. 3, eq. 3.4 — a hand-
+derived, degree-specific zonal closed form for J2-J4 whose denominator
+is a pure power of $r$, with $J_n$ and $R_{Earth}^n$ pre-combined into
+a single constant $\mathcal{J}_n=J_nR_{Earth}^n$) as an "exemplar" of
+the algebraic reduction wanted for the general geopotential — with the
+explicit instruction not to brute-force-expand every term, but to
+choose selectively which pieces benefit. Investigation first
+established that KSROP's own `tess_general_force` (Cunningham,
+`src/Cunningham.F`) already has the wanted property end-to-end for the
+full general $(n,m)$ case (confirmed by inspection: no division by
+$\sqrt{x^2+y^2}$ anywhere in `cunningham_Vnm`/`cunningham_dVnm`) — but
+per user direction, the active path (`LegendreTess.F`, the user's own
+derivation) was reformulated in place instead of switched to
+Cunningham's.
+
+Derived and verified in stages (sympy symbolically + independent
+numeric checks at each step, matching this branch's established
+discipline, before any Fortran was written): (1) differentiating the
+single-degree zonal potential directly through $z(u),r(u)$ (never an
+intermediate $\phi$) gives a $q(j)$ whose denominator is *provably* a
+pure power of $r$ (confirmed for degrees 2-6: $r^5,r^7,r^9,\ldots$,
+exactly matching the thesis's own "order of pole is 9 for $n=4$"
+statement) — and the resulting closed form exactly reproduces the
+thesis's own J2 term once the `Q_i`-vs-`q(j)` normalization convention
+is accounted for; (2) generalized to arbitrary degree (not hardcoded
+per-degree like the thesis) via a **new** non-singular recursion for
+$dP_n/dx$ itself — differentiating Bonnet's own three-term recursion
+term-by-term (no $(1-x^2)$ division anywhere) — verified against
+sympy's own derivatives for degrees 2-8, and the resulting general-$n$
+zonal $q(j)$ verified independently via finite difference
+($\sim10^{-10}$–$10^{-11}$ relative, multiple random trials); (3)
+extended to the full general $(n,m)$ tesseral case by recognizing that
+$P_n^m(\sin\phi)=\cos^m(\phi)\,G(n,m)(\sin\phi)$ and that
+$\cos(m\lambda),\sin(m\lambda)$ scaled by $(\sqrt{x^2+y^2})^m$ are
+pure polynomials $X_m,Y_m(x,y)$ (De Moivre) — the $\cos^m(\phi)$
+factors cancel exactly between the associated-Legendre and trig
+pieces, so $V_{n,m}$ reduces to $R_{Earth}^n/r^{n+m+1}$ times a
+product of two smooth polynomial quantities, with **no singular
+denominator anywhere**; $G(n,m)$ and $X_m,Y_m$ (and their partial
+derivatives) are each computed via new three-term recursions
+(`G_general`, `XY_general`, `src/LegendreTess.F`), verified
+symbolically (sympy, exact match to ground truth, $n_{max}=6$, every
+$(n,m)$) and numerically against Cunningham's independent solid-
+harmonic recursion (machine precision, $\sim10^{-15}$–$10^{-16}$,
+random $u$/$C_{nm}$/$S_{nm}$/$n_{max}$) and finite difference
+(truncation-error level). The energy-element rate ($dU/dt$) was
+re-derived in the same terms: $dV/d\lambda = x\,\partial
+V/\partial y - y\,\partial V/\partial x$ — verified to reproduce the
+pre-reformulation `dvdt_leg` bit-for-bit (same sign, same value) on a
+fixed test case with real $m>0$ coefficients, confirming this is a
+genuine re-derivation of the identical physics, not a different one.
+
+`alfP_general`/`cos_sin_mlambda` (the former spherical-coordinate
+machinery) are removed — no longer used anywhere. `tess_legendre_force`
+itself keeps its exact same call signature; only its internals changed.
+**Decisive new-capability regression** (`test_legendre_tess.F`,
+PL1-PL4): evaluated at an exact polar point
+($\sqrt{x^2+y^2}=0$ identically, a genuine on-axis $u$, not a
+degenerate one) where the former formulation would have divided by
+zero — confirmed finite and matching Cunningham exactly, the first
+direct proof this reformulation actually eliminates the polar
+singularity, not just avoids it in the tested cases. Full regression
+625/625 (619 + 6 new: `test_legendre_tess.F` grew from 26 to 32
+checks), both `ifx` and `gfortran`; `test_dvdt_tess.F`'s existing 7
+checks pass completely unchanged (same interface, same values,
+different internals).
+
 ## 9. Known Limitations
 - **KSROP-Lunar/KSROP-Mars likely still have a separate zonal code
   path** that this repo's own geopotential unification (§5/§8,
@@ -501,17 +601,6 @@ investigated this session, separate follow-on work.
   general path (a deliberate trade, not an oversight). Raising the cap
   for a specific higher-precision use case is a config-constant change,
   not a new derivation.
-- **The active tesseral geopotential (`LegendreTess.F`) has a polar-
-  latitude singularity** the library's unused alternative (`Cunningham.F`)
-  does not: `tanphi = z/sqrt(x^2+y^2)` and the longitude terms both blow
-  up as $\sqrt{x^2+y^2}\to0$ (near-polar/exactly-polar trajectories).
-  Not a concern for KSROP's own validated GTO/HEO/LEO Earth-orbit
-  regime or the current KSROP-Lunar/KSROP-Mars areostationary/near-
-  equatorial use cases, but a real constraint if a genuinely polar orbit
-  (Earth or otherwise) is ever propagated with tesseral terms active —
-  Cunningham's Cartesian solid-harmonic recursion has no such
-  singularity and remains available in the library (`tess_general_force`)
-  if that regime is ever needed.
 - **`gmst_deg` is a mean (IAU 1982 polynomial) sidereal-time formula**, not
   a true-rotation-angle model (no UT1-UTC, nutation, or polar-motion
   correction). Confirmed via a GMAT cross-check (§8) to be precise enough
