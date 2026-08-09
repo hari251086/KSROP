@@ -40,8 +40,9 @@ Read from `input.dat` (via `driver_KS.F`) in this fixed order:
 - `nrev` (revolutions to propagate), `istep` (RKG4 sub-steps per
   revolution), `tole` (integration tolerance, default `1e-15`).
 - Force-model flags `n_force(3)` = [geo, sun, moon] on/off, plus
-  `ngeo_deg`/`nsun_deg`/`nmoon_deg` (Legendre expansion degree per force,
-  geo configurable up to 2190 via `EGM2008_to2190_TideFree`).
+  `ngeo_deg`/`nsun_deg`/`nmoon_deg` (Legendre expansion degree per force;
+  geo reads from `EGM2008_to2190_TideFree` but is capped at
+  `ntess_cap=72` regardless of `ngeo_deg`'s own value — see §5/§9).
 - Drag parameters: `BN` (ballistic number, kg/m², $= m/(C_d A)$), `IDRAG`
   (0/1), `WE_rot` (Earth rotation rate, rad/s), `EPS_f` (oblateness
   flattening), `FR_rot` (atmosphere co-rotation factor).
@@ -164,60 +165,60 @@ flowchart TD
   between the perturbed and unperturbed angular rates, used to keep the
   fixed fictitious-time step aligned with real orbital phase under
   perturbation.
-- **Energy-element rate, $w^*$, now includes a $dU/dt$ term** (`feature/
-  tesseral-energy-time-dependence` branch, 2026-08-09; Sellamuthu 2018 PhD
-  thesis eq. 2.54: $w^*=-(r/8w^2)\,dU/dt - (1/2w)(u^*\!\cdot\!L^T(u)P)$).
-  Previously `z(10)` contained only the second (non-conservative drag/SRP)
-  term — correct as long as every conservative force was static in the
-  inertial frame, but the general $(n,m)$ tesseral potential is not: its
-  coefficients are body-fixed and get re-rotated by Earth's rotation angle
-  $\theta(t)$ every step (`rotate_tess_coeffs`), making $U(u,t)$ explicitly
-  time-dependent — the thesis states directly that eq. 2.54's first term
-  "vanishes when $U$ does not explicitly depend on $t$," which no longer
-  holds once general tesseral support exists. Derived (`dU/dt=-amue\cdot
-  \theta_{dot}\cdot V_{\lambda}$, reusing the potential's own already-
-  computed $\partial V/\partial\lambda$ block, no new recursion) and
-  verified both symbolically (sympy, zero residual) and by an independent
-  finite-difference check holding $u$ exactly fixed and perturbing only
-  $\theta$ (`1.26\times10^{-9}$ relative, consistent with pure $O(h^2)$
-  truncation). Zonal ($m=0$) is exactly zero under this identity
-  (axisymmetric, structurally guaranteed) and needs no term. The
-  **third-body (Sun/Moon) potential has the identical explicit-time-
-  dependence gap** (`ts`/`tm`, the Sun/Moon direction, vary with real
-  time via `solarnpv`/`lunarpv`) and, since KSROP does full numerical
-  integration rather than an approximate/analytical theory, was brought
-  in on the same branch rather than left incomplete: `dU_{3body}/dt`
-  derived symbolically from the disturbing-function series (both
-  $R_{tb}(t)$ and $\cos\phi(x,t)$ vary with the third body's real
-  orbital motion, not a simple rotation), verified against a genuine
-  finite-difference ground truth using the production ephemeris, and
-  summed into the same $z(10)$ term alongside the tesseral piece. See
-  §8 for the full derivation provenance and empirical verification
-  (both tesseral and third-body, including a real finding that
-  corrected the original success-criterion hypothesis).
-- **Oblateness potential**: zonal harmonic sum via associated Legendre
-  polynomials, $V_{oblate} = \sum_{n\ge2} \mu R_{Earth}^n
-  c_n / r^{n+1}\, P_n(\sin\phi)$, configurable up to degree 2190 (EGM2008).
-- **General $(n,m)$ tesseral/mascon potential** (issue #30, superseding
-  #29's (2,2)-only formula): a classical spherical-coordinate (latitude/
-  longitude) associated-Legendre expansion substituted directly into KS
-  $u$-variables (`src/LegendreTess.F`, `alfP_general`/`tess_legendre_force`,
-  ported and corrected from an external research derivation, 2026-08-09
-  — see §8), evaluated for every loaded $0\le m\le n\le n_{max}$. KS-
-  element force and time-element contributions use the same recipe as
-  the zonal terms: $q(j) = V\cdot u(j) + (r/2)\,\partial V/\partial u_j$,
-  $\tau = -2rV - (r/2)\sum_j u(j)\,\partial V/\partial u_j$, with
-  $\partial V/\partial u_j$ chain-ruled through $r$/$\phi$/$\lambda$ as
+- **Energy-element rate, $w^*$, includes a $dU/dt$ term for the geopotential
+  only** (`feature/tesseral-energy-time-dependence` branch, 2026-08-09;
+  Sellamuthu 2018 PhD thesis eq. 2.54: $w^*=-(r/8w^2)\,dU/dt -
+  (1/2w)(u^*\!\cdot\!L^T(u)P)$). Previously `z(10)` contained only the
+  second (non-conservative drag/SRP) term — correct as long as every
+  conservative force was static in the inertial frame, but the general
+  $(n,m)$ geopotential is not: its coefficients are body-fixed and get
+  re-rotated by Earth's rotation angle $\theta(t)$ every step
+  (`rotate_tess_coeffs`), making $U(u,t)$ explicitly time-dependent — the
+  thesis states directly that eq. 2.54's first term "vanishes when $U$
+  does not explicitly depend on $t$," which no longer holds once general
+  $(n,m)$ support exists. Derived (`dU/dt=-amue\cdot\theta_{dot}\cdot
+  V_{\lambda}$, reusing the potential's own already-computed $\partial
+  V/\partial\lambda$ block, no new recursion) and verified both
+  symbolically (sympy, zero residual) and by an independent finite-
+  difference check holding $u$ exactly fixed and perturbing only $\theta$
+  (`1.26\times10^{-9}$ relative, consistent with pure $O(h^2)$
+  truncation). Zonal ($m=0$) terms are exactly zero under this identity
+  (axisymmetric, structurally guaranteed — the $m$ factor in the
+  derivation vanishes) — a genuine consequence of the physics, not a
+  special case, which is why folding zonal into the same general formula
+  (below) changes nothing about it. **Third-body (Sun/Moon) is treated
+  as static for this purpose** — its own direction/distance change on
+  orbital (day-to-month) timescales, not the tesseral case's Earth-
+  rotation rate, and is not modeled as an energy-element source (a
+  dU/dt term for it was implemented and then explicitly removed,
+  2026-08-09 — see §8). See §8 for the full derivation provenance and
+  empirical verification.
+- **General $(n,m)$ geopotential — the sole geopotential model**
+  (unified 2026-08-09, superseding both the separate zonal path and
+  issue #29's (2,2)-only formula): a classical spherical-coordinate
+  (latitude/longitude) associated-Legendre expansion substituted
+  directly into KS $u$-variables (`src/LegendreTess.F`,
+  `alfP_general`/`tess_legendre_force`, ported and corrected from an
+  external research derivation, 2026-08-09 — see §8), evaluated for
+  every loaded $0\le m\le n\le n_{max}$. **$m=0$ is not a distinct
+  "zonal" model — it is this same formula's own $m=0$ row** ($P_n^0=P_n$,
+  the classical zonal Legendre polynomial, via the identical three-term
+  recursion): $V = \sum_{n\ge2}\sum_{m=0}^{n} (R_{Earth}/r)^n
+  P_n^m(\sin\phi)\,[C_{nm}\cos(m\lambda)+S_{nm}\sin(m\lambda)]$, which
+  reduces exactly to the classical zonal sum at $m=0$ ($C_{n0}=-J_n$,
+  no $S_{n0}$ term). KS-element force and time-element contributions:
+  $q(j) = V\cdot u(j) + (r/2)\,\partial V/\partial u_j$, $\tau = -2rV -
+  (r/2)\sum_j u(j)\,\partial V/\partial u_j$, with $\partial
+  V/\partial u_j$ chain-ruled through $r$/$\phi$/$\lambda$ as
   intermediate spherical coordinates (the standard geopotential-gradient
   decomposition). Capped at `ntess_cap=72` (the standard truncated-
   gravity-model resolution, e.g. EGM96 72x72, used throughout
-  operational precision orbit propagation — raised from an initial 10
-  on 2026-08-09; measured 5.4s for a full 3601-step propagation at
-  degree 72, no practical performance concern), independent of
-  `ngeo_deg`'s much larger zonal range, since this recursion is $O(n^2)$
-  per force evaluation — a real per-step cost, not a one-time setup
-  cost like the zonal path. **This is the sole active tesseral
-  geopotential** —
+  operational precision orbit propagation) — **applies to the whole
+  geopotential now, including zonal-only runs**, a deliberate trade
+  (2026-08-09, user direction) for one unified model/cap instead of the
+  former split between a cheap $O(n)$ zonal-only path to degree 2190 and
+  a separate $O(n^2)$ tesseral path capped at 72; zonal-only precision
+  work above degree 72 is no longer supported by this driver.
   Cunningham (1970)'s independent Cartesian solid-harmonic recursion
   (`src/Cunningham.F`, `cunningham_Vnm`/`tess_general_force`, the
   original #30 implementation) remains in the library, verified to
@@ -248,9 +249,11 @@ flowchart TD
 
 ## 7. Complexity & Performance
 Cost scales linearly with `nrev × istep` (one RKG4 evaluation per
-sub-step, each evaluation's own cost dominated by the zonal-harmonic sum's
-degree — up to 2190 is expensive per step, low-single-digit degrees are
-cheap). `benchmark.py` exists in this repo specifically to profile this.
+sub-step, each evaluation's own cost dominated by the general $(n,m)$
+geopotential sum's degree — this recursion is $O(n^2)$ per evaluation,
+capped at `ntess_cap=72` for the whole geopotential including zonal-only
+runs (2026-08-09 unification, §5) — low-single-digit degrees are cheap.
+`benchmark.py` exists in this repo specifically to profile this.
 No parallelism is implemented in KSROP itself (a single propagation run is
 inherently sequential — each step depends on the previous), so the shared
 `GitHub\CLAUDE.md` 4-core cap is not directly exercised here; it becomes
@@ -259,7 +262,7 @@ relevant one level up, in `OREM`'s RSM step, which runs 9 independent
 aren't (run sequentially).
 
 ## 8. Validation & Accuracy
-627 total checks across 10 Fortran test programs, run via `test_all.sh`
+619 total checks across 9 Fortran test programs, run via `test_all.sh`
 (lint + all suites): `test_subrouts.F` (82, coordinate transforms/utility
 subroutines, incl. `gmst_deg`/`geo_coeff_tess22`/`tess22_force`),
 `test_tle.F` (147, TLE parsing), `test_tle2sv.F` (156,
@@ -267,12 +270,12 @@ SGP4/SDP4 + frame conversions), `test_tle2opm.F` (21, TLE-to-OPM pipeline),
 `test_bugs.F` (17, regression tests for specific historical bugs),
 `test_sw.F` (17, epoch-resolved space weather — loader/interpolation
 correctness including a hand-verified exospheric-temperature value),
-`test_cunningham.F` (25, general $(n,m)$ tesseral harmonics, issue #30),
+`test_cunningham.F` (26, general $(n,m)$ tesseral harmonics incl. the
+$m=0$ geopotential-unification cross-check, issue #30),
 `test_legendre_tess.F` (26, independent classical-Legendre cross-check,
 2026-08-09 — see below), `test_dvdt_tess.F` (7, tesseral $dU/dt$
 energy-element term, `feature/tesseral-energy-time-dependence` branch —
-see below), `test_dvdt_3body.F` (9, third-body $dU/dt$ energy-element
-term, same branch — see below), plus `test_driver.py` (10) and
+see below), plus `test_driver.py` (10) and
 `test_initial_conditions.py` (110, multi-orbit sweep) in Python. CI
 (`ci.yml`) runs the full suite on every push/PR to `main`/`HS-dev` via
 `gfortran` on Ubuntu. Cross-validated against GMAT
@@ -424,63 +427,80 @@ pattern is the right qualitative signature of correct new physics,
 not a bug — distinguishing it from a numerical energy leak, which
 would show unbounded secular growth instead.
 
-**Third-body (Sun/Moon) `dU/dt` extended onto the same branch
-(2026-08-09)**: initially scoped out (tesseral-only), then reversed
-per user direction — since KSROP performs full numerical integration
-rather than an approximate/analytical theory, there is no principled
-reason to leave the third-body potential's identical explicit-time-
-dependence gap unaddressed. Unlike the tesseral case (a pure rotation,
-$\theta(t)$), the third-body disturbing function $U_{3body}(x,t) =
--\mu_{tb}/R_{tb}(t)\sum_n(R_1/R_{tb}(t))^n P_n(\cos\phi(x,t))$ depends
-on time through the third body's real orbital motion: both the
-distance $R_{tb}(t)$ and the angle $\cos\phi(x,t) = (x\cdot
-t_b(t))/(R_1 R_{tb}(t))$ vary as `ts`/`tm` (from `solarnpv`/`lunarpv`)
-move. Derived symbolically (product-rule expansion through
-$\dot\rho=(t_b\cdot\dot t_b)/R_{tb}$ and $\dot c = (x\cdot\dot t_b)/
-(R_1 R_{tb}) - \cos\phi\,\dot\rho/R_{tb}$, summed over the associated-
-Legendre series) and implemented as `third_body_dvdt`
-(`src/Subrouts.F`), fed by a central-difference velocity of the third
-body itself (`ts_dot`/`tm_dot`, $h=60$ s, computed once per step
-alongside the existing `ts`/`tm` refresh). Verified against a genuine,
-independent finite-difference ground truth
-(`test_dvdt_3body.F`): the true potential $U(x,t)$ evaluated via the
-actual production ephemeris at $t_0\pm300$ s with $x$ held exactly
-fixed, central-differenced, and compared to the closed form — 9/9
-pass (4 position/epoch cases $\times$ Sun+Moon, plus a degree-guard
-check) on both `ifx` and `gfortran`. Summed directly into $z(10)$
-alongside the tesseral term: `z(10) = -(r/8w^2)(amue\cdot dvdt_{leg}
-+ dvdt_{3body,sun} + dvdt_{3body,moon}) - \ldots`. No `Tau_geo`/
-`z(1)` edit needed, by the same already-established coupling argument.
-A real, unrelated implicit-typing bug was found and fixed during this
-work: the test file's own `leg`/`leg_p`/`leg_m` arrays (names starting
-with `l`, hence implicitly INTEGER under `implicit double precision
-(a-h,o-z)`, which never touches the `i`-`n` range) silently received
-`aLegP`'s DOUBLE PRECISION output, overflowing the stack — `gfortran`
-crashed on it (`ifx` silently tolerated it), isolated via a minimal
-reproduction that bisected the crash down to `aLegP` itself before
-identifying the caller-side type as the actual defect (a repeat of the
-`deg` typing bug found earlier on this same branch — see
+**Third-body (Sun/Moon) `dU/dt` added, then reverted (2026-08-09,
+same branch)**: initially scoped out (tesseral-only), briefly
+implemented (`third_body_dvdt`, `src/Subrouts.F`, verified against an
+independent finite-difference ground truth, `test_dvdt_3body.F`, 9/9
+pass), then removed per explicit user direction after reviewing a
+compiled equations-of-motion report — third-body is now treated as
+static for the energy-element purpose, not modeled as a `w*` source.
+A real, unrelated implicit-typing bug was found and fixed during the
+brief implementation (kept fixed even though the feature itself was
+reverted, since it's a genuine, separate defect): the removed test
+file's own `leg`/`leg_p`/`leg_m` arrays (names starting with `l`,
+hence implicitly INTEGER under `implicit double precision (a-h,o-z)`,
+which never touches the `i`-`n` range) silently received `aLegP`'s
+DOUBLE PRECISION output, overflowing the stack — `gfortran` crashed on
+it (`ifx` silently tolerated it), isolated via a minimal reproduction
+that bisected the crash down to `aLegP` itself before identifying the
+caller-side type as the actual defect (a repeat of the `deg` typing
+bug found earlier on this same branch — see
 `feedback_fortran_implicit_typing_trap` in project memory). `aLegP`
 itself and all of its existing call sites in `driver_KS.F` were
-unaffected. KSROP-Lunar/KSROP-Mars likely have the analogous gap in
-their own `tess_general_force`-based drivers — not investigated this
-session, separate follow-on work.
+unaffected throughout.
+
+**Geopotential unified: separate zonal path removed, folded into the
+general $(n,m)$ formula (2026-08-09, same branch, per explicit user
+direction)**: `driver_KS.F`'s zonal-specific code (the `aLegP`/`c_j`/
+`Re`/`ObyR`/`ZbyR` computation of `V_pot`, `q(j)`, and `Tau_geo`) is
+removed entirely. $m=0$ was never a distinct physical model — it is
+the general $(n,m)$ formula's own $m=0$ row, using the identical
+three-term Legendre recursion (`alfP_general`'s $m=0$ branch is
+algebraically the same recurrence as `aLegP`'s zonal-only one, term
+for term). `geo_coeff_tess_general` (`src/Cunningham.F`) now loads
+$m=0$ rows too (previously skipped deliberately, to avoid double-
+counting against the separate zonal path that no longer exists),
+using the $(2-\delta_{0m})$-aware normalization and the traditional
+$J_n=-C_{n0}$ sign convention — verified to reproduce
+`geo_coeff_body`'s independent zonal loader exactly (`test_cunningham.F`,
+new CG3-CG5 checks, replacing the old "m=0 skipped" assertions).
+**Decisive lossless-unification proof**: a standalone verification
+program reimplemented the exact removed zonal `q(j)`/`Tau_geo`/`V_pot`
+formulas and compared them against `tess_legendre_force`'s $m=0$
+output for a concrete synthetic case — all four $q(j)$ components,
+`Tau_geo`, and `V_pot` agreed to relative $10^{-16}$ (pure floating-
+point noise), and `dvdt_gen` was confirmed exactly zero at $m=0$ as
+the physics requires (axisymmetric fields cannot exchange energy with
+a rotating frame). A real capability trade accompanies this: the
+formerly-separate zonal path supported degree up to 2190 at $O(n)$
+cost; the unified path is capped at `ntess_cap=72` for everything,
+including zonal-only runs (§5/§7) — a deliberate simplification, not
+an oversight. Full regression (619/619, both `ifx` and `gfortran`) and
+an end-to-end `driver_KS.exe` smoke run (`ngeo_deg=50`, 10 revolutions)
+confirmed a clean, physical trajectory with no NaN/divergence.
+KSROP-Lunar/KSROP-Mars likely have the analogous separate-zonal-path
+structure in their own `tess_general_force`-based drivers — not
+investigated this session, separate follow-on work.
 
 ## 9. Known Limitations
-- **KSROP-Lunar/KSROP-Mars likely have the same tesseral/third-body
-  `dU/dt` energy-element gap** in their own `tess_general_force`-based
-  drivers (see §8, `feature/tesseral-energy-time-dependence` branch) —
-  not investigated this session, separate follow-on work.
-- **Tesseral gravity degree is capped at `ntess_cap=72`** (general $(n,m)$
-  support itself is not limited to (2,2) — see §5/§8, issue #30). The cap
-  exists because this recursion is $O(n^2)$ *per force evaluation* (every
-  RKG4 sub-step), unlike the zonal path's one-time-per-file-load cost — a
-  real, literal degree-2190 EGM2008 field is computationally infeasible
-  as a per-step force model regardless of which general-$(n,m)$ method is
-  used (Cunningham's Cartesian solid-harmonic recursion, kept in the
-  library as a cross-check, is the same $O(n^2)$ complexity class).
-  Raising the cap for a specific higher-precision use case is a config-
-  constant change, not a new derivation.
+- **KSROP-Lunar/KSROP-Mars likely still have a separate zonal code
+  path** that this repo's own geopotential unification (§5/§8,
+  `feature/tesseral-energy-time-dependence` branch) removed — not
+  investigated this session, separate follow-on work.
+- **Geopotential degree is capped at `ntess_cap=72`, including zonal-
+  only runs** (general $(n,m)$ support itself is not limited to (2,2) —
+  see §5/§8, issue #30 and the 2026-08-09 unification). The cap exists
+  because this recursion is $O(n^2)$ *per force evaluation* (every RKG4
+  sub-step) — a real, literal degree-2190 EGM2008 field is
+  computationally infeasible as a per-step force model regardless of
+  which general-$(n,m)$ method is used (Cunningham's Cartesian solid-
+  harmonic recursion, kept in the library as a cross-check, is the same
+  $O(n^2)$ complexity class). Before the unification, zonal-only runs
+  used a separate $O(n)$ path supporting degree up to 2190 — that
+  capability is gone now that zonal is folded into the same capped
+  general path (a deliberate trade, not an oversight). Raising the cap
+  for a specific higher-precision use case is a config-constant change,
+  not a new derivation.
 - **The active tesseral geopotential (`LegendreTess.F`) has a polar-
   latitude singularity** the library's unused alternative (`Cunningham.F`)
   does not: `tanphi = z/sqrt(x^2+y^2)` and the longitude terms both blow

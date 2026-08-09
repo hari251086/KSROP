@@ -5,7 +5,9 @@ c       Description:
 c     Orbit propagation using Kustaanheimo-Stiefel regular elements
 c     with numerical integrator RKG4. (Earth)
 c     Perturbations included are:
-c     - Earth's oblateness ( up to 2190th degree )
+c     - Earth's full geopotential ( general (n,m) tesseral/mascon,
+c       m=0 reducing to the classical zonal terms -- one unified
+c       model, up to degree/order ntess_cap )
 c     - Luni-solar perturbations
 c     - Atmospheric drag ( Oblate, co-rotating exponential
 c       atmosphere referenced to perigee conditions, tabulated
@@ -46,6 +48,16 @@ c     --------
 c     Added atmospheric drag via oblate exponential model (ATM.DAT)
 c     KS element equations updated for drag and energy correction
 c     Fixed Tau_term -> Tau_geo in time element
+c     --------
+c     08-09-2026: Unified the geopotential -- the separate zonal
+c     (aLegP/geo_coeff) code path is REMOVED. The general (n,m)
+c     tesseral geopotential (tess_legendre_force) is now the SOLE
+c     geopotential model; m=0 is its own m=0 row, not a distinct
+c     model, and is loaded by geo_coeff_tess_general like every
+c     other (n,m). Zonal-only degree is now capped at ntess_cap (72),
+c     not 2190 -- a deliberate capability trade for one unified path.
+c     Third-body (Sun/Moon) energy-element dU/dt term removed from
+c     w* -- third-body is treated as static for that purpose.
 c     -------------------------------------------------------------
 c     ****Issues****
 c     --------
@@ -53,7 +65,8 @@ c     Conversion from State to Keplerian elements needs to be
 c     revisited for NaN outputs
 c     -------------------------------------------------------------
 c     Subroutines used
-c     geo_coeff,car2ks,ks2car,aLegP,car2oe,ks2ksr,INTPOL
+c     geo_coeff_tess_general,tess_legendre_force,car2ks,ks2car,
+c     aLegP,car2oe,ks2ksr,INTPOL
 c     -------------------------------------------------------------c
 
       implicit double precision (a-h, o-z)
@@ -64,40 +77,34 @@ c     -------------------------------------------------------------c
 c     Value of pi, degree to radians and radians to degree
       common /xy/ pi,d2r,r2d,amue,AU,R_Earth
       dimension pek(7),x(3),xd(3),q(4),u(4),us(4),y(10),z(10)
-      dimension qu(3),q_til(4),u_til(4),uu(4)
-      dimension ZbyR(cn0*2),ObyR(cn0*2),Re(cn0)
-      dimension cn_j(cn0),c_j(cn0),V_p(cn0),aleg(cn0)
+      dimension qu(3),q_til(4),u_til(4)
+      dimension V_p(cn0)
       dimension sleg(cn0),oleg(cn0),R(n*2)
       dimension cal(6),ts(3),tm(3),opt(3),n_force(3)
-c     Sun/Moon velocity (2026-08-09, third-body dU/dt): solarnpv/
-c     lunarpv are position-only analytic series, so velocity is
-c     obtained via central finite difference of the same series --
-c     see third_body_dvdt's own header for why (real orbital motion,
-c     not a simple rotation rate like Earth's spin).
-      dimension ts_dot(3), tm_dot(3), ts_p(3), ts_m(3)
-      dimension tm_p(3), tm_m(3)
       dimension RbyRs(cn0),RbyRm(cn0),cn_m(cn0),cn_s(cn0),Rm(n*2)
       dimension qsun(4),qmoon(4),slambda(cn0),olambda(cn0),Rs(n*2)
-c     General (n,m) tesseral/mascon harmonics (issue #30, replacing
-c     issue #29's (2,2)-only q22/tess22_force): q_gen is the
-c     KS-element force contribution, amue-free like q(j) itself;
-c     tau_gen likewise amue-free (amue applied explicitly when added
-c     to Tau_geo, matching Tau_geo's own convention). Cnm_tess/
-c     Snm_tess/Cnm_rot/Snm_rot are allocated once degree ntess_use is
-c     known (below); a missing (n,m) row in the gravity file, or
-c     ngeo_deg<=1, means that term's contribution is exactly zero --
-c     the same auto-detect convention #29 already used.
-c     ntess_cap bounds the general tesseral degree independently of
-c     ngeo_deg (which can legitimately run to 2190 for zonal-only
-c     precision): this recursion is O(n^2) per step, not O(n) like the
-c     zonal aLegP path, so reusing ngeo_deg directly would make
-c     already-expensive high-degree zonal-only runs far more
-c     expensive for no benefit. Set to 72 (2026-08-09, user direction)
-c     -- the standard truncated-gravity-model resolution (e.g. EGM96
-c     72x72) used throughout operational precision orbit propagation;
-c     ngeo_deg must also be >=72 in const_new.dat for ntess_use to
-c     actually reach this degree (ntess_use=min(ngeo_deg,ntess_cap)
-c     below). Revisit if a future consumer genuinely needs more.
+c     Full (n,m) geopotential, m=0..n (2026-08-09: unified -- the
+c     formerly-separate zonal (aLegP/geo_coeff) pathway is GONE. m=0
+c     is not a distinct force model, it is simply this same general
+c     formula's m=0 row (P_n^0 = P_n, the classical zonal Legendre
+c     polynomial, via the identical three-term recursion), so it has
+c     no business being computed by a second, separate code path).
+c     q_gen is the KS-element force contribution, amue-free; tau_gen
+c     likewise amue-free (amue applied explicitly when added to
+c     Tau_geo). Cnm_tess/Snm_tess/Cnm_rot/Snm_rot are allocated once
+c     degree ntess_use is known (below); a missing (n,m) row in the
+c     gravity file, or ngeo_deg<=1, means that term's contribution is
+c     exactly zero -- the same auto-detect convention issue #29
+c     already used.
+c     ntess_cap bounds the WHOLE geopotential's degree/order (2026-
+c     08-09, user direction: one unified path, one cap, rather than
+c     the former split between a cheap O(n) zonal-only path to degree
+c     2190 and a separate O(n^2) tesseral path capped at 72 --
+c     zonal-only runs above degree 72 are no longer supported by this
+c     driver; use a lower ngeo_deg if only zonal terms are wanted).
+c     Set to 72 -- the standard truncated-gravity-model resolution
+c     (e.g. EGM96 72x72) used throughout operational precision orbit
+c     propagation. Revisit if a future consumer genuinely needs more.
       integer ntess_cap, ntess_use
       parameter (ntess_cap = 72)
       dimension q_gen(4)
@@ -249,12 +256,11 @@ c     -----------------------------------------------------------
 
       write(*,*) '=============================================='
 
-c     General (n,m) tesseral/mascon coefficients (issue #30):
-c     ntess_use<2 (from ngeo_deg<=1, or a large ngeo_deg clipped by
-c     ntess_cap only on its own -- ntess_use is always >=1 whenever
-c     ngeo_deg>1) means geo_coeff_tess_general's own load condition
-c     (ideg>=2) can never match, leaving these arrays all-zero --
-c     the same genuine auto-detect #29 already relied on, not a
+c     Full (n,m) geopotential coefficients (m=0..n, unified 2026-08-
+c     09): ntess_use<2 (from ngeo_deg<=1, or a large ngeo_deg clipped
+c     by ntess_cap) means geo_coeff_tess_general's own load condition
+c     (ideg>=2) can never match, leaving these arrays all-zero -- the
+c     same genuine auto-detect issue #29 already relied on, not a
 c     hard dependency on the row existing.
       ntess_use = min(ngeo_deg, ntess_cap)
       allocate(Cnm_tess(0:ntess_use,0:ntess_use),
@@ -263,13 +269,9 @@ c     hard dependency on the row existing.
      &         Snm_rot(0:ntess_use,0:ntess_use))
 
       if(ngeo_deg.eq.0.or.ngeo_deg.eq.1) then
-         do i = 1,cn0
-            c_j(i) = 0.d0
-         end do
-c        No EGM2008 file guaranteed present in this regime (same
-c        reasoning as the zonal branch above) -- zero directly
-c        rather than calling geo_coeff_tess_general, which would
-c        open the file unconditionally.
+c        No EGM2008 file guaranteed present in this regime -- zero
+c        directly rather than calling geo_coeff_tess_general, which
+c        would open the file unconditionally.
          do i = 0,ntess_use
             do j = 0,ntess_use
                Cnm_tess(i,j) = 0.d0
@@ -277,8 +279,6 @@ c        open the file unconditionally.
             end do
          end do
       else
-!     compute j_n values
-         call geo_coeff(ngeo_deg,c_j)
          call geo_coeff_tess_general('input/EGM2008_to2190_TideFree',
      &        ntess_use, Cnm_tess, Snm_tess)
       end if
@@ -295,19 +295,6 @@ c        open the file unconditionally.
 
       call solarnpv(djulian,ts)
       call lunarpv(djulian,tm)
-
-c     Sun/Moon velocity via central finite difference (2026-08-09,
-c     third-body dU/dt) -- 60s step, ample for these smooth,
-c     day-to-month-timescale low-precision analytic series.
-      h_fd = 60.d0/86400.d0
-      call solarnpv(djulian+h_fd, ts_p)
-      call solarnpv(djulian-h_fd, ts_m)
-      call lunarpv(djulian+h_fd, tm_p)
-      call lunarpv(djulian-h_fd, tm_m)
-      do i_fd = 1,3
-         ts_dot(i_fd) = (ts_p(i_fd)-ts_m(i_fd))/(2.d0*h_fd*86400.d0)
-         tm_dot(i_fd) = (tm_p(i_fd)-tm_m(i_fd))/(2.d0*h_fd*86400.d0)
-      end do
 
 c     General (n,m) tesseral (issue #30): Earth's rotation angle at
 c     this epoch, and the resulting time-dependent (not position-
@@ -330,36 +317,23 @@ c     comments.
 
 !     Perturbing potential, V_pot
 
-!     Oblateness terms
-      Re(1) = R_Earth
-      ZbyR(1) = x(3)/R(1)
-      ObyR(1) = 1.d0/R(1)
-
 !     Third-body terms
       call third_body_aux(nsun_deg,  x, ts, R(1), amuS,
      &                    Rs(1), RbyRs, first_s, cphi_s, cphi_s2)
       call third_body_aux(nmoon_deg, x, tm, R(1), amuM,
      &                    Rm(1), RbyRm, first_m, cphi_m, cphi_m2)
 
-      do i = 1,ngeo_deg
-         ObyR(i+1) = ObyR(i)*ObyR(1)
-         Re(i+1) = Re(i)*Re(1)
-      end do
-
       V_pot = 0.d0
 
-c     +1: the force/time-element formulas below need aleg(i+2)
-c     (degree i+1) for i up to ngeo_deg, i.e. one degree beyond
-c     the requested ngeo_deg itself (same for sleg/oleg).
-      call aLegP(ngeo_deg+1,ZbyR(1),aleg)
+c     +1: the force/time-element formulas below need sleg(i+2)/
+c     oleg(i+2) (degree i+1) for i up to nsun_deg/nmoon_deg, i.e. one
+c     degree beyond the requested degree itself.
       call aLegP(nsun_deg+1,cphi_s,sleg)
       call aLegP(nmoon_deg+1,cphi_m,oleg)
 
-      do i = 2,ngeo_deg
-         cn_j(i) = amue*Re(i)*c_j(i)*ObyR(i+1)
-         V_p(i) = cn_j(i)*aleg(i+1)
-         V_pot = V_pot+V_p(i)
-      end do
+c     Geopotential's own V_pot contribution is added below, once u is
+c     available (needs car2ks, which needs this first V_pot estimate
+c     -- see the two-pass w/car2ks refinement after car2ks below).
 
       do i = 2,nsun_deg
          cn_s(i) = first_s * RbyRs(i)
@@ -383,18 +357,17 @@ c     the requested ngeo_deg itself (same for sleg/oleg).
       call car2ks(x,xd,u,us,w)
       call ks2car(u,us,x,xd,w)
 
-c     Initial tesseral potential contribution to V_pot (2026-08-09):
-c     previously omitted entirely here (only zonal+third-body were
-c     included, unlike the per-step V_pot-equivalent energy balance
-c     tracked via z(10)/w -- see that section's own comment) -- the
-c     very first w should be self-consistent with the same physics
-c     its own rate equation now respects. One-time evaluation; needs
-c     u (just computed above via car2ks), so w/car2ks are redone once
-c     with the corrected V_pot for full (w, us) self-consistency
-c     (car2ks's own us computation scales internally by 1/w). Safe to
-c     call unconditionally -- tess_legendre_force's own do n=2,nmax
-c     loop is a no-op (v_pert=0) whenever ntess_use<2, matching how
-c     the per-step call below is never guarded either.
+c     Initial geopotential contribution to V_pot: the full (n,m)
+c     geopotential (m=0 zonal terms included, 2026-08-09 unification)
+c     needs u, which itself needs w, which needs V_pot -- a genuine
+c     circular dependency, resolved the same way it always was for
+c     the tesseral-only remainder: bootstrap w/u from the third-body-
+c     only V_pot above, then add the geopotential's own contribution
+c     once u is available, then redo w/car2ks once for full (w, us)
+c     self-consistency (car2ks's own us computation scales internally
+c     by 1/w). Safe to call unconditionally -- tess_legendre_force's
+c     own do n=2,nmax loop is a no-op (v_pert=0) whenever ntess_use<2,
+c     matching how the per-step call below is never guarded either.
       call tess_legendre_force(u, R_Earth, WE_rot, ntess_use,
      &                          Cnm_rot, Snm_rot,
      &                          q_gen, tau_gen, dvdt_gen, vpert_gen)
@@ -552,7 +525,6 @@ c           refreshed every step.
 
          do ki = 1,istep        !Steps
  60         continue
-            call u2uu(u,uu)
 
 c     -----------------------------------------------------------
 c     Atmospheric drag perturbation
@@ -648,40 +620,33 @@ c     -----------------------------------------------------------
 
 c     Time-element rate (KS regular elements eq., Sellamuthu 2018 thesis
 c     eq. 2.56): tau* = [mu - 2rU]/(8w^3) - r/(16w^3)*[u.dU/du] + ...
-c     which reduces, per zonal term, to +amue*(n-1)*c_j(n)*Re(n)*
-c     aleg(n+1)*ObyR(n) (matches this loop's structure once amue is
-c     included and the sign is flipped from the pre-2026-07-11 formula,
-c     which omitted amue entirely -- verified against the thesis closed
-c     form to 9 significant digits).
-            Tau_geo = 0.d0
-            do i = 2,ngeo_deg
-               Tau_geo = Tau_geo+amue*(i-1)*c_j(i)*Re(i)*aleg(i+1)
-     &                   *ObyR(i)
-            end do
-
-c     General (n,m) tesseral contribution (issue #30): q_gen/tau_gen
-c     are amue-free, like q(j)/Tau_geo's own zonal accumulation, so
-c     amue is applied here exactly as it already is for Tau_geo
-c     above. All-zero Cnm_rot/Snm_rot (no tesseral data loaded) makes
-c     q_gen and tau_gen identically zero -- see tess_legendre_force/
-c     gmst_deg. The classical-Legendre derivation (src/LegendreTess.F)
-c     is the sole active geopotential here -- verified to reproduce
-c     Cunningham's independent Cartesian solid-harmonic recursion
-c     (src/Cunningham.F, kept in the library as a standing cross-check,
-c     not called from this loop) to machine precision at the force-
-c     vector level and byte-for-byte in propagated output.
+c     Tau_geo is the WHOLE geopotential's contribution (m=0 zonal
+c     terms included, 2026-08-09 unification) -- q_gen/tau_gen are
+c     amue-free, so amue is applied here exactly as the pre-
+c     unification zonal loop always did. All-zero Cnm_rot/Snm_rot (no
+c     geopotential data loaded) makes q_gen and tau_gen identically
+c     zero -- see tess_legendre_force/gmst_deg. The classical-Legendre
+c     derivation (src/LegendreTess.F) is the sole active geopotential
+c     here -- verified to reproduce Cunningham's independent Cartesian
+c     solid-harmonic recursion (src/Cunningham.F, kept in the library
+c     as a standing cross-check, not called from this loop) to machine
+c     precision at the force-vector level.
 c
 c     dvdt_gen (2026-08-09): mu-free d(v_pert)/dt at fixed u -- this
 c     potential is explicitly time-dependent (rotate_tess_coeffs
 c     re-rotates it by theta(t) every step), so w* needs a dV/dt term
 c     -- see LegendreTess.F's own header derivation and thesis eq.
 c     2.54. WE_rot (Earth's rotation rate) is theta_dot here, matching
-c     gmst_deg's own dominant rate.
+c     gmst_deg's own dominant rate. Zonal (m=0) terms contribute
+c     exactly zero to dvdt_gen by construction (the m factor in
+c     Vlam_block vanishes at m=0) -- axisymmetric terms cannot
+c     exchange energy with a rotating frame, so folding zonal into
+c     this same call changes nothing about that physics.
             call tess_legendre_force(u, R_Earth, WE_rot, ntess_use,
      &                                Cnm_rot, Snm_rot,
      &                                q_gen, tau_gen, dvdt_gen,
      &                                vpert_gen)
-            Tau_geo = Tau_geo + amue*tau_gen
+            Tau_geo = amue*tau_gen
 
             Tau_3body1 = 0.d0
             do i = 2,nsun_deg
@@ -694,44 +659,22 @@ c     gmst_deg's own dominant rate.
      &              +(i+2)*oleg(i+1)*RbyRm(i)*RbyRm(1)*amuM
             end do
 
-c     Third-body dU/dt (2026-08-09): the Sun/Moon disturbing potential
-c     is explicitly time-dependent at fixed x too -- Rtb(t) (distance)
-c     and cphi(x,t) (phase angle) both genuinely vary via the third
-c     body's own real orbital motion, unlike the tesseral case's
-c     single scalar rotation rate. See third_body_dvdt's own header
-c     (src/Subrouts.F) for the full derivation. dvdt_3body_sun/moon
-c     are already amuS/amuM-scaled (matching Tau_3body1/2's own
-c     convention above, NOT LegendreTess.F's mu-free one) -- added
-c     directly into z(10) with no extra multiply.
-            dvdt_3body_sun = 0.d0
-            dvdt_3body_moon = 0.d0
-            if (nsun_deg .ge. 2) then
-               call third_body_dvdt(nsun_deg, x, ts, ts_dot, R(1),
-     &            amuS, Rs(1), RbyRs, cphi_s, cphi_s2, sleg,
-     &            dvdt_3body_sun)
-            end if
-            if (nmoon_deg .ge. 2) then
-               call third_body_dvdt(nmoon_deg, x, tm, tm_dot, R(1),
-     &            amuM, Rm(1), RbyRm, cphi_m, cphi_m2, oleg,
-     &            dvdt_3body_moon)
-            end if
-
 c     -----------------------------------------------------------
 c     Energy element (Sellamuthu 2018 PhD thesis eq. 2.54):
 c       w* = -(r/(8w^2))*dU/dt - (1/(2w))*(us . (qdrag+qsrp))
 c     The first term is the ONLY conservative-force contribution to
 c     w* -- it is exactly zero for every conservative force that is
 c     STATIC in the inertial frame (the thesis states explicitly:
-c     "vanishes when U does not explicitly depend on t"), but neither
-c     the general tesseral term (Earth's rotation) nor the third-body
-c     terms (Sun/Moon's own real orbital motion, 2026-08-09) are
-c     static, so neither vanishes here. dvdt_gen is mu-free (amue
-c     applied explicitly); dvdt_3body_sun/moon are already amu-scaled
-c     (added directly, see comment above).
+c     "vanishes when U does not explicitly depend on t"). The general
+c     tesseral/geopotential term is NOT static (Earth's rotation
+c     re-rotates its coefficients every step), so it does not vanish
+c     here. Third-body (Sun/Moon) is treated as static for this
+c     purpose -- its own direction/distance change on orbital
+c     (day-to-month) timescales, not the tesseral case's rotation
+c     rate, and is not modeled as an energy-element source. dvdt_gen
+c     is mu-free (amue applied explicitly).
 c     -----------------------------------------------------------
-            z(10) = -(R(1)/(8.d0*w*w))*(amue*dvdt_gen
-     &                                  + dvdt_3body_sun
-     &                                  + dvdt_3body_moon)
+            z(10) = -(R(1)/(8.d0*w*w))*amue*dvdt_gen
      &            - 0.5d0*(us(1)*(qdrag(1)+qsrp(1))
      &                    + us(2)*(qdrag(2)+qsrp(2))
      &                    + us(3)*(qdrag(3)+qsrp(3))
@@ -746,34 +689,21 @@ c     -----------------------------------------------------------
      &             + R(1)*(dotp4(u,qdrag)+dotp4(u,qsrp)))/(8.d0*w*w*w)
      &             - z(10)*(2.d0/(w*w))*dotp4(u,us)
 
-            if (ngeo_deg  .gt. 1) call aLegP(ngeo_deg+1, ZbyR(1), aleg)
             if (nsun_deg  .gt. 1) call aLegP(nsun_deg+1, cphi_s,  sleg)
             if (nmoon_deg .gt. 1) call aLegP(nmoon_deg+1,cphi_m,  oleg)
 
             do j = 1,4
-               q(j) = 0.d0
                qsun(j) = 0.d0
                qmoon(j) = 0.d0
             end do
 
             do j = 1,4
 
-!     oblateness terms
-               z2mR2=x(3)**2-R(1)**2
-               qj=0.d0
-               do i = 2,ngeo_deg
-                  qj = dble(ObyR(i+1)*Re(i)*c_j(i)*
-     &                 (R(1)*(i+1)*aleg(i+2)*(R(1)*uu(j)-x(3)*u(j))+
-     &                 (aleg(i+1)*(u(j)*(i*R(2)+x(3)**2)
-     &                 -uu(j)*(i+1)*R(1)*x(3))))/z2mR2)
-                  q(j)=qj+q(j)
-               end do
-
-c     General (n,m) tesseral contribution, computed once (all 4
-c     components together) above -- amue-free like the zonal q(j)
-c     sum, so it is picked up automatically by the same
-c     "q(j)*amue" in z(j+1)/z(j+5) below.
-               q(j) = q(j) + q_gen(j)
+c     Full (n,m) geopotential contribution, computed once (all 4
+c     components together, m=0 zonal terms included) above --
+c     amue-free, picked up by the same "q(j)*amue" in z(j+1)/z(j+5)
+c     below.
+               q(j) = q_gen(j)
 
 !     third-body terms
                call u2qu(u,qu,j)
@@ -851,27 +781,10 @@ c     -----------------------------------------------------------
             end do
 
             V = vmn(xd)
-            ZbyR(1) = x(3)/R(1)
-            ObyR(1) = 1.d0/R(1)
-            do i = 1,ngeo_deg
-               ZbyR(i+1) = ZbyR(i)*ZbyR(1)
-               ObyR(i+1) = ObyR(i)*ObyR(1)
-            end do
             FracJd = T/86400.d0
             djulian1 = djulian + FracJd
             call solarnpv(djulian1, ts)
             call lunarpv(djulian1, tm)
-
-c     Sun/Moon velocity, same finite-difference convention as the
-c     initial setup above (2026-08-09, third-body dU/dt).
-            call solarnpv(djulian1+h_fd, ts_p)
-            call solarnpv(djulian1-h_fd, ts_m)
-            call lunarpv(djulian1+h_fd, tm_p)
-            call lunarpv(djulian1-h_fd, tm_m)
-            do i_fd = 1,3
-               ts_dot(i_fd)=(ts_p(i_fd)-ts_m(i_fd))/(2.d0*h_fd*86400.d0)
-               tm_dot(i_fd)=(tm_p(i_fd)-tm_m(i_fd))/(2.d0*h_fd*86400.d0)
-            end do
 
 c     General (n,m) tesseral: refresh at the same cadence as the
 c     third-body ephemerides above, since GMST (unlike Cnm_tess/
