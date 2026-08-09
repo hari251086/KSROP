@@ -363,6 +363,26 @@ c     the requested ngeo_deg itself (same for sleg/oleg).
       call car2ks(x,xd,u,us,w)
       call ks2car(u,us,x,xd,w)
 
+c     Initial tesseral potential contribution to V_pot (2026-08-09):
+c     previously omitted entirely here (only zonal+third-body were
+c     included, unlike the per-step V_pot-equivalent energy balance
+c     tracked via z(10)/w -- see that section's own comment) -- the
+c     very first w should be self-consistent with the same physics
+c     its own rate equation now respects. One-time evaluation; needs
+c     u (just computed above via car2ks), so w/car2ks are redone once
+c     with the corrected V_pot for full (w, us) self-consistency
+c     (car2ks's own us computation scales internally by 1/w). Safe to
+c     call unconditionally -- tess_legendre_force's own do n=2,nmax
+c     loop is a no-op (v_pert=0) whenever ntess_use<2, matching how
+c     the per-step call below is never guarded either.
+      call tess_legendre_force(u, R_Earth, WE_rot, ntess_use,
+     &                          Cnm_rot, Snm_rot,
+     &                          q_gen, tau_gen, dvdt_gen, vpert_gen)
+      V_pot = V_pot + amue*vpert_gen
+      w = dsqrt(0.5d0*(amue/R(1)-V2/2.d0-V_pot))
+      call car2ks(x,xd,u,us,w)
+      call ks2car(u,us,x,xd,w)
+
       Tow = T+dotp4(u,us)/w     !Time-element
 
 !     Initial KS regular elements
@@ -630,9 +650,17 @@ c     Cunningham's independent Cartesian solid-harmonic recursion
 c     (src/Cunningham.F, kept in the library as a standing cross-check,
 c     not called from this loop) to machine precision at the force-
 c     vector level and byte-for-byte in propagated output.
-            call tess_legendre_force(u, R_Earth, ntess_use,
+c
+c     dvdt_gen (2026-08-09): mu-free d(v_pert)/dt at fixed u -- this
+c     potential is explicitly time-dependent (rotate_tess_coeffs
+c     re-rotates it by theta(t) every step), so w* needs a dV/dt term
+c     -- see LegendreTess.F's own header derivation and thesis eq.
+c     2.54. WE_rot (Earth's rotation rate) is theta_dot here, matching
+c     gmst_deg's own dominant rate.
+            call tess_legendre_force(u, R_Earth, WE_rot, ntess_use,
      &                                Cnm_rot, Snm_rot,
-     &                                q_gen, tau_gen)
+     &                                q_gen, tau_gen, dvdt_gen,
+     &                                vpert_gen)
             Tau_geo = Tau_geo + amue*tau_gen
 
             Tau_3body1 = 0.d0
@@ -647,10 +675,21 @@ c     vector level and byte-for-byte in propagated output.
             end do
 
 c     -----------------------------------------------------------
-c     Energy element: non-conservative drag + SRP contributions
-c     dw/ds = -0.5 * (us . (qdrag + qsrp)) / w
+c     Energy element (Sellamuthu 2018 PhD thesis eq. 2.54):
+c       w* = -(r/(8w^2))*dU/dt - (1/(2w))*(us . (qdrag+qsrp))
+c     The first term (2026-08-09) is the ONLY conservative-force
+c     contribution to w* -- it is exactly zero for every OTHER force
+c     in this codebase (zonal, third-body) since those are static in
+c     the inertial frame (the thesis states explicitly: "vanishes when
+c     U does not explicitly depend on t"), but the general tesseral
+c     term is genuinely time-dependent (Earth's rotation), so it does
+c     not vanish here. amue is applied explicitly since dvdt_gen is
+c     mu-free, matching Tau_geo's own convention above. Third-body
+c     (Sun/Moon) has the identical gap by the same mechanism -- not
+c     addressed here, filed as a follow-on (see plan notes).
 c     -----------------------------------------------------------
-            z(10) = -0.5d0*(us(1)*(qdrag(1)+qsrp(1))
+            z(10) = -(R(1)/(8.d0*w*w))*amue*dvdt_gen
+     &            - 0.5d0*(us(1)*(qdrag(1)+qsrp(1))
      &                    + us(2)*(qdrag(2)+qsrp(2))
      &                    + us(3)*(qdrag(3)+qsrp(3))
      &                    + us(4)*(qdrag(4)+qsrp(4)))/w

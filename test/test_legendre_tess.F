@@ -110,8 +110,9 @@ c        triangle, including deliberately asymmetric magnitudes.
 
          call tess_general_force(u, 6378.1363d0, nmax, Cnm, Snm,
      &                            q_ref, tau_ref)
-         call tess_legendre_force(u, 6378.1363d0, nmax, Cnm, Snm,
-     &                             q_leg, tau_leg)
+         call tess_legendre_force(u, 6378.1363d0, 7.2921150d-5,
+     &                             nmax, Cnm, Snm,
+     &                             q_leg, tau_leg, dvdt_leg, vpert_leg)
 
          write(*,*) ''
          write(*,'(A,I2,A,I1)') '  --- case ', it, ', nmax=', nmax

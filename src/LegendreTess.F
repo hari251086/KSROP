@@ -90,8 +90,10 @@ c     ============================================================
       end
 
 c     ============================================================
-      subroutine tess_legendre_force(u, R_body, nmax, Cnm, Snm,
-     &                                q_leg, tau_leg)
+      subroutine tess_legendre_force(u, R_body, theta_dot, nmax,
+     &                                Cnm, Snm,
+     &                                q_leg, tau_leg, dvdt_leg,
+     &                                v_pert_out)
 c     KSROP: general (n,m) tesseral/mascon KS-element force (q_leg)
 c     and time-element (tau_leg) contribution -- an INDEPENDENT
 c     alternative derivation to tess_general_force (src/Cunningham.F,
@@ -107,7 +109,16 @@ c     (E:\Research\1. R&D\Mathematica). TWO bugs found in the source
 c     file and fixed here (2026-08-09):
 c       1. General associated Legendre recursion -- see
 c          alfP_general's header. Wrong for every interior (n,m),
-c          0<m<n-1.
+c          0<m<n-1. Independently corroborated (2026-08-09, same day)
+c          against a second reference ("Analytical and Numerical
+c          Predictions for Near-Earth's Satellite Orbits with KS
+c          Uniform Regular Canonical Equations", eq 3.2.2 -- the same
+c          section already cited in driver_KS.F's header for the
+c          geopotential physics), whose "otherwise" branch states the
+c          identical incorrect formula -- exact-rational-arithmetic
+c          verified (3-4-5 triple) against the Rodrigues formula, same
+c          failure pattern. The bug is inherited from this literature
+c          lineage, not a one-off transcription slip.
 c       2. Longitude (lambda) was computed from Y,Z
 c          (cos(alpha)=z/sqrt(y^2+z^2)) -- inconsistent with the same
 c          file's own latitude convention (sin(phi)=z/r, i.e. Z is
@@ -137,6 +148,50 @@ c     fully-normalized-to-unnormalized coefficient arrays
 c     geo_coeff_tess_general produces -- no separate loader needed;
 c     this can be fed the exact arrays already loaded for
 c     tess_general_force.
+c
+c     dvdt_leg (2026-08-09): the mu-free rate of change of this
+c     potential w.r.t. PHYSICAL time t, holding u (hence r,phi,lambda)
+c     fixed -- needed because the tesseral coefficients Cnm/Snm are
+c     defined body-fixed but driver_KS.F evaluates this potential in
+c     the inertial frame via a fresh per-step rotation by theta(t)
+c     (rotate_tess_coeffs), making the potential explicitly time-
+c     dependent: U(u,t), not U(u). Per Sellamuthu 2018 PhD thesis eq.
+c     2.54, the KS energy-element rate w* has a
+c     "-(r/(8w^2))*dU/dt" term that vanishes only when U does not
+c     explicitly depend on t -- previously omitted here since every
+c     OTHER conservative force in this codebase (zonal, third-body)
+c     was treated as static; the general tesseral term breaks that
+c     assumption.
+c
+c     Derivation: writing Cnm_rot(t)=Cnm*cos(m*theta)-Snm*sin(m*theta),
+c     Snm_rot(t)=Cnm*sin(m*theta)+Snm*cos(m*theta) (the exact
+c     rotate_tess_coeffs convention) is algebraically identical to
+c     evaluating the potential at body-fixed longitude
+c     psi=lambda-theta(t) with the RAW (un-rotated) Cnm/Snm. Since
+c     lambda is a pure function of u (atan2(y,x)), holding u fixed
+c     holds lambda fixed, so d/dt enters solely through theta(t):
+c       d/dt[Cnm*cos(m*psi)+Snm*sin(m*psi)]
+c         = -m*theta_dot*(Snm_rot*cos(m*lambda)-Cnm_rot*sin(m*lambda))
+c     -- verified in sympy to zero symbolic residual, and independently
+c     via finite difference (central diff at h=1e-7 in theta, u held
+c     exactly fixed, matched to 1.26e-9 relative -- consistent with
+c     pure O(h^2) truncation, i.e. effectively exact). The RHS is
+c     exactly m times the per-term summand already accumulated in
+c     vlam_sum below -- no new recursion needed:
+c       d(v_pert)/dt |_u = -theta_dot * Vlam_block
+c     theta_dot is Earth's rotation rate (WE_rot at the call site,
+c     confirmed to match gmst_deg's own dominant rate,
+c     360.98564736629 deg/day = 7.29211e-5 rad/s).
+c
+c     Zonal (m=0) terms contribute exactly zero to this identity (the
+c     m factor vanishes) -- physically correct, since an axisymmetric
+c     term cannot exchange energy with a rotating frame.
+c
+c     v_pert_out: the mu-free potential value itself (same v_pert
+c     already used internally for q_leg/tau_leg) -- exposed so a
+c     caller can build a self-consistent initial energy element w
+c     (driver_KS.F's V_pot at t=t0), which needs the tesseral
+c     potential's VALUE, not just its u-gradient or time-rate.
 c     ============================================================
       implicit double precision (a-h,o-z)
       dimension u(4), q_leg(4)
@@ -235,6 +290,10 @@ c     convention exactly -- see header note).
 
       tau_leg = -2.d0*r_ks*v_pert - (r_ks/2.d0)*
      &          (u1*dVdu(1) + u2*dVdu(2) + u3*dVdu(3) + u4*dVdu(4))
+
+c     mu-free d(v_pert)/dt at fixed u -- see header derivation.
+      dvdt_leg = -theta_dot * Vlam_block
+      v_pert_out = v_pert
 
       return
       end

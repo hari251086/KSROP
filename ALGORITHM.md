@@ -164,6 +164,28 @@ flowchart TD
   between the perturbed and unperturbed angular rates, used to keep the
   fixed fictitious-time step aligned with real orbital phase under
   perturbation.
+- **Energy-element rate, $w^*$, now includes a $dU/dt$ term** (`feature/
+  tesseral-energy-time-dependence` branch, 2026-08-09; Sellamuthu 2018 PhD
+  thesis eq. 2.54: $w^*=-(r/8w^2)\,dU/dt - (1/2w)(u^*\!\cdot\!L^T(u)P)$).
+  Previously `z(10)` contained only the second (non-conservative drag/SRP)
+  term — correct as long as every conservative force was static in the
+  inertial frame, but the general $(n,m)$ tesseral potential is not: its
+  coefficients are body-fixed and get re-rotated by Earth's rotation angle
+  $\theta(t)$ every step (`rotate_tess_coeffs`), making $U(u,t)$ explicitly
+  time-dependent — the thesis states directly that eq. 2.54's first term
+  "vanishes when $U$ does not explicitly depend on $t$," which no longer
+  holds once general tesseral support exists. Derived (`dU/dt=-amue\cdot
+  \theta_{dot}\cdot V_{\lambda}$, reusing the potential's own already-
+  computed $\partial V/\partial\lambda$ block, no new recursion) and
+  verified both symbolically (sympy, zero residual) and by an independent
+  finite-difference check holding $u$ exactly fixed and perturbing only
+  $\theta$ (`1.26\times10^{-9}$ relative, consistent with pure $O(h^2)$
+  truncation). Zonal ($m=0$) and third-body terms are unaffected —
+  zonal is exactly zero under this identity (axisymmetric, structurally
+  guaranteed); third-body has the identical gap by the same mechanism
+  but is explicitly out of scope for this branch. See §8 for the full
+  derivation provenance and empirical verification (including a real
+  finding that corrected the original success-criterion hypothesis).
 - **Oblateness potential**: zonal harmonic sum via associated Legendre
   polynomials, $V_{oblate} = \sum_{n\ge2} \mu R_{Earth}^n
   c_n / r^{n+1}\, P_n(\sin\phi)$, configurable up to degree 2190 (EGM2008).
@@ -324,7 +346,89 @@ correctness check, not a second production code path. Re-verified via
 a fresh before/after propagation that the unconditional call produces
 byte-identical output to the pre-simplification switched run.
 
+**Energy-element `dU/dt` term added, `feature/tesseral-energy-time-
+dependence` branch (2026-08-09)**: user observed `w*` should have a
+`dV/dt` term (thesis eq. 2.54) — previously omitted because every
+conservative force in this codebase was static in the inertial frame,
+which the general tesseral term is not (§5). Derivation: writing the
+production `rotate_tess_coeffs` convention as evaluating the potential
+at body-fixed longitude $\psi=\lambda-\theta(t)$ with raw (un-rotated)
+coefficients makes the chain rule direct — `d/dt` enters solely through
+$\theta(t)$ since $\lambda$ (inertial) is a pure function of $u$.
+Verified two independent ways before any Fortran was written: (1)
+sympy, zero symbolic residual after catching one missing factor of `m`
+mid-derivation; (2) numerically, holding a concrete `u` (hence
+$\lambda_{inertial}$) *exactly* fixed and finite-differencing only in
+$\theta$ — matched to `1.26e-9` relative, consistent with pure $O(h^2)$
+truncation.
+
+**Independent literature corroboration found during review**: the user
+supplied a second reference ("Analytical and Numerical Predictions for
+Near-Earth's Satellite Orbits with KS Uniform Regular Canonical
+Equations," Ch. 3, §3.2-3.3 — the same section numbering already cited
+in `driver_KS.F`'s header). Its $V$/normalization/$\partial H/\partial
+\phi$/$\partial H/\partial\lambda$ formulas all matched `LegendreTess.F`
+exactly. Its own associated-Legendre recursion stated the *identical*
+incorrect interior-$(n,m)$ formula already found and fixed in the
+`.wl` source — reverified with exact rational arithmetic (a 3-4-5
+triple, zero floating-point ambiguity) against the Rodrigues formula.
+Given the matching section numbers, the `.wl` file's bug is very
+likely inherited directly from this literature, not a one-off
+transcription slip.
+
+**Primary-source cross-check, not just formula transcription**: eq.
+(2.54) was read directly from the user's own PhD thesis (Chapter 2,
+PDF p.19/printed p.41) rather than trusted from any secondary
+transcription, given the `.wl` file's already-established error rate.
+The thesis states explicitly: *"The first term on the right-hand side
+of equation (2.54) vanishes when U does not explicitly depend on t"* —
+directly confirming the physics gap. Eq. (2.56)'s own final term,
+$-(2/w^2)w^*(u\cdot u^*)$, matches `driver_KS.F`'s pre-existing
+`z(1)` structure exactly (`-z(10)*(2/w^2)*dotp4(u,us)`), confirming
+algebraically that `Tau_geo` needed no direct edit — once `z(10)`
+includes `dU/dt`, `z(1)` picks it up automatically through this
+already-existing coupling term. A permanent regression test
+(`test_dvdt_tess.F`, TC1/TC2) locks this structural claim in.
+
+**Empirical verification, and a corrected hypothesis**: implemented
+`dvdt_leg` (reusing the potential's already-computed $\partial V/
+\partial\lambda$ block, no new recursion) and wired it into `z(10)`
+and the initial `V_pot`. A 100-revolution conservative-only (drag/SRP
+off) propagation at `ngeo_deg=72` with real tesseral data, compared
+against the pre-fix commit via a temporary git worktree: **before the
+fix, `w` was frozen to machine precision (std $1.3\times10^{-15}$) for
+the entire run** — direct confirmation `z(10)` genuinely had zero
+conservative-force contribution before this change. **After the fix,
+`w` varies with a bounded, oscillatory character** (25 sign changes
+across 100 revolutions, repeatedly returning near its starting value,
+no secular drift) rather than staying constant. This corrects the
+plan's original success criterion, which hypothesized `w` should
+become *more* constant after the fix — the opposite is physically
+correct: a genuinely time-dependent (rotating, asymmetric) potential
+is expected to exchange energy periodically with the orbiting body
+(the same mechanism behind GEO/areostationary resonance), so `w`
+*should* vary, not stay flat. The bounded, non-secular oscillation
+pattern is the right qualitative signature of correct new physics,
+not a bug — distinguishing it from a numerical energy leak, which
+would show unbounded secular growth instead.
+
+**Explicitly out of scope, by user decision**: the identical
+explicit-time-dependence argument applies to the third-body (Sun/Moon)
+potential (`qsun`/`qmoon`), since `ts`/`tm` also vary with time via
+`solarnpv`/`lunarpv`. Filed as a real, known, parallel gap for a
+future branch, not started here. KSROP-Lunar/KSROP-Mars likely have
+the analogous gap in their own `tess_general_force`-based drivers —
+not investigated this session, separate follow-on work.
+
 ## 9. Known Limitations
+- **Third-body (Sun/Moon) potential is missing the same `dU/dt` energy-
+  element term the general tesseral potential now has** (see §5/§8,
+  `feature/tesseral-energy-time-dependence` branch) — `qsun`/`qmoon`'s
+  own potential is explicitly time-dependent by the identical mechanism
+  (`ts`/`tm`, the Sun/Moon direction, vary with time via `solarnpv`/
+  `lunarpv`), so `w*` is currently under-counting energy exchange with
+  third-body perturbations too. Explicitly scoped out of that branch by
+  user decision; a real, known, unaddressed gap for a future branch.
 - **Tesseral gravity degree is capped at `ntess_cap=72`** (general $(n,m)$
   support itself is not limited to (2,2) — see §5/§8, issue #30). The cap
   exists because this recursion is $O(n^2)$ *per force evaluation* (every

@@ -71,3 +71,8 @@ main = "test_cunningham.F"
 name = "test_legendre_tess"
 source-dir = "test"
 main = "test_legendre_tess.F"
+
+[[test]]
+name = "test_dvdt_tess"
+source-dir = "test"
+main = "test_dvdt_tess.F"

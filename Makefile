@@ -45,9 +45,14 @@ TEST_LEGENDRE_TESS_SRC = test/test_legendre_tess.F src/LegendreTess.F \
                           src/Cunningham.F src/Subrouts.F src/Legendre.F
 TEST_LEGENDRE_TESS_BIN = test_legendre_tess
 
+TEST_DVDT_TESS_SRC = test/test_dvdt_tess.F src/LegendreTess.F \
+                      src/Cunningham.F src/Subrouts.F src/Legendre.F
+TEST_DVDT_TESS_BIN = test_dvdt_tess
+
 ALL_TEST_BINS = $(TEST_BIN) $(TEST_BUGS_BIN) $(TEST_TLE_BIN) \
                 $(TEST_TLE2SV_BIN) $(TEST_TLE2OPM_BIN) $(TEST_SW_BIN) \
-                $(TEST_CUNNINGHAM_BIN) $(TEST_LEGENDRE_TESS_BIN)
+                $(TEST_CUNNINGHAM_BIN) $(TEST_LEGENDRE_TESS_BIN) \
+                $(TEST_DVDT_TESS_BIN)
 
 .PHONY: all tools tests run test clean
 
@@ -86,6 +91,9 @@ $(TEST_CUNNINGHAM_BIN): $(TEST_CUNNINGHAM_SRC)
 
 $(TEST_LEGENDRE_TESS_BIN): $(TEST_LEGENDRE_TESS_SRC)
 	$(FC) $(FFLAGS) $(TEST_LEGENDRE_TESS_SRC) -o $(TEST_LEGENDRE_TESS_BIN)
+
+$(TEST_DVDT_TESS_BIN): $(TEST_DVDT_TESS_SRC)
+	$(FC) $(FFLAGS) $(TEST_DVDT_TESS_SRC) -o $(TEST_DVDT_TESS_BIN)
 
 run: $(TARGET)
 	./$(TARGET)
