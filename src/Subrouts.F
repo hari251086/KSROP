@@ -398,6 +398,67 @@ c     ON/OFF sensitivity test, issue #23).
       end
 
 c     ============================================================
+      subroutine third_body_dvdt(deg, x, tb, tb_dot, R1, amu_tb,
+     &                            Rtb1, RbyRtb, cphi, cphi2, sleg,
+     &                            dvdt_out)
+c     KSROP branch feature/tesseral-energy-time-dependence (2026-08-09):
+c     dU/dt for the third-body (Sun/Moon) disturbing potential, at
+c     FIXED satellite position x -- the same "w* needs a dV/dt term"
+c     gap already fixed for the general tesseral potential
+c     (src/LegendreTess.F) applies here too: the third-body direction
+c     tb(t) genuinely moves (real orbital motion, not a simple
+c     constant-rate rotation like Earth's own spin), so
+c     U_3body(x,t) = -amu_tb/Rtb(t) * Sum_{n=2}^deg (R1/Rtb(t))^n
+c                    P_n(cphi(x,t))
+c     is explicitly time-dependent even holding x fixed, through BOTH
+c     Rtb(t) (distance) and cphi(x,t) (angle) -- unlike the tesseral
+c     case's single scalar rotation rate.
+c
+c     Derivation (verified in sympy to zero residual against a direct
+c     vector-calculus differentiation of rho=|tb| and
+c     cphi=(x.tb)/(R1*rho), general degree n):
+c       rho_dot = (tb . tb_dot) / rho
+c       c_dot   = (x . tb_dot)/(R1*rho) - cphi*rho_dot/rho
+c       dU_n/dt = cn(n) * [ -n*c_dot*(P_{n-1}-cphi*P_n)/(cphi^2-1)
+c                            - (n+1)*(rho_dot/rho)*P_n ]
+c     where cn(n) = -amu_tb/Rtb1 * RbyRtb(n) (the SAME coefficient
+c     already used for this degree's V_pot/Tau_3body contribution --
+c     already amu_tb-scaled, unlike LegendreTess.F's mu-free
+c     convention, so the caller adds this directly into z(10) with NO
+c     extra amue/amu_tb multiply). P_{n-1}=sleg(n), P_n=sleg(n+1),
+c     matching this repo's existing aLegP 1-based indexing (same
+c     convention already used by Tau_3body1/2 and qsun/qmoon).
+c
+c     tb_dot (Sun/Moon velocity) is NOT available from solarnpv/
+c     lunarpv (position-only analytic series) -- the caller supplies
+c     it via a cheap central finite difference of the same series,
+c     adequate given solarnpv/lunarpv are themselves low-precision
+c     (~0.1% vs DE405) analytic approximations, not exact ephemerides.
+c
+c     Verified against a genuine finite difference of the REAL
+c     third-body potential (via solarnpv/lunarpv at t0+/-h, x held
+c     exactly fixed) -- see test/test_dvdt_3body.F.
+c     ============================================================
+      implicit double precision (a-h,o-z)
+      integer deg
+      dimension x(3), tb(3), tb_dot(3), RbyRtb(*), sleg(*)
+
+      rho_dot = dotp3(tb,tb_dot)/Rtb1
+      c_dot = dotp3(x,tb_dot)/(R1*Rtb1) - cphi*rho_dot/Rtb1
+      den = cphi2 - 1.d0
+
+      dvdt_out = 0.d0
+      do i = 2, deg
+         cn_i = -amu_tb/Rtb1 * RbyRtb(i)
+         term = -dble(i)*c_dot*(sleg(i)-cphi*sleg(i+1))/den
+     &          - dble(i+1)*(rho_dot/Rtb1)*sleg(i+1)
+         dvdt_out = dvdt_out + cn_i*term
+      end do
+
+      return
+      end
+
+c     ============================================================
       subroutine ks2ksr(y,u,us,E,cosE,sinE)
 c     Conversion from Cartesian to KS coordinates
 !     w: (un)perturbed angular frequency of harmonic oscillator

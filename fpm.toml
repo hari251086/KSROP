@@ -76,3 +76,8 @@ main = "test_legendre_tess.F"
 name = "test_dvdt_tess"
 source-dir = "test"
 main = "test_dvdt_tess.F"
+
+[[test]]
+name = "test_dvdt_3body"
+source-dir = "test"
+main = "test_dvdt_3body.F"

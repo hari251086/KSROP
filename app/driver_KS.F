@@ -69,6 +69,13 @@ c     Value of pi, degree to radians and radians to degree
       dimension cn_j(cn0),c_j(cn0),V_p(cn0),aleg(cn0)
       dimension sleg(cn0),oleg(cn0),R(n*2)
       dimension cal(6),ts(3),tm(3),opt(3),n_force(3)
+c     Sun/Moon velocity (2026-08-09, third-body dU/dt): solarnpv/
+c     lunarpv are position-only analytic series, so velocity is
+c     obtained via central finite difference of the same series --
+c     see third_body_dvdt's own header for why (real orbital motion,
+c     not a simple rotation rate like Earth's spin).
+      dimension ts_dot(3), tm_dot(3), ts_p(3), ts_m(3)
+      dimension tm_p(3), tm_m(3)
       dimension RbyRs(cn0),RbyRm(cn0),cn_m(cn0),cn_s(cn0),Rm(n*2)
       dimension qsun(4),qmoon(4),slambda(cn0),olambda(cn0),Rs(n*2)
 c     General (n,m) tesseral/mascon harmonics (issue #30, replacing
@@ -288,6 +295,19 @@ c        open the file unconditionally.
 
       call solarnpv(djulian,ts)
       call lunarpv(djulian,tm)
+
+c     Sun/Moon velocity via central finite difference (2026-08-09,
+c     third-body dU/dt) -- 60s step, ample for these smooth,
+c     day-to-month-timescale low-precision analytic series.
+      h_fd = 60.d0/86400.d0
+      call solarnpv(djulian+h_fd, ts_p)
+      call solarnpv(djulian-h_fd, ts_m)
+      call lunarpv(djulian+h_fd, tm_p)
+      call lunarpv(djulian-h_fd, tm_m)
+      do i_fd = 1,3
+         ts_dot(i_fd) = (ts_p(i_fd)-ts_m(i_fd))/(2.d0*h_fd*86400.d0)
+         tm_dot(i_fd) = (tm_p(i_fd)-tm_m(i_fd))/(2.d0*h_fd*86400.d0)
+      end do
 
 c     General (n,m) tesseral (issue #30): Earth's rotation angle at
 c     this epoch, and the resulting time-dependent (not position-
@@ -674,21 +694,44 @@ c     gmst_deg's own dominant rate.
      &              +(i+2)*oleg(i+1)*RbyRm(i)*RbyRm(1)*amuM
             end do
 
+c     Third-body dU/dt (2026-08-09): the Sun/Moon disturbing potential
+c     is explicitly time-dependent at fixed x too -- Rtb(t) (distance)
+c     and cphi(x,t) (phase angle) both genuinely vary via the third
+c     body's own real orbital motion, unlike the tesseral case's
+c     single scalar rotation rate. See third_body_dvdt's own header
+c     (src/Subrouts.F) for the full derivation. dvdt_3body_sun/moon
+c     are already amuS/amuM-scaled (matching Tau_3body1/2's own
+c     convention above, NOT LegendreTess.F's mu-free one) -- added
+c     directly into z(10) with no extra multiply.
+            dvdt_3body_sun = 0.d0
+            dvdt_3body_moon = 0.d0
+            if (nsun_deg .ge. 2) then
+               call third_body_dvdt(nsun_deg, x, ts, ts_dot, R(1),
+     &            amuS, Rs(1), RbyRs, cphi_s, cphi_s2, sleg,
+     &            dvdt_3body_sun)
+            end if
+            if (nmoon_deg .ge. 2) then
+               call third_body_dvdt(nmoon_deg, x, tm, tm_dot, R(1),
+     &            amuM, Rm(1), RbyRm, cphi_m, cphi_m2, oleg,
+     &            dvdt_3body_moon)
+            end if
+
 c     -----------------------------------------------------------
 c     Energy element (Sellamuthu 2018 PhD thesis eq. 2.54):
 c       w* = -(r/(8w^2))*dU/dt - (1/(2w))*(us . (qdrag+qsrp))
-c     The first term (2026-08-09) is the ONLY conservative-force
-c     contribution to w* -- it is exactly zero for every OTHER force
-c     in this codebase (zonal, third-body) since those are static in
-c     the inertial frame (the thesis states explicitly: "vanishes when
-c     U does not explicitly depend on t"), but the general tesseral
-c     term is genuinely time-dependent (Earth's rotation), so it does
-c     not vanish here. amue is applied explicitly since dvdt_gen is
-c     mu-free, matching Tau_geo's own convention above. Third-body
-c     (Sun/Moon) has the identical gap by the same mechanism -- not
-c     addressed here, filed as a follow-on (see plan notes).
+c     The first term is the ONLY conservative-force contribution to
+c     w* -- it is exactly zero for every conservative force that is
+c     STATIC in the inertial frame (the thesis states explicitly:
+c     "vanishes when U does not explicitly depend on t"), but neither
+c     the general tesseral term (Earth's rotation) nor the third-body
+c     terms (Sun/Moon's own real orbital motion, 2026-08-09) are
+c     static, so neither vanishes here. dvdt_gen is mu-free (amue
+c     applied explicitly); dvdt_3body_sun/moon are already amu-scaled
+c     (added directly, see comment above).
 c     -----------------------------------------------------------
-            z(10) = -(R(1)/(8.d0*w*w))*amue*dvdt_gen
+            z(10) = -(R(1)/(8.d0*w*w))*(amue*dvdt_gen
+     &                                  + dvdt_3body_sun
+     &                                  + dvdt_3body_moon)
      &            - 0.5d0*(us(1)*(qdrag(1)+qsrp(1))
      &                    + us(2)*(qdrag(2)+qsrp(2))
      &                    + us(3)*(qdrag(3)+qsrp(3))
@@ -818,6 +861,17 @@ c     -----------------------------------------------------------
             djulian1 = djulian + FracJd
             call solarnpv(djulian1, ts)
             call lunarpv(djulian1, tm)
+
+c     Sun/Moon velocity, same finite-difference convention as the
+c     initial setup above (2026-08-09, third-body dU/dt).
+            call solarnpv(djulian1+h_fd, ts_p)
+            call solarnpv(djulian1-h_fd, ts_m)
+            call lunarpv(djulian1+h_fd, tm_p)
+            call lunarpv(djulian1-h_fd, tm_m)
+            do i_fd = 1,3
+               ts_dot(i_fd)=(ts_p(i_fd)-ts_m(i_fd))/(2.d0*h_fd*86400.d0)
+               tm_dot(i_fd)=(tm_p(i_fd)-tm_m(i_fd))/(2.d0*h_fd*86400.d0)
+            end do
 
 c     General (n,m) tesseral: refresh at the same cadence as the
 c     third-body ephemerides above, since GMST (unlike Cnm_tess/

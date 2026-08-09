@@ -180,12 +180,21 @@ flowchart TD
   verified both symbolically (sympy, zero residual) and by an independent
   finite-difference check holding $u$ exactly fixed and perturbing only
   $\theta$ (`1.26\times10^{-9}$ relative, consistent with pure $O(h^2)$
-  truncation). Zonal ($m=0$) and third-body terms are unaffected —
-  zonal is exactly zero under this identity (axisymmetric, structurally
-  guaranteed); third-body has the identical gap by the same mechanism
-  but is explicitly out of scope for this branch. See §8 for the full
-  derivation provenance and empirical verification (including a real
-  finding that corrected the original success-criterion hypothesis).
+  truncation). Zonal ($m=0$) is exactly zero under this identity
+  (axisymmetric, structurally guaranteed) and needs no term. The
+  **third-body (Sun/Moon) potential has the identical explicit-time-
+  dependence gap** (`ts`/`tm`, the Sun/Moon direction, vary with real
+  time via `solarnpv`/`lunarpv`) and, since KSROP does full numerical
+  integration rather than an approximate/analytical theory, was brought
+  in on the same branch rather than left incomplete: `dU_{3body}/dt`
+  derived symbolically from the disturbing-function series (both
+  $R_{tb}(t)$ and $\cos\phi(x,t)$ vary with the third body's real
+  orbital motion, not a simple rotation), verified against a genuine
+  finite-difference ground truth using the production ephemeris, and
+  summed into the same $z(10)$ term alongside the tesseral piece. See
+  §8 for the full derivation provenance and empirical verification
+  (both tesseral and third-body, including a real finding that
+  corrected the original success-criterion hypothesis).
 - **Oblateness potential**: zonal harmonic sum via associated Legendre
   polynomials, $V_{oblate} = \sum_{n\ge2} \mu R_{Earth}^n
   c_n / r^{n+1}\, P_n(\sin\phi)$, configurable up to degree 2190 (EGM2008).
@@ -250,7 +259,7 @@ relevant one level up, in `OREM`'s RSM step, which runs 9 independent
 aren't (run sequentially).
 
 ## 8. Validation & Accuracy
-611 total checks across 8 Fortran test programs, run via `test_all.sh`
+627 total checks across 10 Fortran test programs, run via `test_all.sh`
 (lint + all suites): `test_subrouts.F` (82, coordinate transforms/utility
 subroutines, incl. `gmst_deg`/`geo_coeff_tess22`/`tess22_force`),
 `test_tle.F` (147, TLE parsing), `test_tle2sv.F` (156,
@@ -260,7 +269,10 @@ SGP4/SDP4 + frame conversions), `test_tle2opm.F` (21, TLE-to-OPM pipeline),
 correctness including a hand-verified exospheric-temperature value),
 `test_cunningham.F` (25, general $(n,m)$ tesseral harmonics, issue #30),
 `test_legendre_tess.F` (26, independent classical-Legendre cross-check,
-2026-08-09 — see below), plus `test_driver.py` (10) and
+2026-08-09 — see below), `test_dvdt_tess.F` (7, tesseral $dU/dt$
+energy-element term, `feature/tesseral-energy-time-dependence` branch —
+see below), `test_dvdt_3body.F` (9, third-body $dU/dt$ energy-element
+term, same branch — see below), plus `test_driver.py` (10) and
 `test_initial_conditions.py` (110, multi-orbit sweep) in Python. CI
 (`ci.yml`) runs the full suite on every push/PR to `main`/`HS-dev` via
 `gfortran` on Ubuntu. Cross-validated against GMAT
@@ -412,23 +424,53 @@ pattern is the right qualitative signature of correct new physics,
 not a bug — distinguishing it from a numerical energy leak, which
 would show unbounded secular growth instead.
 
-**Explicitly out of scope, by user decision**: the identical
-explicit-time-dependence argument applies to the third-body (Sun/Moon)
-potential (`qsun`/`qmoon`), since `ts`/`tm` also vary with time via
-`solarnpv`/`lunarpv`. Filed as a real, known, parallel gap for a
-future branch, not started here. KSROP-Lunar/KSROP-Mars likely have
-the analogous gap in their own `tess_general_force`-based drivers —
-not investigated this session, separate follow-on work.
+**Third-body (Sun/Moon) `dU/dt` extended onto the same branch
+(2026-08-09)**: initially scoped out (tesseral-only), then reversed
+per user direction — since KSROP performs full numerical integration
+rather than an approximate/analytical theory, there is no principled
+reason to leave the third-body potential's identical explicit-time-
+dependence gap unaddressed. Unlike the tesseral case (a pure rotation,
+$\theta(t)$), the third-body disturbing function $U_{3body}(x,t) =
+-\mu_{tb}/R_{tb}(t)\sum_n(R_1/R_{tb}(t))^n P_n(\cos\phi(x,t))$ depends
+on time through the third body's real orbital motion: both the
+distance $R_{tb}(t)$ and the angle $\cos\phi(x,t) = (x\cdot
+t_b(t))/(R_1 R_{tb}(t))$ vary as `ts`/`tm` (from `solarnpv`/`lunarpv`)
+move. Derived symbolically (product-rule expansion through
+$\dot\rho=(t_b\cdot\dot t_b)/R_{tb}$ and $\dot c = (x\cdot\dot t_b)/
+(R_1 R_{tb}) - \cos\phi\,\dot\rho/R_{tb}$, summed over the associated-
+Legendre series) and implemented as `third_body_dvdt`
+(`src/Subrouts.F`), fed by a central-difference velocity of the third
+body itself (`ts_dot`/`tm_dot`, $h=60$ s, computed once per step
+alongside the existing `ts`/`tm` refresh). Verified against a genuine,
+independent finite-difference ground truth
+(`test_dvdt_3body.F`): the true potential $U(x,t)$ evaluated via the
+actual production ephemeris at $t_0\pm300$ s with $x$ held exactly
+fixed, central-differenced, and compared to the closed form — 9/9
+pass (4 position/epoch cases $\times$ Sun+Moon, plus a degree-guard
+check) on both `ifx` and `gfortran`. Summed directly into $z(10)$
+alongside the tesseral term: `z(10) = -(r/8w^2)(amue\cdot dvdt_{leg}
++ dvdt_{3body,sun} + dvdt_{3body,moon}) - \ldots`. No `Tau_geo`/
+`z(1)` edit needed, by the same already-established coupling argument.
+A real, unrelated implicit-typing bug was found and fixed during this
+work: the test file's own `leg`/`leg_p`/`leg_m` arrays (names starting
+with `l`, hence implicitly INTEGER under `implicit double precision
+(a-h,o-z)`, which never touches the `i`-`n` range) silently received
+`aLegP`'s DOUBLE PRECISION output, overflowing the stack — `gfortran`
+crashed on it (`ifx` silently tolerated it), isolated via a minimal
+reproduction that bisected the crash down to `aLegP` itself before
+identifying the caller-side type as the actual defect (a repeat of the
+`deg` typing bug found earlier on this same branch — see
+`feedback_fortran_implicit_typing_trap` in project memory). `aLegP`
+itself and all of its existing call sites in `driver_KS.F` were
+unaffected. KSROP-Lunar/KSROP-Mars likely have the analogous gap in
+their own `tess_general_force`-based drivers — not investigated this
+session, separate follow-on work.
 
 ## 9. Known Limitations
-- **Third-body (Sun/Moon) potential is missing the same `dU/dt` energy-
-  element term the general tesseral potential now has** (see §5/§8,
-  `feature/tesseral-energy-time-dependence` branch) — `qsun`/`qmoon`'s
-  own potential is explicitly time-dependent by the identical mechanism
-  (`ts`/`tm`, the Sun/Moon direction, vary with time via `solarnpv`/
-  `lunarpv`), so `w*` is currently under-counting energy exchange with
-  third-body perturbations too. Explicitly scoped out of that branch by
-  user decision; a real, known, unaddressed gap for a future branch.
+- **KSROP-Lunar/KSROP-Mars likely have the same tesseral/third-body
+  `dU/dt` energy-element gap** in their own `tess_general_force`-based
+  drivers (see §8, `feature/tesseral-energy-time-dependence` branch) —
+  not investigated this session, separate follow-on work.
 - **Tesseral gravity degree is capped at `ntess_cap=72`** (general $(n,m)$
   support itself is not limited to (2,2) — see §5/§8, issue #30). The cap
   exists because this recursion is $O(n^2)$ *per force evaluation* (every
