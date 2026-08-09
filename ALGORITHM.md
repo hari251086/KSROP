@@ -582,6 +582,33 @@ checks), both `ifx` and `gfortran`; `test_dvdt_tess.F`'s existing 7
 checks pass completely unchanged (same interface, same values,
 different internals).
 
+**Floating-point overflow found and fixed, same day**: the initial
+reformulation above computed $R_{Earth}^n$ and $r^{n+m+1}$ as
+separate quantities before dividing, and fed `XY_general` raw $x,y$
+instead of normalized $\hat{x}=x/r,\hat{y}=y/r$. Both can
+independently overflow double precision at realistic degree (up to
+`ntess_cap=72`, $n+m$ up to $\sim140$ at the sectorial diagonal) even
+though the true, combined result is mathematically small and correct
+— caught not by any unit test (all of which used $n_{max}\le6$) but
+by a production `driver_KS.exe` smoke run (`ngeo_deg=50`, real
+EGM2008 data), which signalled `IEEE_OVERFLOW_FLAG` despite producing
+a physically sane trajectory. Fixed by computing the bounded ratio
+$R_r(n) = (R_{Earth}/r)^n/r$ directly (never forming $R_{Earth}^n$ or
+$r^{n+m+1}$ separately) and normalizing `XY_general`'s inputs to
+$\hat{x},\hat{y}$ (bounded by construction, $\hat{x}^2+\hat{y}^2=
+\cos^2\phi\le1$). Re-verified: unchanged agreement with Cunningham
+and finite difference (same mathematics, only the floating-point
+evaluation order changed); zero overflow across LEO through
+super-GEO-altitude stress tests at $n_{max}=72$ (Python/numpy,
+`np.seterr(all='raise')`); a smoke run at `ngeo_deg=72` (the actual
+maximum) with real data produces the same physical trajectory with no
+floating-point exception. **Lesson for future degree-general
+recursion work**: verifying only at low degree ($n_{max}\le6$, as the
+initial symbolic/numeric derivation did) can miss numerical-stability
+failures that only appear at realistic production scale — a
+production-scale smoke test is not optional once a recursion is meant
+to run up to `ntess_cap`.
+
 ## 9. Known Limitations
 - **KSROP-Lunar/KSROP-Mars likely still have a separate zonal code
   path** that this repo's own geopotential unification (§5/§8,
