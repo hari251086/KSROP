@@ -168,27 +168,32 @@ flowchart TD
   polynomials, $V_{oblate} = \sum_{n\ge2} \mu R_{Earth}^n
   c_n / r^{n+1}\, P_n(\sin\phi)$, configurable up to degree 2190 (EGM2008).
 - **General $(n,m)$ tesseral/mascon potential** (issue #30, superseding
-  #29's (2,2)-only formula): Cunningham (1970)'s recursive complex solid
-  spherical harmonics in body-fixed Cartesian coordinates (no polar/
-  equatorial singularity), $V_{n,m} = P_n^m(\sin\phi)\,e^{im\lambda}/
-  r^{n+1}$, evaluated for every loaded $0\le m\le n\le n_{max}$
-  (`src/Cunningham.F`, `cunningham_Vnm`/`cunningham_dVnm`). Verified
-  against the paper's own Table I closed forms to machine precision and,
-  at $n=m=2$, to reproduce the original #29 (2,2)-only formula exactly
-  (diff ~$10^{-14}$) — the acceptance gate for trusting every other
-  $(n,m)$. KS-element force and time-element contributions use the same
-  recipe as the zonal terms: $q(j) = V\cdot u(j) + (r/2)\,\partial
-  V/\partial u_j$, $\tau = -2rV - (r/2)\sum_j u(j)\,\partial V/\partial
-  u_j$, with $\partial V/\partial u_j$ chain-ruled through the closed-form
-  KS position Jacobian $\partial x_k/\partial u_j = 2L(u)_{kj}$. Capped at
-  `ntess_cap=10` (independent of `ngeo_deg`'s much larger zonal range,
-  since Cunningham's recursion is $O(n^2)$ per force evaluation — a real
-  per-step cost, not a one-time setup cost like the zonal path). An
-  independent second derivation (`src/LegendreTess.F`, classical
-  latitude/longitude associated-Legendre expansion rather than Cartesian
-  solid harmonics, ported and corrected from an external research
-  derivation, 2026-08-09) cross-validates this to machine precision — see
-  §8.
+  #29's (2,2)-only formula): a classical spherical-coordinate (latitude/
+  longitude) associated-Legendre expansion substituted directly into KS
+  $u$-variables (`src/LegendreTess.F`, `alfP_general`/`tess_legendre_force`,
+  ported and corrected from an external research derivation, 2026-08-09
+  — see §8), evaluated for every loaded $0\le m\le n\le n_{max}$. KS-
+  element force and time-element contributions use the same recipe as
+  the zonal terms: $q(j) = V\cdot u(j) + (r/2)\,\partial V/\partial u_j$,
+  $\tau = -2rV - (r/2)\sum_j u(j)\,\partial V/\partial u_j$, with
+  $\partial V/\partial u_j$ chain-ruled through $r$/$\phi$/$\lambda$ as
+  intermediate spherical coordinates (the standard geopotential-gradient
+  decomposition). Capped at `ntess_cap=10` (independent of `ngeo_deg`'s
+  much larger zonal range, since this recursion is $O(n^2)$ per force
+  evaluation — a real per-step cost, not a one-time setup cost like the
+  zonal path). **This is the sole active tesseral geopotential** —
+  Cunningham (1970)'s independent Cartesian solid-harmonic recursion
+  (`src/Cunningham.F`, `cunningham_Vnm`/`tess_general_force`, the
+  original #30 implementation) remains in the library, verified to
+  reproduce this path to machine precision (worst case $5.6\times
+  10^{-15}$, see §8), but is no longer called from `driver_KS.F` — kept
+  as a standing independent cross-check, and because it has no polar-
+  latitude singularity (the classical formulation's $\cos\phi=0$
+  denominator terms — see §9 — do not arise in Cartesian solid harmonics),
+  a real robustness property worth preserving in the library even while
+  unused. `LegendreTess.F` was chosen as the active path per explicit
+  user direction (2026-08-09), ported from the user's own KS-regularized
+  research derivation.
 - **Drag co-rotation factor**: $F_{dg} = \left(1 - \dfrac{R_{PO}\,\omega_E\,
   F_{rot}\cos\xi}{V_{PO}}\right)^2$, refreshed from the current revolution's
   own perigee state.
@@ -303,17 +308,39 @@ byte identical — the two independently-derived force paths agree at
 this propagation's own printed precision, not just at the isolated
 force-vector level.
 
+**Simplified to a single active geopotential** (2026-08-09, same day,
+per explicit user direction — "keep only one"): the `ITESS_METHOD`
+switch above was removed; `driver_KS.F` now unconditionally calls
+`tess_legendre_force`. `Cunningham.F` remains in the library unchanged
+(both `test_cunningham.F` and `test_legendre_tess.F` still run and
+still cross-validate the two derivations against each other) but is no
+longer reachable from `driver_KS.F` — kept as a standing independent
+correctness check, not a second production code path. Re-verified via
+a fresh before/after propagation that the unconditional call produces
+byte-identical output to the pre-simplification switched run.
+
 ## 9. Known Limitations
 - **Tesseral gravity degree is capped at `ntess_cap=10`** (general $(n,m)$
   support itself is not limited to (2,2) — see §5/§8, issue #30). The cap
-  exists because Cunningham's recursion is $O(n^2)$ *per force evaluation*
-  (every RKG4 sub-step), unlike the zonal path's one-time-per-file-load
-  cost — a real, literal degree-2190 EGM2008 field is computationally
-  infeasible as a per-step force model regardless of which general-$(n,m)$
-  method is used (classical latitude/longitude Legendre expansion is the
-  same $O(n^2)$ complexity class, confirmed via the independent
-  `LegendreTess.F` derivation, §8). Raising the cap for a specific higher-
-  precision use case is a config-constant change, not a new derivation.
+  exists because this recursion is $O(n^2)$ *per force evaluation* (every
+  RKG4 sub-step), unlike the zonal path's one-time-per-file-load cost — a
+  real, literal degree-2190 EGM2008 field is computationally infeasible
+  as a per-step force model regardless of which general-$(n,m)$ method is
+  used (Cunningham's Cartesian solid-harmonic recursion, kept in the
+  library as a cross-check, is the same $O(n^2)$ complexity class).
+  Raising the cap for a specific higher-precision use case is a config-
+  constant change, not a new derivation.
+- **The active tesseral geopotential (`LegendreTess.F`) has a polar-
+  latitude singularity** the library's unused alternative (`Cunningham.F`)
+  does not: `tanphi = z/sqrt(x^2+y^2)` and the longitude terms both blow
+  up as $\sqrt{x^2+y^2}\to0$ (near-polar/exactly-polar trajectories).
+  Not a concern for KSROP's own validated GTO/HEO/LEO Earth-orbit
+  regime or the current KSROP-Lunar/KSROP-Mars areostationary/near-
+  equatorial use cases, but a real constraint if a genuinely polar orbit
+  (Earth or otherwise) is ever propagated with tesseral terms active —
+  Cunningham's Cartesian solid-harmonic recursion has no such
+  singularity and remains available in the library (`tess_general_force`)
+  if that regime is ever needed.
 - **`gmst_deg` is a mean (IAU 1982 polynomial) sidereal-time formula**, not
   a true-rotation-angle model (no UT1-UTC, nutation, or polar-motion
   correction). Confirmed via a GMAT cross-check (§8) to be precise enough
