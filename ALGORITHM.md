@@ -167,20 +167,28 @@ flowchart TD
 - **Oblateness potential**: zonal harmonic sum via associated Legendre
   polynomials, $V_{oblate} = \sum_{n\ge2} \mu R_{Earth}^n
   c_n / r^{n+1}\, P_n(\sin\phi)$, configurable up to degree 2190 (EGM2008).
-- **(2,2) tesseral potential** (issue #29): $\hat V_{22} = 3R_{Earth}^2/r^5
-  \,[A(x_1^2-x_2^2) + 2Bx_1x_2]$ in inertial Cartesian coordinates, with
-  $A=C_{22}\cos2\theta - S_{22}\sin2\theta$, $B=C_{22}\sin2\theta +
-  S_{22}\cos2\theta$ and $\theta$ the GMST rotation angle — algebraically
-  identical (verified symbolically) to the standard body-fixed form
-  $-\mu/r\,(R/r)^2\,P_2^2(\sin\phi)\,[C_{22}\cos2\lambda + S_{22}\sin2\lambda]$
-  up to an overall sign consistent with this project's own $q(j)$/force
-  convention. KS-element force and time-element contributions derived via
-  $q(j) = V\cdot u(j) + (r/2)\,\partial V/\partial u_j$, $\tau = -2rV -
-  (r/2)\sum_j u(j)\,\partial V/\partial u_j$ — the same recipe already used
-  for the zonal terms above, verified to reproduce them exactly at
-  independent rational test points before being applied to this new term.
-  Only the sectorial $(2,2)$ term is implemented; general $(n,m)$ tesseral/
-  mascon support does not exist (see §9).
+- **General $(n,m)$ tesseral/mascon potential** (issue #30, superseding
+  #29's (2,2)-only formula): Cunningham (1970)'s recursive complex solid
+  spherical harmonics in body-fixed Cartesian coordinates (no polar/
+  equatorial singularity), $V_{n,m} = P_n^m(\sin\phi)\,e^{im\lambda}/
+  r^{n+1}$, evaluated for every loaded $0\le m\le n\le n_{max}$
+  (`src/Cunningham.F`, `cunningham_Vnm`/`cunningham_dVnm`). Verified
+  against the paper's own Table I closed forms to machine precision and,
+  at $n=m=2$, to reproduce the original #29 (2,2)-only formula exactly
+  (diff ~$10^{-14}$) — the acceptance gate for trusting every other
+  $(n,m)$. KS-element force and time-element contributions use the same
+  recipe as the zonal terms: $q(j) = V\cdot u(j) + (r/2)\,\partial
+  V/\partial u_j$, $\tau = -2rV - (r/2)\sum_j u(j)\,\partial V/\partial
+  u_j$, with $\partial V/\partial u_j$ chain-ruled through the closed-form
+  KS position Jacobian $\partial x_k/\partial u_j = 2L(u)_{kj}$. Capped at
+  `ntess_cap=10` (independent of `ngeo_deg`'s much larger zonal range,
+  since Cunningham's recursion is $O(n^2)$ per force evaluation — a real
+  per-step cost, not a one-time setup cost like the zonal path). An
+  independent second derivation (`src/LegendreTess.F`, classical
+  latitude/longitude associated-Legendre expansion rather than Cartesian
+  solid harmonics, ported and corrected from an external research
+  derivation, 2026-08-09) cross-validates this to machine precision — see
+  §8.
 - **Drag co-rotation factor**: $F_{dg} = \left(1 - \dfrac{R_{PO}\,\omega_E\,
   F_{rot}\cos\xi}{V_{PO}}\right)^2$, refreshed from the current revolution's
   own perigee state.
@@ -210,17 +218,20 @@ relevant one level up, in `OREM`'s RSM step, which runs 9 independent
 aren't (run sequentially).
 
 ## 8. Validation & Accuracy
-554 total checks across 6 Fortran test programs, run via `test_all.sh`
+611 total checks across 8 Fortran test programs, run via `test_all.sh`
 (lint + all suites): `test_subrouts.F` (82, coordinate transforms/utility
 subroutines, incl. `gmst_deg`/`geo_coeff_tess22`/`tess22_force`),
 `test_tle.F` (147, TLE parsing), `test_tle2sv.F` (156,
 SGP4/SDP4 + frame conversions), `test_tle2opm.F` (21, TLE-to-OPM pipeline),
 `test_bugs.F` (17, regression tests for specific historical bugs),
-`test_sw.F` (11, epoch-resolved space weather — loader/interpolation
-correctness including a hand-verified exospheric-temperature value), plus
-`test_driver.py` (10) and `test_initial_conditions.py` (110, multi-orbit
-sweep) in Python. CI (`ci.yml`) runs the full suite on every push/PR to
-`main`/`HS-dev` via `gfortran` on Ubuntu. Cross-validated against GMAT
+`test_sw.F` (17, epoch-resolved space weather — loader/interpolation
+correctness including a hand-verified exospheric-temperature value),
+`test_cunningham.F` (25, general $(n,m)$ tesseral harmonics, issue #30),
+`test_legendre_tess.F` (26, independent classical-Legendre cross-check,
+2026-08-09 — see below), plus `test_driver.py` (10) and
+`test_initial_conditions.py` (110, multi-orbit sweep) in Python. CI
+(`ci.yml`) runs the full suite on every push/PR to `main`/`HS-dev` via
+`gfortran` on Ubuntu. Cross-validated against GMAT
 (project memory `project_ksrop_gmat_validation`): after fixing 6 real bugs
 found during that campaign (including a third-body force that had been
 *exactly zero* since an implicit-typing bug, and a wrong KS $z$-equation
@@ -245,12 +256,51 @@ silent no-op) via a controlled before/after run: ~27–35 m position
 divergence over 3 LEO revolutions with real vs. zeroed Earth (2,2)
 coefficients.
 
+**General $(n,m)$ tesseral term (issue #30, 2026-08-08)**: 25 checks
+(`test_cunningham.F`) — 9 against Cunningham's own Table I closed forms,
+3 finite-difference derivative checks, 2 coefficient-loader cross-checks,
+and 5 end-to-end checks at $n=m=2$ reproducing the already-validated
+(2,2) formula exactly. Rolled out with real data into both KSROP-Lunar
+(GRAIL, ~12 m divergence over 10 revs at 100 km) and KSROP-Mars
+(Alvarellos/GMM-2B, ~27 km divergence over 20 Mars days at the resonant
+areostationary altitude).
+
+**Independent second derivation, `LegendreTess.F` (2026-08-09)**: a
+classical spherical-coordinate (latitude/longitude) associated-Legendre
+formulation was evaluated as an alternative to Cunningham's Cartesian
+solid-harmonic recursion, ported from an external from-scratch KS-
+regularized derivation (`EarthGravityPotential_KS (4).wl`). Verification
+found and fixed two real bugs in that source derivation before it could
+be trusted: (1) the general $(n,m)$ associated Legendre recursion's
+$0<m<n$ branch was structurally wrong — confirmed against
+`scipy.special.lpmv` ground truth, correct only by coincidence at the
+sectorial ($m=n$) and sub-sectorial ($m=n-1$) edges, wrong everywhere
+else (error growing from $O(1)$ at $(n,m)=(3,1)$ to $O(10^5)$ by $(8,1)$);
+(2) longitude was computed from the wrong coordinate pair ($Y,Z$ instead
+of $X,Y$), inconsistent with the same derivation's own latitude
+convention ($Z$ as the polar axis, confirmed to match this repo's own
+`aLegP(ZbyR)` usage) — confirmed via a pure $(2,2)$ test case that
+disagreed with the already-validated Cunningham potential by 50-100+
+units (even wrong sign) using the source formula, matching to $10^{-14}$
+once corrected. With both fixed, `tess_legendre_force` reproduces
+`tess_general_force` to machine precision (worst case $5.6\times10^{-15}$)
+across $n_{max}=2..6$, random full-triangle $C_{nm}/S_{nm}$, random $u$
+(`test_legendre_tess.F`, 26/26 pass on both `ifx` and `gfortran`). Not
+wired into the live propagation loop — kept as a standing independent
+verification of the already-shipped Cunningham path, callable with the
+identical interface if ever needed as a production alternative.
+
 ## 9. Known Limitations
-- **Tesseral gravity support is (2,2)-only**, not general $(n,m)$ — added
-  for issue #29 (motivated by a real Mars C₂₂/S₂₂ coefficient that a
-  zonal-only model couldn't represent), not a full tesseral/mascon field.
-  Extending to arbitrary $(n,m)$ would need a general force-law derivation
-  along the same lines, not just a loop bound change.
+- **Tesseral gravity degree is capped at `ntess_cap=10`** (general $(n,m)$
+  support itself is not limited to (2,2) — see §5/§8, issue #30). The cap
+  exists because Cunningham's recursion is $O(n^2)$ *per force evaluation*
+  (every RKG4 sub-step), unlike the zonal path's one-time-per-file-load
+  cost — a real, literal degree-2190 EGM2008 field is computationally
+  infeasible as a per-step force model regardless of which general-$(n,m)$
+  method is used (classical latitude/longitude Legendre expansion is the
+  same $O(n^2)$ complexity class, confirmed via the independent
+  `LegendreTess.F` derivation, §8). Raising the cap for a specific higher-
+  precision use case is a config-constant change, not a new derivation.
 - **`gmst_deg` is a mean (IAU 1982 polynomial) sidereal-time formula**, not
   a true-rotation-angle model (no UT1-UTC, nutation, or polar-motion
   correction). Confirmed via a GMAT cross-check (§8) to be precise enough
