@@ -82,15 +82,17 @@ c     ngeo_deg<=1, means that term's contribution is exactly zero --
 c     the same auto-detect convention #29 already used.
 c     ntess_cap bounds the general tesseral degree independently of
 c     ngeo_deg (which can legitimately run to 2190 for zonal-only
-c     precision): the Cunningham recursion is O(n^2) per step, not
-c     O(n) like the zonal aLegP path, so reusing ngeo_deg directly
-c     would make already-expensive high-degree zonal-only runs far
-c     more expensive for no benefit -- real tesseral/mascon tables
-c     (this issue's own Mars/Lunar motivation) don't need high
-c     degree. Revisit this constant if a future consumer genuinely
-c     needs more.
+c     precision): this recursion is O(n^2) per step, not O(n) like the
+c     zonal aLegP path, so reusing ngeo_deg directly would make
+c     already-expensive high-degree zonal-only runs far more
+c     expensive for no benefit. Set to 72 (2026-08-09, user direction)
+c     -- the standard truncated-gravity-model resolution (e.g. EGM96
+c     72x72) used throughout operational precision orbit propagation;
+c     ngeo_deg must also be >=72 in const_new.dat for ntess_use to
+c     actually reach this degree (ntess_use=min(ngeo_deg,ntess_cap)
+c     below). Revisit if a future consumer genuinely needs more.
       integer ntess_cap, ntess_use
-      parameter (ntess_cap = 10)
+      parameter (ntess_cap = 72)
       dimension q_gen(4)
       double precision, allocatable :: Cnm_tess(:,:), Snm_tess(:,:)
       double precision, allocatable :: Cnm_rot(:,:), Snm_rot(:,:)

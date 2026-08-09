@@ -178,10 +178,15 @@ flowchart TD
   $\tau = -2rV - (r/2)\sum_j u(j)\,\partial V/\partial u_j$, with
   $\partial V/\partial u_j$ chain-ruled through $r$/$\phi$/$\lambda$ as
   intermediate spherical coordinates (the standard geopotential-gradient
-  decomposition). Capped at `ntess_cap=10` (independent of `ngeo_deg`'s
-  much larger zonal range, since this recursion is $O(n^2)$ per force
-  evaluation — a real per-step cost, not a one-time setup cost like the
-  zonal path). **This is the sole active tesseral geopotential** —
+  decomposition). Capped at `ntess_cap=72` (the standard truncated-
+  gravity-model resolution, e.g. EGM96 72x72, used throughout
+  operational precision orbit propagation — raised from an initial 10
+  on 2026-08-09; measured 5.4s for a full 3601-step propagation at
+  degree 72, no practical performance concern), independent of
+  `ngeo_deg`'s much larger zonal range, since this recursion is $O(n^2)$
+  per force evaluation — a real per-step cost, not a one-time setup
+  cost like the zonal path. **This is the sole active tesseral
+  geopotential** —
   Cunningham (1970)'s independent Cartesian solid-harmonic recursion
   (`src/Cunningham.F`, `cunningham_Vnm`/`tess_general_force`, the
   original #30 implementation) remains in the library, verified to
@@ -320,7 +325,7 @@ a fresh before/after propagation that the unconditional call produces
 byte-identical output to the pre-simplification switched run.
 
 ## 9. Known Limitations
-- **Tesseral gravity degree is capped at `ntess_cap=10`** (general $(n,m)$
+- **Tesseral gravity degree is capped at `ntess_cap=72`** (general $(n,m)$
   support itself is not limited to (2,2) — see §5/§8, issue #30). The cap
   exists because this recursion is $O(n^2)$ *per force evaluation* (every
   RKG4 sub-step), unlike the zonal path's one-time-per-file-load cost — a
