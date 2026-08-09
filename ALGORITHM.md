@@ -285,10 +285,23 @@ units (even wrong sign) using the source formula, matching to $10^{-14}$
 once corrected. With both fixed, `tess_legendre_force` reproduces
 `tess_general_force` to machine precision (worst case $5.6\times10^{-15}$)
 across $n_{max}=2..6$, random full-triangle $C_{nm}/S_{nm}$, random $u$
-(`test_legendre_tess.F`, 26/26 pass on both `ifx` and `gfortran`). Not
-wired into the live propagation loop — kept as a standing independent
-verification of the already-shipped Cunningham path, callable with the
-identical interface if ever needed as a production alternative.
+(`test_legendre_tess.F`, 26/26 pass on both `ifx` and `gfortran`).
+
+**Wired into the live propagation loop as a selectable alternative**
+(2026-08-09, same day): `driver_KS.F` reads an optional 6th `input.dat`
+line, `ITESS_METHOD` (0=Cunningham, default — every pre-existing
+`input.dat` without this line keeps running unchanged; 1=LegendreTess),
+and branches the general-$(n,m)$ force call between
+`tess_general_force`/`tess_legendre_force` accordingly — both already
+share the identical `q(j)`/`tau` interface, so no other code changed.
+Verified genuinely active and correct via a real before/after
+propagation (real EGM2008 data, `ngeo_deg=50` → `ntess_use=10`, 3601
+steps): the two methods' OEM output is identical to the file's own
+printed precision (mm-level position, µm/s-level velocity) and the
+higher-precision KS-element debug dump (`10f20.9` format) is byte-for-
+byte identical — the two independently-derived force paths agree at
+this propagation's own printed precision, not just at the isolated
+force-vector level.
 
 ## 9. Known Limitations
 - **Tesseral gravity degree is capped at `ntess_cap=10`** (general $(n,m)$

@@ -25,6 +25,15 @@ c     Revolutions, steps, tolerance (1e-15 default)
 c     Force model flags: n_force(1)=geo, n_force(2)=sun, n_force(3)=moon
 c     Drag params: BN(kg/m2), IDRAG(0/1), WE_rot(rad/s), EPS_f, FR_rot
 c     SRP: CR, AM(m2/kg), IPSR(0/1), ISHAD(0/1/2)
+c     General (n,m) tesseral method (OPTIONAL 6th line, issue #30
+c     cross-check): ITESS_METHOD(0/1) -- 0 (default, also used if this
+c     line is absent, full backward compatibility with every existing
+c     input.dat) selects tess_general_force (Cunningham 1970 Cartesian
+c     solid-harmonic recursion); 1 selects tess_legendre_force (the
+c     independent classical latitude/longitude associated-Legendre
+c     derivation, src/LegendreTess.F) -- verified to reproduce the
+c     Cunningham path to machine precision (worst case 5.6e-15) at the
+c     force-vector level, see that file's own header comments.
 c     -------------------------------------------------------------c
 c     Compiling with Intel Fortran compiler in command line:
 c     ifort <driver_File>.F <Subroutines_File>.F
@@ -92,6 +101,11 @@ c     needs more.
       integer ntess_cap, ntess_use
       parameter (ntess_cap = 10)
       dimension q_gen(4)
+c     Selects which of the two independently-verified general (n,m)
+c     tesseral force implementations to call (see header comment and
+c     the input.dat optional 6th line above): 0=Cunningham (default),
+c     1=LegendreTess (src/LegendreTess.F, issue #30 cross-check).
+      integer itess_method
       double precision, allocatable :: Cnm_tess(:,:), Snm_tess(:,:)
       double precision, allocatable :: Cnm_rot(:,:), Snm_rot(:,:)
 c     Drag: atmosphere tables and KS drag perturbation vectors
@@ -177,6 +191,15 @@ c     Earth rotation rate (rad/s), Earth flattening, rotation factor
 c     SRP parameters: reflectivity coeff, area-to-mass (m^2/kg),
 c     SRP on/off, shadow model (0=sunlit,1=cyl,2=cone)
       read(2,*) CR_srp, AM_srp, IPSR, ISHAD
+
+c     General (n,m) tesseral method (issue #30 cross-check, OPTIONAL
+c     line -- see header comment above): 0=Cunningham (default),
+c     1=LegendreTess. Guarded by its own end= so every pre-existing
+c     input.dat (without this line) keeps running the default,
+c     previously-only path unchanged.
+      itess_method = 0
+      read(2,*,end=98) itess_method
+ 98   continue
 
       allocate(traj_jd(nrev*istep+1),
      &         traj_x(3,nrev*istep+1),
@@ -622,9 +645,18 @@ c     are amue-free, like q(j)/Tau_geo's own zonal accumulation, so
 c     amue is applied here exactly as it already is for Tau_geo
 c     above. All-zero Cnm_rot/Snm_rot (no tesseral data loaded)
 c     makes q_gen and tau_gen identically zero -- see
-c     tess_general_force/gmst_deg.
-            call tess_general_force(u, R_Earth, ntess_use, Cnm_rot,
-     &                               Snm_rot, q_gen, tau_gen)
+c     tess_general_force/tess_legendre_force/gmst_deg. itess_method
+c     selects between the two independently-verified derivations
+c     (input.dat optional 6th line, default 0=Cunningham).
+            if (itess_method .eq. 1) then
+               call tess_legendre_force(u, R_Earth, ntess_use,
+     &                                   Cnm_rot, Snm_rot,
+     &                                   q_gen, tau_gen)
+            else
+               call tess_general_force(u, R_Earth, ntess_use,
+     &                                  Cnm_rot, Snm_rot,
+     &                                  q_gen, tau_gen)
+            end if
             Tau_geo = Tau_geo + amue*tau_gen
 
             Tau_3body1 = 0.d0
