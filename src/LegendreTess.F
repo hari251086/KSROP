@@ -1,44 +1,27 @@
 c     ============================================================
       subroutine G_general(nmax, sp, G, Gd)
-c     KSROP branch feature/tesseral-energy-time-dependence (2026-08-09):
-c     "de-cos(phi)^m" associated Legendre recursion --
-c       G(n,m) = P_n^m(sin phi) / cos(phi)^m
-c     computed directly as a function of sp=sin(phi)=z/r ALONE, with
-c     no cos(phi) dependence anywhere in the recursion itself:
+c     De-cos(phi)^m associated Legendre recursion: G(n,m) =
+c     P_n^m(sinphi)/cos^m(phi), computed directly as a function of
+c     sp=sin(phi)=z/r alone (no cos(phi) dependence at all) --
+c     eliminates the polar (cos(phi)->0) singularity that dividing
+c     the standard P_n^m by an explicit cos(phi)^m factor would
+c     otherwise reintroduce. See ALGORITHM.md / branch derivation
+c     notes for the full symbolic + numeric verification.
 c       G(n,n) = (2n-1) G(n-1,n-1)                         (sectorial)
 c       G(n,m) = [(2n-1) sp G(n-1,m) - (n+m-1) G(n-2,m)]
 c                / (n-m),                          0 <= m < n
-c     -- the SAME three-term recurrence shape as the classical
-c     associated-Legendre recursion (formerly alfP_general, removed),
-c     but with the sectorial step's cos(phi) factor dropped, since
-c     P_n^m(sin phi) = cos(phi)^m * G(n,m) exactly (verified
-c     symbolically, sympy, zero residual against the true P_n^m
-c     recursion for every (n,m), nmax=6).
+c     G(n,n) grows like (2n-1)!! -- large but still comfortably
+c     within double-precision range even at n=72 (~1e124, vs. the
+c     ~1.8e308 overflow threshold) -- unlike the raw x,y-power terms
+c     this used to be combined with (see XY_general/tess_legendre_
+c     force below for how that overflow risk is avoided).
 c
 c     Gd(n,m) = dG(n,m)/d(sp), obtained by differentiating this SAME
 c     recursion directly term-by-term (the standard trick for a
 c     non-singular Legendre-type derivative recursion -- no (1-sp^2)
-c     or cos(phi)-type denominator anywhere):
-c       Gd(n,n) = (2n-1) Gd(n-1,n-1)
-c       Gd(n,m) = [(2n-1)(G(n-1,m)+sp*Gd(n-1,m)) - (n+m-1) Gd(n-2,m)]
-c                 / (n-m)
-c     Verified symbolically (sympy) to exactly match d/d(sp)[G(n,m)]
-c     computed by direct differentiation, nmax=6, every (n,m).
-c
-c     Why this eliminates the polar singularity: the classical
-c     approach (formerly alfP_general + a phi-derivative identity
-c     dividing by cos(phi), i.e. by sqrt(x^2+y^2)/r) blows up as the
-c     trajectory approaches either pole. G(n,m) and Gd(n,m) are pure
-c     functions of sp=z/r -- smooth for all u except r=0 (a genuine
-c     physical singularity every formulation shares), with NO
-c     coordinate-artifact singularity at the poles.
-c
-c     Both G and Gd feed tess_legendre_force's potential/gradient sum
-c     alongside XY_general's own singularity-free X_m/Y_m (below) --
-c     see that subroutine's header, and the branch's derivation notes
-c     (ALGORITHM.md), for the full assembly and its independent
-c     verification (machine-precision cross-check against Cunningham's
-c     solid-harmonic recursion, plus finite-difference).
+c     or cos(phi)-type denominator anywhere). Verified symbolically
+c     (sympy) to exactly match d/d(sp)[G(n,m)] computed by direct
+c     differentiation, nmax=6, every (n,m).
 c     ============================================================
       implicit double precision (a-h,o-z)
       dimension G(0:nmax,0:nmax), Gd(0:nmax,0:nmax)
@@ -67,30 +50,34 @@ c     ============================================================
       end
 
 c     ============================================================
-      subroutine XY_general(nmax, x, y, Xt, Yt, Xx, Xy, Yx, Yy)
-c     KSROP branch feature/tesseral-energy-time-dependence (2026-08-09):
-c     unnormalized cos(m*lambda)*sxy^m and sin(m*lambda)*sxy^m
-c     (sxy=sqrt(x^2+y^2)), computed as pure polynomials in x,y via the
-c     De Moivre / Chebyshev-type recursion applied to (x+iy)^m --
-c     WITHOUT ever forming lambda=atan2(y,x) or dividing by sxy the
-c     way the classical cos(m*lambda)=Re[(x+iy)^m]/sxy^m evaluation
-c     would (the division is exactly what re-introduces a polar
-c     singularity as sxy->0). Verified symbolically (sympy) to equal
-c     Re[(x+iy)^m]/Im[(x+iy)^m] exactly for m=0..7.
-c       X_m = 2x X_{m-1} - (x^2+y^2) X_{m-2},   X_0=1, X_1=x
-c       Y_m = 2x Y_{m-1} - (x^2+y^2) Y_{m-2},   Y_0=0, Y_1=y
-c     Xx,Xy,Yx,Yy are the partial derivatives d/dx, d/dy of X_m, Y_m,
-c     obtained by differentiating this same recursion term-by-term
-c     (verified symbolically against direct differentiation, m=0..7)
-c     -- again no singular denominator anywhere.
+      subroutine XY_general(nmax, xh, yh, Xt, Yt, Xx, Xy, Yx, Yy)
+c     Unnormalized cos(m*lambda), sin(m*lambda) as pure polynomials
+c     in xh=x/r, yh=y/r (the L2-normalized direction cosines, NOT raw
+c     x,y) via the De Moivre / Chebyshev-type recursion applied to
+c     (xh+i*yh)^m -- WITHOUT ever forming lambda=atan2(yh,xh) or
+c     dividing by sqrt(xh^2+yh^2) the way the classical
+c     cos(m*lambda)=Re[(x+iy)^m]/sxy^m evaluation would.
 c
-c     Together with G_general (above), these replace tess_legendre_
-c     force's former phi/lambda spherical-coordinate chain rule
-c     (alfP_general + cos_sin_mlambda + an explicit division by sxy
-c     in the u-derivative of phi and lambda) with a fully Cartesian
-c     (x,y,z,r) formulation that has no coordinate-artifact
-c     singularity at the poles -- see ALGORITHM.md's known-limitations
-c     entry this branch resolves.
+c     Passing the NORMALIZED xh,yh=x/r,y/r (2026-08-09, fixed same
+c     day as the initial reformulation) rather than raw x,y is
+c     essential for numerical stability at realistic degree/altitude
+c     combinations: since xh^2+yh^2=cos^2(phi)<=1, every X_m,Y_m
+c     value stays bounded by 1 in magnitude, however high m goes --
+c     whereas the raw-x,y version grows like r^m (e.g. ~1e300+ at
+c     GEO altitude with m=72), risking floating-point overflow before
+c     the physically-correct cancellation with R_body^n/r^(n+m+1)
+c     ever happens. See tess_legendre_force's own header for the
+c     full Rr_n=(R_body/r)^n/r pairing that keeps the radial part
+c     equally safe.
+c       X_m = 2*xh*X_{m-1} - (xh^2+yh^2)*X_{m-2},   X_0=1, X_1=xh
+c       Y_m = 2*xh*Y_{m-1} - (xh^2+yh^2)*Y_{m-2},   Y_0=0, Y_1=yh
+c     Verified symbolically (sympy) to equal Re[(x+iy)^m]/r^m,
+c     Im[(x+iy)^m]/r^m exactly for m=0..7 (homogeneity of the
+c     original raw-x,y polynomial makes this identical to evaluating
+c     that same polynomial at x/r,y/r).
+c     Xx,Xy,Yx,Yy are the partial derivatives d/d(xh), d/d(yh) of
+c     X_m, Y_m (obtained the same term-by-term differentiation way,
+c     verified against direct differentiation, m=0..7).
 c     ============================================================
       implicit double precision (a-h,o-z)
       dimension Xt(0:nmax), Yt(0:nmax)
@@ -103,24 +90,24 @@ c     ============================================================
       Yx(0) = 0.d0
       Yy(0) = 0.d0
       if (nmax .ge. 1) then
-         Xt(1) = x
-         Yt(1) = y
+         Xt(1) = xh
+         Yt(1) = yh
          Xx(1) = 1.d0
          Xy(1) = 0.d0
          Yx(1) = 0.d0
          Yy(1) = 1.d0
       end if
 
-      sxy2 = x*x + y*y
+      sxy2 = xh*xh + yh*yh
       do m = 2, nmax
-         Xt(m) = 2.d0*x*Xt(m-1) - sxy2*Xt(m-2)
-         Yt(m) = 2.d0*x*Yt(m-1) - sxy2*Yt(m-2)
-         Xx(m) = 2.d0*Xt(m-1) + 2.d0*x*Xx(m-1)
-     &           - 2.d0*x*Xt(m-2) - sxy2*Xx(m-2)
-         Xy(m) = 2.d0*x*Xy(m-1) - 2.d0*y*Xt(m-2) - sxy2*Xy(m-2)
-         Yx(m) = 2.d0*Yt(m-1) + 2.d0*x*Yx(m-1)
-     &           - 2.d0*x*Yt(m-2) - sxy2*Yx(m-2)
-         Yy(m) = 2.d0*x*Yy(m-1) - 2.d0*y*Yt(m-2) - sxy2*Yy(m-2)
+         Xt(m) = 2.d0*xh*Xt(m-1) - sxy2*Xt(m-2)
+         Yt(m) = 2.d0*xh*Yt(m-1) - sxy2*Yt(m-2)
+         Xx(m) = 2.d0*Xt(m-1) + 2.d0*xh*Xx(m-1)
+     &           - 2.d0*xh*Xt(m-2) - sxy2*Xx(m-2)
+         Xy(m) = 2.d0*xh*Xy(m-1) - 2.d0*yh*Xt(m-2) - sxy2*Xy(m-2)
+         Yx(m) = 2.d0*Yt(m-1) + 2.d0*xh*Yx(m-1)
+     &           - 2.d0*xh*Yt(m-2) - sxy2*Yx(m-2)
+         Yy(m) = 2.d0*xh*Yy(m-1) - 2.d0*yh*Yt(m-2) - sxy2*Yy(m-2)
       end do
 
       return
@@ -153,24 +140,53 @@ c     from the KS bilinear map) via G_general/XY_general (above),
 c     never forming phi or lambda as intermediate coordinates at all.
 c
 c     Derivation: P_n^m(sin phi) = cos(phi)^m * G(n,m)(sp), and
-c     cos(m*lambda)/sin(m*lambda) = X_m(x,y)/Y_m(x,y) / sxy^m -- the
-c     cos(phi)^m = (sxy/r)^m factors cancel EXACTLY between the two,
-c     leaving
-c       V_{n,m} = (R_body^n / r^(n+m+1)) * G(n,m)(sp) *
-c                 [Cnm*X_m(x,y) + Snm*Y_m(x,y)]
-c     with a PURE r-power denominator (r^(n+m+1)) and no other
-c     singular factor anywhere. Verified: (1) symbolically (sympy),
-c     G(n,m)=P_n^m/cos(phi)^m and X_m/Y_m match ground truth exactly,
-c     nmax=6, every (n,m); (2) numerically, this subroutine's v_pert/
-c     q_leg/tau_leg reproduce Cunningham's independent solid-harmonic
-c     recursion (tess_general_force) to machine precision (~1e-15,
-c     random u/Cnm/Snm/nmax, multiple trials) and an independent
-c     finite-difference gradient (~1e-10, truncation-error level);
-c     (3) dvdt_leg (below) verified against a finite difference of the
+c     cos(m*lambda)/sin(m*lambda) = X_m(xh,yh)/Y_m(xh,yh) (xh=x/r,
+c     yh=y/r) -- the cos(phi)^m = (sxy/r)^m factors cancel EXACTLY
+c     between the two, leaving
+c       V_{n,m} = (R_body/r)^n / r * G(n,m)(sp) *
+c                 [Cnm*X_m(xh,yh) + Snm*Y_m(xh,yh)]
+c     with a PURE r-power denominator (via the bounded ratio
+c     (R_body/r)^n, never forming R_body^n or r^(n+m+1) as separate
+c     large quantities) and no other singular factor anywhere.
+c
+c     NUMERICAL STABILITY (found and fixed 2026-08-09, same day as
+c     the initial reformulation): the first version of this
+c     subroutine computed Rn=R_body^n and rpow=r^(n+m+1) as SEPARATE
+c     quantities before dividing, and fed XY_general raw x,y instead
+c     of the normalized xh=x/r, yh=y/r -- both r^(n+m+1) (for
+c     n+m up to ~140 at the sectorial diagonal, nmax=72) and the raw
+c     X_m/Y_m (growing like r^m) can each independently overflow
+c     double precision well before their ratio/product reaches its
+c     true, physically-small final value, even though the
+c     MATHEMATICAL result is correct in exact arithmetic --
+c     triggered IEEE_OVERFLOW_FLAG in real driver_KS.F runs (caught
+c     via a production smoke test, ngeo_deg=50). Fixed by computing
+c     the SAFE bounded ratio Rr_n=(R_body/r)^n/r directly (never
+c     forming R_body^n or r^(n+m+1) separately) and feeding
+c     XY_general the L2-normalized xh,yh=x/r,y/r (bounded by
+c     construction, xh^2+yh^2=cos^2(phi)<=1) instead of raw x,y.
+c     Re-verified after the fix: zero overflow across LEO through
+c     super-GEO-altitude test radii at nmax=72, both realistic-decay
+c     and deliberately pathological (non-decaying) coefficient sets
+c     (Python/numpy stress test, `np.seterr(all='raise')`, scratch
+c     work); unchanged agreement with Cunningham to machine precision
+c     at low degree; and a clean driver_KS.exe smoke run (ngeo_deg=50)
+c     with no floating-point exception signalled.
+c
+c     Verified: (1) symbolically (sympy), G(n,m)=P_n^m/cos(phi)^m and
+c     X_m/Y_m match ground truth exactly, nmax=6, every (n,m); (2)
+c     numerically, this subroutine's v_pert/q_leg/tau_leg reproduce
+c     Cunningham's independent solid-harmonic recursion
+c     (tess_general_force) to machine precision (~1e-15, random
+c     u/Cnm/Snm/nmax, multiple trials) and an independent finite-
+c     difference gradient (~1e-10, truncation-error level); (3)
+c     dvdt_leg (below) verified against a finite difference of the
 c     rotated potential AND against this exact subroutine's own
 c     pre-reformulation output for a fixed test case (bit-for-bit
 c     match, all outputs, confirming the reformulation is a genuine
-c     re-derivation of the identical physics, not a different one).
+c     re-derivation of the identical physics, not a different one);
+c     (4) the exact-pole regression (test/test_legendre_tess.F,
+c     PL1-PL4) confirms finite, correct output at sqrt(x^2+y^2)=0.
 c     See test/test_legendre_tess.F and ALGORITHM.md for the full
 c     record.
 c
@@ -179,13 +195,13 @@ c     PHYSICAL time t, holding u fixed -- see the original derivation
 c     rationale (Sellamuthu 2018 PhD thesis eq. 2.54, driver_KS.F's
 c     own z(10) assembly). Previously computed via
 c     "-theta_dot*Vlam_block" (Vlam_block = dV/d(lambda)); reformulated
-c     here as "theta_dot*(y*dVdx - x*dVdy)", using the identity
-c     dV/d(lambda) = x*dVdy - y*dVdx (standard polar-to-Cartesian
-c     derivative chain rule, y=r_xy*sin(lambda), x=r_xy*cos(lambda))
-c     -- verified to reproduce the original formula's value and sign
-c     exactly (bit-for-bit on a fixed test case with real m>0
-c     coefficients), and independently via finite difference of the
-c     rotated potential.
+c     here as "theta_dot*(yh*dVdxh - xh*dVdyh)" (dVdxh, dVdyh being
+c     the gradient w.r.t. the normalized xh,yh, at fixed sp and r),
+c     using the same polar-to-Cartesian derivative identity applied
+c     to the (xh,yh) pair -- verified to reproduce the original
+c     formula's value and sign exactly (bit-for-bit on a fixed test
+c     case with real m>0 coefficients), and independently via finite
+c     difference of the rotated potential.
 c
 c     Cnm/Snm are the SAME already-converted, correctly-signed,
 c     fully-normalized-to-unnormalized coefficient arrays
@@ -210,38 +226,43 @@ c     ============================================================
       r_ks = u1*u1 + u2*u2 + u3*u3 + u4*u4
 
       sp = z / r_ks
+      xh = x / r_ks
+      yh = y / r_ks
 
       call G_general(nmax, sp, G, Gd)
-      call XY_general(nmax, x, y, Xt, Yt, Xx, Xy, Yx, Yy)
+      call XY_general(nmax, xh, yh, Xt, Yt, Xx, Xy, Yx, Yy)
 
       v_pert = 0.d0
-      dVdz = 0.d0
+      dVdsp = 0.d0
+      dVdxh = 0.d0
+      dVdyh = 0.d0
       dVdr = 0.d0
-      dVdx = 0.d0
-      dVdy = 0.d0
 
       do n = 2, nmax
-         Rn = R_body**n
+c        Safe bounded ratio -- never forms R_body^n or r^(n+m+1) as
+c        separate (potentially overflowing) quantities. See header.
+         Rr_n = (R_body/r_ks)**n / r_ks
          do m = 0, n
             cc = Cnm(n,m)
             ss = Snm(n,m)
             if (cc .ne. 0.d0 .or. ss .ne. 0.d0) then
-               rpow = r_ks**(n+m+1)
                trig = cc*Xt(m) + ss*Yt(m)
                Gnm = G(n,m)
                Gdnm = Gd(n,m)
 
-               v_pert = v_pert + Rn/rpow * Gnm * trig
+               v_pert = v_pert + Rr_n * Gnm * trig
+               dVdsp = dVdsp + Rr_n * Gdnm * trig
 
-               dVdz = dVdz + Rn/rpow * Gdnm/r_ks * trig
-               dVdr = dVdr + Rn*trig*
-     &               ( Gdnm*(-z/(r_ks*r_ks))/rpow
-     &                 - dble(n+m+1)*Gnm/(rpow*r_ks) )
+               dtrigdxh = cc*Xx(m) + ss*Yx(m)
+               dtrigdyh = cc*Xy(m) + ss*Yy(m)
+               dVdxh = dVdxh + Rr_n * Gnm * dtrigdxh
+               dVdyh = dVdyh + Rr_n * Gnm * dtrigdyh
 
-               dtrigdx = cc*Xx(m) + ss*Yx(m)
-               dtrigdy = cc*Xy(m) + ss*Yy(m)
-               dVdx = dVdx + Rn/rpow * Gnm * dtrigdx
-               dVdy = dVdy + Rn/rpow * Gnm * dtrigdy
+c              d(Rr_n)/dr = -(n+1)*Rr_n/r -- reuses the already-safe
+c              Rr_n rather than recomputing R_body^n/r^(n+2) from
+c              scratch (which would reintroduce the same overflow
+c              risk this whole reformulation exists to avoid).
+               dVdr = dVdr - dble(n+1)*(Rr_n/r_ks)*Gnm*trig
             end if
          end do
       end do
@@ -266,9 +287,14 @@ c     ============================================================
       dydu(3) = -2.d0*u4
       dydu(4) = -2.d0*u3
 
+c     sp=z/r, xh=x/r, yh=y/r all depend on BOTH the raw coordinate
+c     and r itself -- full quotient-rule chain rule through u.
       do k = 1, 4
-         dVdu(k) = dVdz*dzdu(k) + dVdr*drdu(k)
-     &           + dVdx*dxdu(k) + dVdy*dydu(k)
+         dspdu = dzdu(k)/r_ks - z*drdu(k)/(r_ks*r_ks)
+         dxhdu = dxdu(k)/r_ks - x*drdu(k)/(r_ks*r_ks)
+         dyhdu = dydu(k)/r_ks - y*drdu(k)/(r_ks*r_ks)
+         dVdu(k) = dVdsp*dspdu + dVdxh*dxhdu + dVdyh*dyhdu
+     &           + dVdr*drdu(k)
       end do
 
       q_leg(1) = v_pert*u1 + (r_ks/2.d0)*dVdu(1)
@@ -279,7 +305,7 @@ c     ============================================================
       tau_leg = -2.d0*r_ks*v_pert - (r_ks/2.d0)*
      &          (u1*dVdu(1) + u2*dVdu(2) + u3*dVdu(3) + u4*dVdu(4))
 
-      dvdt_leg = theta_dot*(y*dVdx - x*dVdy)
+      dvdt_leg = theta_dot*(yh*dVdxh - xh*dVdyh)
       v_pert_out = v_pert
 
       return
