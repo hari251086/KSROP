@@ -1,0 +1,64 @@
+%General Mission Analysis Tool(GMAT) Script
+%  Cross-validation campaign 2026-08-10: KSROP-Lunar's real GRAIL
+%  degree/order-30 lunar geopotential vs GMAT's GRGM900C field (truncated
+%  to the same degree/order 30 here). First-ever GMAT cross-check for
+%  KSROP-Lunar (KSROP issue #26). Geopotential-only: no third-body
+%  (Earth/Sun)/SRP, isolating the force law. Initial state matches
+%  KSROP-Lunar's own input/input.opm default (100 km circular).
+%  Each Propagate command advances ElapsedSecs *from the current epoch*
+%  -- deltas below are period/4 (x4) then a full period (x2), reaching
+%  1/4,1/2,3/4,1,2,3 orbits (period = 7067.460 s).
+
+Create Spacecraft DefaultSC;
+GMAT DefaultSC.DateFormat = UTCGregorian;
+GMAT DefaultSC.Epoch = '10 Aug 2026 00:00:00.000';
+
+Create CoordinateSystem MoonMJ2000Eq;
+GMAT MoonMJ2000Eq.Origin = Luna;
+GMAT MoonMJ2000Eq.Axes = MJ2000Eq;
+
+GMAT DefaultSC.CoordinateSystem = MoonMJ2000Eq;
+GMAT DefaultSC.DisplayStateType = Cartesian;
+GMAT DefaultSC.X = 1837.400000000;
+GMAT DefaultSC.Y = 0.000000000;
+GMAT DefaultSC.Z = 0.000000000;
+GMAT DefaultSC.VX = 0.000000000;
+GMAT DefaultSC.VY = 1.633480000;
+GMAT DefaultSC.VZ = 0.000000000;
+
+Create ForceModel FMmoon30;
+GMAT FMmoon30.CentralBody = Luna;
+GMAT FMmoon30.PrimaryBodies = {Luna};
+GMAT FMmoon30.GravityField.Luna.Degree = 30;
+GMAT FMmoon30.GravityField.Luna.Order = 30;
+GMAT FMmoon30.GravityField.Luna.PotentialFile = 'E:\Softwares\gmat-win-R2026a\data\gravity\luna\grgm900c.cof';
+GMAT FMmoon30.Drag = None;
+GMAT FMmoon30.SRP = Off;
+
+Create Propagator Propmoon30;
+GMAT Propmoon30.FM = FMmoon30;
+GMAT Propmoon30.Type = RungeKutta89;
+GMAT Propmoon30.InitialStepSize = 10;
+GMAT Propmoon30.Accuracy = 1e-13;
+GMAT Propmoon30.MaxStep = 60;
+
+Create ReportFile Repmoon30;
+GMAT Repmoon30.Filename = 'crosscheck_lunar_deg30_gmat.txt';
+GMAT Repmoon30.Precision = 16;
+GMAT Repmoon30.WriteHeaders = true;
+
+BeginMissionSequence;
+
+Report Repmoon30 DefaultSC.ElapsedSecs DefaultSC.MoonMJ2000Eq.X DefaultSC.MoonMJ2000Eq.Y DefaultSC.MoonMJ2000Eq.Z DefaultSC.MoonMJ2000Eq.VX DefaultSC.MoonMJ2000Eq.VY DefaultSC.MoonMJ2000Eq.VZ;
+Propagate Propmoon30(DefaultSC) {DefaultSC.ElapsedSecs = 1766.865};
+Report Repmoon30 DefaultSC.ElapsedSecs DefaultSC.MoonMJ2000Eq.X DefaultSC.MoonMJ2000Eq.Y DefaultSC.MoonMJ2000Eq.Z DefaultSC.MoonMJ2000Eq.VX DefaultSC.MoonMJ2000Eq.VY DefaultSC.MoonMJ2000Eq.VZ;
+Propagate Propmoon30(DefaultSC) {DefaultSC.ElapsedSecs = 1766.865};
+Report Repmoon30 DefaultSC.ElapsedSecs DefaultSC.MoonMJ2000Eq.X DefaultSC.MoonMJ2000Eq.Y DefaultSC.MoonMJ2000Eq.Z DefaultSC.MoonMJ2000Eq.VX DefaultSC.MoonMJ2000Eq.VY DefaultSC.MoonMJ2000Eq.VZ;
+Propagate Propmoon30(DefaultSC) {DefaultSC.ElapsedSecs = 1766.865};
+Report Repmoon30 DefaultSC.ElapsedSecs DefaultSC.MoonMJ2000Eq.X DefaultSC.MoonMJ2000Eq.Y DefaultSC.MoonMJ2000Eq.Z DefaultSC.MoonMJ2000Eq.VX DefaultSC.MoonMJ2000Eq.VY DefaultSC.MoonMJ2000Eq.VZ;
+Propagate Propmoon30(DefaultSC) {DefaultSC.ElapsedSecs = 1766.865};
+Report Repmoon30 DefaultSC.ElapsedSecs DefaultSC.MoonMJ2000Eq.X DefaultSC.MoonMJ2000Eq.Y DefaultSC.MoonMJ2000Eq.Z DefaultSC.MoonMJ2000Eq.VX DefaultSC.MoonMJ2000Eq.VY DefaultSC.MoonMJ2000Eq.VZ;
+Propagate Propmoon30(DefaultSC) {DefaultSC.ElapsedSecs = 7067.460};
+Report Repmoon30 DefaultSC.ElapsedSecs DefaultSC.MoonMJ2000Eq.X DefaultSC.MoonMJ2000Eq.Y DefaultSC.MoonMJ2000Eq.Z DefaultSC.MoonMJ2000Eq.VX DefaultSC.MoonMJ2000Eq.VY DefaultSC.MoonMJ2000Eq.VZ;
+Propagate Propmoon30(DefaultSC) {DefaultSC.ElapsedSecs = 7067.460};
+Report Repmoon30 DefaultSC.ElapsedSecs DefaultSC.MoonMJ2000Eq.X DefaultSC.MoonMJ2000Eq.Y DefaultSC.MoonMJ2000Eq.Z DefaultSC.MoonMJ2000Eq.VX DefaultSC.MoonMJ2000Eq.VY DefaultSC.MoonMJ2000Eq.VZ;

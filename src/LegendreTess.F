@@ -114,8 +114,8 @@ c     ============================================================
       end
 
 c     ============================================================
-      subroutine tess_legendre_force(u, R_body, theta_dot, nmax,
-     &                                Cnm, Snm,
+      subroutine tess_legendre_force(u, R_body, theta_dot, Rtilt,
+     &                                nmax, Cnm, Snm,
      &                                q_leg, tau_leg, dvdt_leg,
      &                                v_pert_out)
 c     KSROP: general (n,m) tesseral/mascon KS-element force (q_leg),
@@ -206,9 +206,70 @@ c
 c     Cnm/Snm are the SAME already-converted, correctly-signed,
 c     fully-normalized-to-unnormalized coefficient arrays
 c     geo_coeff_tess_general produces -- unchanged interface.
+c
+c     Rtilt (added 2026-08-10, KSROP issue TBD -- found via GMAT
+c     cross-validation of KSROP-Lunar/KSROP-Mars): 3x3 constant
+c     orthogonal rotation matrix taking a position vector from the
+c     WORKING inertial frame (e.g. EarthMJ2000Eq-parallel axes, as
+c     KSROP-Lunar/KSROP-Mars both use) into the body's own "true
+c     equator and prime-meridian-node of date" frame, i.e. the frame
+c     whose Z axis IS the body's real rotation pole. This subroutine
+c     had NO such rotation before 2026-08-10 -- only the per-step
+c     prime-meridian (longitude) rotation via rotate_tess_coeffs --
+c     which is exactly correct for Earth (EarthMJ2000Eq's Z axis IS
+c     Earth's own pole, by definition) but was SILENTLY WRONG for any
+c     other body: it implicitly assumed the working frame's Z axis
+c     coincides with the target body's pole, which is false by ~35.6
+c     deg for Mars and ~23.5 deg for the Moon (IAU pole RA/Dec vs. the
+c     Earth-equatorial Z axis) -- caught via a GMAT cross-validation
+c     campaign showing ~2%/~0.7% position residuals that persisted
+c     unchanged across identical-coefficient, zonal-only, and
+c     J2-only isolation tests (ruling out coefficient/model-vintage
+c     differences and rotation-PHASE-only explanations), pointing
+c     squarely at a missing rotation, not a force-law defect.
+c
+c     Construction (both downstream repos): Rtilt = R1(90-dec0) .
+c     R3(90+ra0), the standard IAU body-fixed-frame prefix (Archinal
+c     et al., "Report of the IAU WGCCRE"), using the body's pole
+c     right ascension/declination (ra0, dec0) at the run's epoch --
+c     the SAME NAIF pck00011.tpc kernel each repo's own prime-meridian
+c     angle subroutine (mars_rotation_angle_deg/moon_rotation_angle_
+c     deg) already cites, so this is a self-consistent extension of
+c     an already-used source, not a new one. Passed as the IDENTITY
+c     matrix for Earth (KSROP's own driver_KS.F) -- preserves the
+c     already-GMAT-validated (2026-08-10, <0.02% over 3 orbits at
+c     degree/order 30) Earth behavior exactly unchanged.
+c
+c     Implementation: x,y,z,r are computed from u EXACTLY as before
+c     (the KS bilinear map itself is central-body-agnostic and
+c     unaffected). The resulting UNIT direction (xh,yh,sp) is then
+c     rotated by Rtilt BEFORE being fed to G_general/XY_general --
+c     i.e. the potential and its angular gradient are evaluated at
+c     the body-pole-aligned direction, not the raw working-frame
+c     direction. dvdt_leg (needs the longitude-rotation-rate energy
+c     term) is computed from these ROTATED xh,yh/dVdxh,dVdyh directly,
+c     since the physical longitude rotation happens about the body's
+c     TRUE pole (the rotated frame's own Z axis), matching theta_dot.
+c     The resulting gradient (dVdxh,dVdyh,dVdsp), which is now
+c     expressed in the ROTATED frame, is then rotated BACK to the
+c     ORIGINAL (u-native) frame via Rtilt^T before the existing
+c     du-chain-rule step -- verified symbolically (sympy) that for a
+c     linear coordinate rotation (xh',yh',sp')=Rtilt.(xh,yh,sp), the
+c     gradient transforms as (dV/dxh,dV/dyh,dV/dsp) =
+c     Rtilt^T.(dV/dxh',dV/dyh',dV/dsp'), the standard covariant
+c     gradient transformation for an orthogonal change of coordinates
+c     -- dV/dr needs no such transformation (r is rotation-invariant,
+c     a true scalar), and v_pert (the potential itself) likewise
+c     needs none (also a true scalar). Rtilt=identity reproduces the
+c     pre-2026-08-10 formulas bit-for-bit (the rotate-then-unrotate
+c     round-trip is then the identity operation) -- regression-tested,
+c     see test_legendre_tess.F RT1-RT4 (rotation covariance: evaluating
+c     at a position P with Rtilt=R must equal evaluating at R.P with
+c     Rtilt=identity, then rotating the resulting force back by R^T).
 c     ============================================================
       implicit double precision (a-h,o-z)
       dimension u(4), q_leg(4)
+      dimension Rtilt(3,3)
       dimension Cnm(0:nmax,0:nmax), Snm(0:nmax,0:nmax)
       dimension G(0:nmax,0:nmax), Gd(0:nmax,0:nmax)
       dimension Xt(0:nmax), Yt(0:nmax)
@@ -225,9 +286,19 @@ c     ============================================================
       z = 2.d0*(u1*u3 + u2*u4)
       r_ks = u1*u1 + u2*u2 + u3*u3 + u4*u4
 
-      sp = z / r_ks
-      xh = x / r_ks
-      yh = y / r_ks
+c     Original (working-frame) unit direction, then rotated by Rtilt
+c     into the body-pole-aligned frame -- see the Rtilt header note
+c     above. xh,yh,sp are OVERWRITTEN with the rotated components;
+c     everything below (G_general/XY_general/dvdt_leg) is otherwise
+c     completely unchanged and now simply operates on the rotated
+c     direction, exactly as it always operated on the raw one.
+      xh0 = x / r_ks
+      yh0 = y / r_ks
+      sp0 = z / r_ks
+
+      xh = Rtilt(1,1)*xh0 + Rtilt(1,2)*yh0 + Rtilt(1,3)*sp0
+      yh = Rtilt(2,1)*xh0 + Rtilt(2,2)*yh0 + Rtilt(2,3)*sp0
+      sp = Rtilt(3,1)*xh0 + Rtilt(3,2)*yh0 + Rtilt(3,3)*sp0
 
       call G_general(nmax, sp, G, Gd)
       call XY_general(nmax, xh, yh, Xt, Yt, Xx, Xy, Yx, Yy)
@@ -267,6 +338,26 @@ c              risk this whole reformulation exists to avoid).
          end do
       end do
 
+c     Energy-element rate: the physical longitude rotation happens
+c     about the body's TRUE pole, i.e. the ROTATED frame's own Z
+c     axis -- must use the still-rotated xh,yh/dVdxh,dVdyh here,
+c     BEFORE un-rotating the gradient back below.
+      dvdt_leg = theta_dot*(yh*dVdxh - xh*dVdyh)
+
+c     Un-rotate the gradient (dVdxh,dVdyh,dVdsp), currently expressed
+c     in the body-pole-aligned frame, back to the ORIGINAL
+c     working-frame direction via Rtilt^T -- the standard covariant
+c     gradient transformation for an orthogonal coordinate rotation
+c     (verified symbolically, see header note). dVdr and v_pert are
+c     true scalars (r and the potential itself are rotation-
+c     invariant) and need no such transformation.
+      dVdxh_r = Rtilt(1,1)*dVdxh + Rtilt(2,1)*dVdyh + Rtilt(3,1)*dVdsp
+      dVdyh_r = Rtilt(1,2)*dVdxh + Rtilt(2,2)*dVdyh + Rtilt(3,2)*dVdsp
+      dVdsp_r = Rtilt(1,3)*dVdxh + Rtilt(2,3)*dVdyh + Rtilt(3,3)*dVdsp
+      dVdxh = dVdxh_r
+      dVdyh = dVdyh_r
+      dVdsp = dVdsp_r
+
       dzdu(1) =  2.d0*u3
       dzdu(2) =  2.d0*u4
       dzdu(3) =  2.d0*u1
@@ -305,7 +396,6 @@ c     and r itself -- full quotient-rule chain rule through u.
       tau_leg = -2.d0*r_ks*v_pert - (r_ks/2.d0)*
      &          (u1*dVdu(1) + u2*dVdu(2) + u3*dVdu(3) + u4*dVdu(4))
 
-      dvdt_leg = theta_dot*(yh*dVdxh - xh*dVdyh)
       v_pert_out = v_pert
 
       return

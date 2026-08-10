@@ -110,6 +110,12 @@ c     propagation. Revisit if a future consumer genuinely needs more.
       dimension q_gen(4)
       double precision, allocatable :: Cnm_tess(:,:), Snm_tess(:,:)
       double precision, allocatable :: Cnm_rot(:,:), Snm_rot(:,:)
+c     Pole-alignment rotation for tess_legendre_force (2026-08-10,
+c     found via KSROP-Lunar/KSROP-Mars's own GMAT cross-validation --
+c     see LegendreTess.F's Rtilt header note). Identity here: Earth's
+c     own EarthMJ2000Eq Z axis IS Earth's pole by definition, so no
+c     rotation is needed -- this repo's own geopotential is unchanged.
+      dimension Rtilt_id(3,3)
 c     Drag: atmosphere tables and KS drag perturbation vectors
       dimension ALT_atm(ndim_atm),DEN_atm(ndim_atm),SCH_atm(ndim_atm)
       dimension qdrag(4),p_drag(3)
@@ -161,6 +167,13 @@ c     changes fast.
       pi=4.d0*datan(1.d0)
       d2r=pi/180.d0
       r2d=180.d0/pi
+
+      do i = 1,3
+         do j = 1,3
+            Rtilt_id(i,j) = 0.d0
+         end do
+         Rtilt_id(i,i) = 1.d0
+      end do
 
 c     Get UTC timestamp for output filenames
       call utc_now_epoch(epochstr, compact_epoch)
@@ -368,7 +381,7 @@ c     self-consistency (car2ks's own us computation scales internally
 c     by 1/w). Safe to call unconditionally -- tess_legendre_force's
 c     own do n=2,nmax loop is a no-op (v_pert=0) whenever ntess_use<2,
 c     matching how the per-step call below is never guarded either.
-      call tess_legendre_force(u, R_Earth, WE_rot, ntess_use,
+      call tess_legendre_force(u, R_Earth, WE_rot, Rtilt_id, ntess_use,
      &                          Cnm_rot, Snm_rot,
      &                          q_gen, tau_gen, dvdt_gen, vpert_gen)
       V_pot = V_pot + amue*vpert_gen
@@ -642,8 +655,8 @@ c     exactly zero to dvdt_gen by construction (the m factor in
 c     Vlam_block vanishes at m=0) -- axisymmetric terms cannot
 c     exchange energy with a rotating frame, so folding zonal into
 c     this same call changes nothing about that physics.
-            call tess_legendre_force(u, R_Earth, WE_rot, ntess_use,
-     &                                Cnm_rot, Snm_rot,
+            call tess_legendre_force(u, R_Earth, WE_rot, Rtilt_id,
+     &                                ntess_use, Cnm_rot, Snm_rot,
      &                                q_gen, tau_gen, dvdt_gen,
      &                                vpert_gen)
             Tau_geo = amue*tau_gen

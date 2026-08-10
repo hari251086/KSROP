@@ -39,9 +39,20 @@ c     -------------------------------------------------------
       dimension Xx(0:6), Xy(0:6), Yx(0:6), Yy(0:6)
       dimension u(4), q_leg(4), q_ref(4)
       dimension Cnm(0:6,0:6), Snm(0:6,0:6)
+      dimension Rid(3,3), Rrt(3,3)
+      dimension u1v(4), up(4), um(4), usdum(4), qdum(4)
+      dimension x0v(3), x1v(3), xd0v(3)
+      character*48 label_rt
 
       npass = 0
       nfail = 0
+
+      do i = 1,3
+         do j = 1,3
+            Rid(i,j) = 0.d0
+         end do
+         Rid(i,i) = 1.d0
+      end do
 
       write(*,*) '=============================================='
       write(*,*) ' Singularity-free general (n,m) tesseral force'
@@ -138,7 +149,7 @@ c        triangle, including deliberately asymmetric magnitudes.
 
          call tess_general_force(u, 6378.1363d0, nmax, Cnm, Snm,
      &                            q_ref, tau_ref)
-         call tess_legendre_force(u, 6378.1363d0, 7.2921150d-5,
+         call tess_legendre_force(u, 6378.1363d0, 7.2921150d-5, Rid,
      &                             nmax, Cnm, Snm,
      &                             q_leg, tau_leg, dvdt_leg, vpert_leg)
 
@@ -195,7 +206,7 @@ c     r=4 -- a genuine on-axis point, not degenerate in u).
 
       call tess_general_force(u, 6378.1363d0, nmax, Cnm, Snm,
      &                         q_ref, tau_ref)
-      call tess_legendre_force(u, 6378.1363d0, 7.2921150d-5,
+      call tess_legendre_force(u, 6378.1363d0, 7.2921150d-5, Rid,
      &                          nmax, Cnm, Snm,
      &                          q_leg, tau_leg, dvdt_leg, vpert_leg)
 
@@ -214,6 +225,146 @@ c     r=4 -- a genuine on-axis point, not degenerate in u).
       call assert_d('PL4 tau matches Cunningham at pole', tau_leg,
      &              tau_ref, 1.d-9*dabs(tau_ref)+1.d-14,
      &              npass, nfail)
+
+c     ---------------------------------------------------------
+c     RT1-RT4: Rtilt rotation covariance (2026-08-10, added when
+c     Rtilt was introduced -- see LegendreTess.F header note). Two
+c     independent checks that don't require deriving a KS-space
+c     (u-space) rotation formula:
+c
+c     RT1 (forward rotation): v_pert is a true scalar (a potential
+c     value at a physical point), so evaluating at u0 with Rtilt=R
+c     must give EXACTLY the same v_pert as evaluating (with
+c     Rtilt=identity) at u1, the KS pre-image of the ACTUALLY
+c     rotated Cartesian point x1=R.x0 (obtained via car2ks, which
+c     depends only on position, not velocity -- dummy xd/w are
+c     safe). This directly tests that the forward xh,yh,sp rotation
+c     is correct.
+c
+c     RT2-RT4 (backward/gradient rotation): finite-difference check
+c     of q_leg's own implied dV/du_j (backed out from
+c     q_leg(j)=v_pert*u_j+(r/2)*dVdu(j)) against a direct central
+c     difference of v_pert itself as u_j is perturbed, at u0 with a
+c     NON-trivial Rtilt=R. This tests that the gradient correctly
+c     round-trips back through Rtilt^T before the du chain rule --
+c     the same finite-difference acceptance gate this subroutine's
+c     original 2026-08-09 derivation used (~1e-10, truncation-error
+c     level).
+c     ---------------------------------------------------------
+      write(*,*) ''
+      write(*,*) '  --- Rtilt rotation covariance ---'
+
+c     Arbitrary well-conditioned rotation: 40deg about X after 30deg
+c     about Z (R = R1(40) . R3(30), same convention as the Rtilt
+c     header note's R1(90-dec0).R3(90+ra0) construction).
+      ang1 = 30.d0 * (4.d0*datan(1.d0)/180.d0)
+      ang2 = 40.d0 * (4.d0*datan(1.d0)/180.d0)
+      c1 = dcos(ang1)
+      s1 = dsin(ang1)
+      c2 = dcos(ang2)
+      s2 = dsin(ang2)
+c     R3(ang1)
+      r3_11=c1
+      r3_12=s1
+      r3_13=0.d0
+      r3_21=-s1
+      r3_22=c1
+      r3_23=0.d0
+      r3_31=0.d0
+      r3_32=0.d0
+      r3_33=1.d0
+c     R1(ang2) . R3(ang1)
+      rr_11 = r3_11
+      rr_12 = r3_12
+      rr_13 = r3_13
+      rr_21 = c2*r3_21 + s2*r3_31
+      rr_22 = c2*r3_22 + s2*r3_32
+      rr_23 = c2*r3_23 + s2*r3_33
+      rr_31 = -s2*r3_21 + c2*r3_31
+      rr_32 = -s2*r3_22 + c2*r3_32
+      rr_33 = -s2*r3_23 + c2*r3_33
+
+      x0v(1) = 4200.d0
+      x0v(2) = -1800.d0
+      x0v(3) = 3100.d0
+      xd0v(1) = 0.d0
+      xd0v(2) = 0.d0
+      xd0v(3) = 0.d0
+      w0 = 1.d0
+
+c     u depends only on position (car2ks), not velocity/w -- dummy
+c     xd0v/w0 are safe (see LegendreTess.F Rtilt header note / this
+c     block's own comment).
+      call car2ks(x0v, xd0v, u, usdum, w0)
+
+      x1v(1) = rr_11*x0v(1) + rr_12*x0v(2) + rr_13*x0v(3)
+      x1v(2) = rr_21*x0v(1) + rr_22*x0v(2) + rr_23*x0v(3)
+      x1v(3) = rr_31*x0v(1) + rr_32*x0v(2) + rr_33*x0v(3)
+
+      call car2ks(x1v, xd0v, u1v, usdum, w0)
+
+      nmax = 4
+      do n = 0, nmax
+         do m = 0, nmax
+            Cnm(n,m) = 0.d0
+            Snm(n,m) = 0.d0
+         end do
+      end do
+      do n = 2, nmax
+         do m = 0, n
+            Cnm(n,m) = 1.d-5 * dble(n-m+1) / dble(n*n+1)
+            if (m .gt. 0) Snm(n,m) = -0.7d-5 * dble(m) / dble(n+3)
+         end do
+      end do
+
+      Rrt(1,1)=rr_11
+      Rrt(1,2)=rr_12
+      Rrt(1,3)=rr_13
+      Rrt(2,1)=rr_21
+      Rrt(2,2)=rr_22
+      Rrt(2,3)=rr_23
+      Rrt(3,1)=rr_31
+      Rrt(3,2)=rr_32
+      Rrt(3,3)=rr_33
+
+      call tess_legendre_force(u, 6378.1363d0, 0.d0, Rrt, nmax,
+     &                          Cnm, Snm, q_leg, tau_leg, dvdt_leg,
+     &                          vpert_A)
+      call tess_legendre_force(u1v, 6378.1363d0, 0.d0, Rid, nmax,
+     &                          Cnm, Snm, q_ref, tau_ref, dvdt_dum,
+     &                          vpert_B)
+
+      call assert_d('RT1 v_pert(u0,Rtilt=R) = v_pert(R.x0,identity)',
+     &              vpert_A, vpert_B, 1.d-9*dabs(vpert_B)+1.d-16,
+     &              npass, nfail)
+
+c     RT2-RT4: finite-difference dV/du_j vs q_leg's own implied value
+      r_ks0 = u(1)*u(1)+u(2)*u(2)+u(3)*u(3)+u(4)*u(4)
+      eps = 1.d-6
+      do j = 1, 3
+         up(1)=u(1)
+         up(2)=u(2)
+         up(3)=u(3)
+         up(4)=u(4)
+         um(1)=u(1)
+         um(2)=u(2)
+         um(3)=u(3)
+         um(4)=u(4)
+         up(j) = up(j) + eps
+         um(j) = um(j) - eps
+         call tess_legendre_force(up, 6378.1363d0, 0.d0, Rrt, nmax,
+     &                             Cnm, Snm, qdum, taudum, dvdum,
+     &                             vpert_p)
+         call tess_legendre_force(um, 6378.1363d0, 0.d0, Rrt, nmax,
+     &                             Cnm, Snm, qdum, taudum, dvdum,
+     &                             vpert_m)
+         dVdu_fd = (vpert_p - vpert_m) / (2.d0*eps)
+         dVdu_analytic = (q_leg(j) - vpert_A*u(j)) * 2.d0 / r_ks0
+         write(label_rt,'(A,I1,A)') 'RT', j+1,
+     &        ' dV/du finite-diff vs analytic (post-Rtilt)'
+         call assert_d(label_rt, dVdu_analytic, dVdu_fd,
+     &                 1.d-6*dabs(dVdu_fd)+1.d-10, npass, nfail)
+      end do
 
       write(*,*) ''
       write(*,*) '=============================================='

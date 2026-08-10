@@ -1,0 +1,64 @@
+%General Mission Analysis Tool(GMAT) Script
+%  Cross-validation campaign 2026-08-10: KSROP's CURRENT unified general
+%  (n,m) geopotential (post-2026-08-09 singularity-free reformulation)
+%  vs GMAT EGM2008, degree/order 30 (matching the truncation used for the
+%  same-day KSROP-Lunar/KSROP-Mars checks, for a fair 3-body comparison).
+%  Geopotential-only: no third-body/drag/SRP, isolating the force law.
+%  Circular LEO, i=28.5deg (matches KSROP's own "LEO circular i=28.5"
+%  regression-test convention) -- NOTE: an earlier version of this script
+%  reused the old (2,2)-only single-checkpoint test's IC (v=(0,5.4,4.8)),
+%  which turns out to have perigee below Earth's surface (r_p~5641 km <
+%  Re) -- harmless for that script's single short checkpoint, but caused
+%  KSROP's own re-entry check to truncate a multi-revolution run early.
+%  Each Propagate command advances ElapsedSecs *from the current epoch*,
+%  not to a fixed value since mission start -- the deltas below are
+%  period/4 (x4) then a full period (x2), reaching 1/4,1/2,3/4,1,2,3 orbits.
+
+Create Spacecraft DefaultSC;
+GMAT DefaultSC.DateFormat = UTCGregorian;
+GMAT DefaultSC.Epoch = '10 Aug 2026 00:00:00.000';
+GMAT DefaultSC.CoordinateSystem = EarthMJ2000Eq;
+GMAT DefaultSC.DisplayStateType = Cartesian;
+GMAT DefaultSC.X = 6878.000000000;
+GMAT DefaultSC.Y = 0.000000000;
+GMAT DefaultSC.Z = 0.000000000;
+GMAT DefaultSC.VX = 0.000000000;
+GMAT DefaultSC.VY = 6.690156960323;
+GMAT DefaultSC.VZ = 3.632458853083;
+
+Create ForceModel FMdeg30;
+GMAT FMdeg30.CentralBody = Earth;
+GMAT FMdeg30.PrimaryBodies = {Earth};
+GMAT FMdeg30.GravityField.Earth.Degree = 30;
+GMAT FMdeg30.GravityField.Earth.Order = 30;
+GMAT FMdeg30.GravityField.Earth.PotentialFile = 'C:\Users\hari2\OneDrive\Documents\GitHub\KSROP\scratch_gmat\EGM2008_72x72.cof';
+GMAT FMdeg30.Drag = None;
+GMAT FMdeg30.SRP = Off;
+
+Create Propagator Propdeg30;
+GMAT Propdeg30.FM = FMdeg30;
+GMAT Propdeg30.Type = RungeKutta89;
+GMAT Propdeg30.InitialStepSize = 10;
+GMAT Propdeg30.Accuracy = 1e-13;
+GMAT Propdeg30.MaxStep = 60;
+
+Create ReportFile Repdeg30;
+GMAT Repdeg30.Filename = 'crosscheck_earth_deg30_gmat.txt';
+GMAT Repdeg30.Precision = 16;
+GMAT Repdeg30.WriteHeaders = true;
+
+BeginMissionSequence;
+
+Report Repdeg30 DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate Propdeg30(DefaultSC) {DefaultSC.ElapsedSecs = 1419.202};
+Report Repdeg30 DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate Propdeg30(DefaultSC) {DefaultSC.ElapsedSecs = 1419.202};
+Report Repdeg30 DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate Propdeg30(DefaultSC) {DefaultSC.ElapsedSecs = 1419.202};
+Report Repdeg30 DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate Propdeg30(DefaultSC) {DefaultSC.ElapsedSecs = 1419.202};
+Report Repdeg30 DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate Propdeg30(DefaultSC) {DefaultSC.ElapsedSecs = 5676.808};
+Report Repdeg30 DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
+Propagate Propdeg30(DefaultSC) {DefaultSC.ElapsedSecs = 5676.808};
+Report Repdeg30 DefaultSC.ElapsedSecs DefaultSC.EarthMJ2000Eq.X DefaultSC.EarthMJ2000Eq.Y DefaultSC.EarthMJ2000Eq.Z DefaultSC.EarthMJ2000Eq.VX DefaultSC.EarthMJ2000Eq.VY DefaultSC.EarthMJ2000Eq.VZ;
