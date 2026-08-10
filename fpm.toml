@@ -66,3 +66,13 @@ main = "test_sw.F"
 name = "test_cunningham"
 source-dir = "test"
 main = "test_cunningham.F"
+
+[[test]]
+name = "test_legendre_tess"
+source-dir = "test"
+main = "test_legendre_tess.F"
+
+[[test]]
+name = "test_dvdt_tess"
+source-dir = "test"
+main = "test_dvdt_tess.F"

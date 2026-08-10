@@ -18,6 +18,7 @@ c     -------------------------------------------------------
       dimension u(4), q_gen(4), q_ref(4)
       dimension Cnm(0:4,0:4), Snm(0:4,0:4)
       dimension Cnm2(0:4,0:4), Snm2(0:4,0:4)
+      dimension cj_ref(4)
 
       npass = 0
       nfail = 0
@@ -93,8 +94,13 @@ c     ---------------------------------------------------------
       end do
 
 c     ---------------------------------------------------------
-c     CG1: geo_coeff_tess_general reproduces geo_coeff_tess22's
+c     CG1-CG2: geo_coeff_tess_general reproduces geo_coeff_tess22's
 c     own already-validated (2,2) fixture exactly
+c     CG3-CG4 (2026-08-09, geopotential unification): m=0 rows are
+c     now loaded too (m=0 is this same formula's own m=0 row, not a
+c     distinct model) -- verified to reproduce geo_coeff_body's
+c     independent zonal loader exactly, same fixture file, same
+c     "-sqrt(2n+1)*Cnm" (J_n=-C_n0) sign convention.
 c     ---------------------------------------------------------
       call geo_coeff_tess_general('test/fixture_geo_coeff.dat', 4,
      &                            Cnm, Snm)
@@ -104,10 +110,13 @@ c     ---------------------------------------------------------
      &              c22_ref, 1.d-14, npass, nfail)
       call assert_d('CG2 S22 matches geo_coeff_tess22', Snm(2,2),
      &              s22_ref, 1.d-14, npass, nfail)
-      call assert_d('CG3 C20 skipped (m=0 not loaded)', Cnm(2,0),
-     &              0.d0, 1.d-14, npass, nfail)
-      call assert_d('CG4 C30 skipped (m=0 not loaded)', Cnm(3,0),
-     &              0.d0, 1.d-14, npass, nfail)
+      call geo_coeff_body(3, cj_ref, 'test/fixture_geo_coeff.dat')
+      call assert_d('CG3 C20 matches geo_coeff_body zonal', Cnm(2,0),
+     &              cj_ref(2), 1.d-14, npass, nfail)
+      call assert_d('CG4 C30 matches geo_coeff_body zonal', Cnm(3,0),
+     &              cj_ref(3), 1.d-14, npass, nfail)
+      call assert_d('CG5 S20 identically zero (zonal has no S)',
+     &              Snm(2,0), 0.d0, 1.d-14, npass, nfail)
 
 c     ---------------------------------------------------------
 c     CF1-CF5: tess_general_force at n=m=2 reproduces the
