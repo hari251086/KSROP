@@ -1,0 +1,47 @@
+%General Mission Analysis Tool(GMAT) Script
+% Two-body-only (point mass, GMAT's own default Mars Mu) sanity check --
+% isolates whether GMAT's default Mars Mu matches JGMRO120F's own
+% 42828.3756639565 km3/s2 header value.
+
+Create Spacecraft DefaultSC;
+GMAT DefaultSC.DateFormat = UTCGregorian;
+GMAT DefaultSC.Epoch = '10 Aug 2026 00:00:00.000';
+
+Create CoordinateSystem MarsMJ2000Eq;
+GMAT MarsMJ2000Eq.Origin = Mars;
+GMAT MarsMJ2000Eq.Axes = MJ2000Eq;
+
+GMAT DefaultSC.CoordinateSystem = MarsMJ2000Eq;
+GMAT DefaultSC.DisplayStateType = Cartesian;
+GMAT DefaultSC.X = 3796.190000000;
+GMAT DefaultSC.Y = 0.000000000;
+GMAT DefaultSC.Z = 0.000000000;
+GMAT DefaultSC.VX = 0.000000000;
+GMAT DefaultSC.VY = 0.000000000;
+GMAT DefaultSC.VZ = 3.358859227;
+
+Create ForceModel FMtwobody;
+GMAT FMtwobody.CentralBody = Mars;
+GMAT FMtwobody.PointMasses = {Mars};
+GMAT FMtwobody.Drag = None;
+GMAT FMtwobody.SRP = Off;
+
+Create Propagator Proptwobody;
+GMAT Proptwobody.FM = FMtwobody;
+GMAT Proptwobody.Type = RungeKutta89;
+GMAT Proptwobody.InitialStepSize = 10;
+GMAT Proptwobody.Accuracy = 1e-13;
+GMAT Proptwobody.MaxStep = 60;
+
+Create ReportFile Reptwobody;
+GMAT Reptwobody.Filename = 'crosscheck_mars_twobody_gmat.txt';
+GMAT Reptwobody.Precision = 16;
+GMAT Reptwobody.WriteHeaders = true;
+
+BeginMissionSequence;
+
+Report Reptwobody DefaultSC.ElapsedSecs DefaultSC.MarsMJ2000Eq.X DefaultSC.MarsMJ2000Eq.Y DefaultSC.MarsMJ2000Eq.Z DefaultSC.MarsMJ2000Eq.VX DefaultSC.MarsMJ2000Eq.VY DefaultSC.MarsMJ2000Eq.VZ;
+Propagate Proptwobody(DefaultSC) {DefaultSC.ElapsedSecs = 1775.317};
+Report Reptwobody DefaultSC.ElapsedSecs DefaultSC.MarsMJ2000Eq.X DefaultSC.MarsMJ2000Eq.Y DefaultSC.MarsMJ2000Eq.Z DefaultSC.MarsMJ2000Eq.VX DefaultSC.MarsMJ2000Eq.VY DefaultSC.MarsMJ2000Eq.VZ;
+Propagate Proptwobody(DefaultSC) {DefaultSC.ElapsedSecs = 5325.952};
+Report Reptwobody DefaultSC.ElapsedSecs DefaultSC.MarsMJ2000Eq.X DefaultSC.MarsMJ2000Eq.Y DefaultSC.MarsMJ2000Eq.Z DefaultSC.MarsMJ2000Eq.VX DefaultSC.MarsMJ2000Eq.VY DefaultSC.MarsMJ2000Eq.VZ;

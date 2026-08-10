@@ -66,7 +66,12 @@ KSROP/
 │   ├── test_tle2opm.F                    TLE-to-OPM pipeline tests (21 checks)
 │   ├── test_bugs.F                       Bug regression tests (17 checks)
 │   ├── test_sw.F                         Space weather tests (17 checks)
-│   └── test_cunningham.F                 General tesseral harmonics tests (25 checks, issue #30)
+│   ├── test_cunningham.F                 General tesseral harmonics tests (26 checks, issue #30)
+│   ├── test_legendre_tess.F              Singularity-free general (n,m) force tests (32 checks)
+│   ├── test_dvdt_tess.F                  Time-dependent tesseral dU/dt tests (7 checks)
+│   ├── test_xjr_validation.py            Zonal geopotential vs. XJR thesis Ch.2/3 (34 checks)
+│   ├── fixture_xjr_ch2_zonal.dat          J2..J36 zonal coefficients (thesis Table 2.1)
+│   └── fixture_xjr_ch3_zonal.dat          GEM-T2 zonal coefficients (thesis Table 3.1A)
 ├── test_driver.py                       Integration test (10 checks)
 ├── test_initial_conditions.py           Multi-orbit test (110 checks)
 ├── benchmark.py                         Performance profiler
@@ -267,20 +272,25 @@ Reads `input/tle2opm.cfg`, selects closest TLE entry by NORAD/epoch, converts vi
 ### Tests
 
 ```bash
-./test_subrouts.exe                          # 67 unit tests
+./test_subrouts.exe                          # 82 unit tests
 ./test_bugs.exe                              # 17 regression tests
 ./test_tle.exe                               # 147 TLE reader tests
 ./test_tle2sv.exe                            # 156 SGP4/SDP4/frame tests
 ./test_tle2opm.exe                           # 21 pipeline tests
+./test_sw.exe                                # 17 space weather tests
+./test_cunningham.exe                        # 26 general tesseral harmonics tests
+./test_legendre_tess.exe                     # 32 singularity-free general (n,m) force tests
+./test_dvdt_tess.exe                         # 7 time-dependent tesseral dU/dt tests
 python test_driver.py driver_KS.exe          # 10 integration tests
 python test_initial_conditions.py driver_KS.exe  # 110 multi-orbit tests
+python test/test_xjr_validation.py driver_KS.exe # 34 zonal geopotential vs. XJR thesis checks
 
 # Lint + all tests in one command
-bash test_all.sh                             # lint + 419 Fortran + 120 integration
+bash test_all.sh                             # lint + 505 Fortran + 154 integration
 bash lint_check.sh                           # lint only (line length, precision, common blocks)
 ```
 
-**Total: 585 automated checks + 5 lint rules.**
+**Total: 659 automated checks + 5 lint rules.**
 
 ---
 
@@ -616,3 +626,4 @@ EGM2008 streaming read: O(n²) lines for degree n (J2 = 3 lines, not 2.4M).
 | 2026-08-09 | **Third-body `dU/dt` reverted; geopotential unified into a single general (n,m) model, same branch, after reviewing a compiled equations-of-motion report**: two corrections. (1) Third-body `dU/dt` (previous entry) is removed — `third_body_dvdt`, its `z(10)` wiring, and `test_dvdt_3body.F` are all gone; third-body is now treated as static for the energy-element purpose. (2) `driver_KS.F`'s separate zonal code path (`aLegP`/`c_j`/`Re`/`ObyR`/`ZbyR`, computing `V_pot`/`q(j)`/`Tau_geo`) is removed entirely — `m=0` was never a distinct model, it's the general `(n,m)` formula's own `m=0` row (the identical three-term Legendre recursion). `geo_coeff_tess_general` now loads `m=0` rows too (previously skipped deliberately to avoid double-counting against the path that no longer exists), with `(2-delta_0m)`-aware normalization and the traditional `J_n=-C_n0` sign, verified to reproduce `geo_coeff_body`'s independent zonal loader exactly (`test_cunningham.F`, new CG3-CG5). **Decisive lossless-unification check**: a standalone program reimplementing the exact removed zonal formulas matched `tess_legendre_force`'s `m=0` output to relative `1e-16` on `V_pot`/`Tau_geo`/all four `q(j)`, with `dvdt_gen` confirmed exactly zero at `m=0` as expected. Real trade: the geopotential is now capped at `ntess_cap=72` uniformly, including zonal-only runs (was degree 2190 at O(n) cost for zonal-only before). 619/619 regression (627 − 9 removed + 1 new CG5 check), both `ifx` and `gfortran`, plus a clean end-to-end `driver_KS.exe` smoke run (`ngeo_deg=50`, 10 revs, no NaN). |
 | 2026-08-09 | **Singularity-free closed-form reformulation of the general (n,m) geopotential, same branch**: motivated by a page from the user's own thesis (Ch. 3, eq. 3.4 — a hand-derived, degree-specific J2-J4 closed form with a pure-r-power denominator, no z-dependent term, and `Jn`/`R_Earth^n` pre-combined into one constant) supplied as an "exemplar," with explicit instruction not to brute-force-expand every term but to choose selectively. `tess_general_force` (Cunningham) already had this property for the full general case (no `sqrt(x^2+y^2)` division anywhere) — but per user direction, the *active* path (`LegendreTess.F`, the user's own derivation) was reformulated in place rather than switched. Derived and verified in stages (sympy + independent numeric checks before any Fortran): a new non-singular recursion for `dP_n/dx` (differentiating Bonnet's recursion directly, no `(1-x^2)` division) generalizes the thesis's zonal closed form to arbitrary degree; and `P_n^m(sinphi)=cos^m(phi)*G(n,m)(sinphi)` combined with unnormalized `cos(m*lambda)*sxy^m`/`sin(m*lambda)*sxy^m` polynomials `X_m,Y_m(x,y)` (De Moivre) makes the `cos^m(phi)` factors cancel exactly, extending the same principle to the full tesseral case with **no singular denominator anywhere**. New recursions `G_general`/`XY_general` (`src/LegendreTess.F`) replace `alfP_general`/`cos_sin_mlambda` (removed) — verified symbolically (sympy, exact match to ground truth) and numerically (machine precision vs. Cunningham, `~1e-15`; finite difference, `~1e-10`). The energy-element `dU/dt` term was re-derived too (`dV/dlambda = x*dVdy - y*dVdx`), verified bit-for-bit against the pre-reformulation `dvdt_leg` on a fixed test case. **Decisive new-capability regression** (`test_legendre_tess.F`, PL1-PL4): evaluated at an *exact* polar point (`sqrt(x^2+y^2)=0` identically) where the old formulation would have divided by zero — confirmed finite and matching Cunningham exactly. 625/625 regression (619 + 6 new checks, `test_legendre_tess.F` 26→32), both `ifx` and `gfortran`; `test_dvdt_tess.F`'s existing 7 checks pass unchanged (same interface, different internals). |
 | 2026-08-09 | **Floating-point overflow found and fixed in the reformulation above, same day**: the initial version computed `R_Earth^n` and `r^(n+m+1)` as separate quantities before dividing, and fed `XY_general` raw `x,y` instead of normalized `xh=x/r,yh=y/r`. Both can independently overflow double precision at realistic degree (`ntess_cap=72`, `n+m` up to ~140 at the sectorial diagonal) even though the combined result is mathematically small and correct — caught not by any unit test (all used `nmax<=6`) but by a production `driver_KS.exe` smoke run (`ngeo_deg=50`, real EGM2008 data), which signalled `IEEE_OVERFLOW_FLAG` despite a physically sane trajectory. Fixed by computing the bounded ratio `Rr_n=(R_Earth/r)^n/r` directly and normalizing `XY_general`'s inputs to `xh,yh=x/r,y/r` (bounded, `xh^2+yh^2=cos^2(phi)<=1`). Re-verified: unchanged agreement with Cunningham/finite-difference; zero overflow across LEO through super-GEO stress tests at `nmax=72` (Python/numpy, `seterr(all='raise')`); a smoke run at `ngeo_deg=72` (the actual maximum) with no floating-point exception. **Lesson**: verifying only at low degree can miss numerical-stability failures that only appear at production scale — a production-scale smoke test is not optional for a degree-general recursion. 625/625 regression, both `ifx` and `gfortran`. Merged into `HS-dev`. |
+| 2026-08-10 | **Zonal geopotential cross-validated against a second, independent literature source (Xavier James Raj's PhD thesis) and turned into a permanent regression test**: distinct from the GMAT campaign (different integrator, different gravity-model source). Reproduced Ch.2 ("...Oblateness", $J_2$-$J_{36}$, 4 cases, 100-rev $a$/$e$) and Ch.3 ("...Flattening", GEM-T2, 3 cases, 22h $\Delta(a,e,i)$ zonal-only) with KSROP's own driver using the thesis's own initial conditions/coefficients — agreement within a few$\times10^{-4}$ relative in $a$, sub-percent in $e$, $<0.03\%$ in $\Delta i$. A diagnostic sweep confirmed the residual (~4m at rev 1 growing to ~3.7km at rev 100) is a genuine $J_2$ periodic oscillation in osculating $a$ sampled at a slightly different phase after many revs, not a force-law defect. Ch.3 case B excluded (OCR-corrupted velocity digit in the source PDF; cases A/C both reproduced the thesis's own stated elements to <0.01%, confirming the method). New `test/test_xjr_validation.py` (34 checks, tolerances several times wider than observed residuals) plus `test/fixture_xjr_ch2_zonal.dat`/`fixture_xjr_ch3_zonal.dat`, wired into `test_all.sh`. 659/659 total (625 + 34 new). Posted to issue #29. |

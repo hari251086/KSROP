@@ -1,0 +1,68 @@
+%General Mission Analysis Tool(GMAT) Script
+%  Cross-validation campaign 2026-08-10: KSROP-Mars's real JGMRO120F
+%  degree/order-30 Mars geopotential vs GMAT's Mars50c field (also
+%  truncated to degree/order 30 -- Mars50c is a 50x50 model). First-ever
+%  GMAT cross-check for KSROP-Mars (KSROP issue #27). Note: Mars50c's
+%  own reference radius (3394.2 km) differs from JGMRO120F's (3396.0 km)
+%  by ~1.8 km/~0.05% -- a real, expected source of residual between two
+%  different-generation Mars gravity models, not a code defect.
+%  Geopotential-only: no third-body (Sun)/SRP, isolating the force law.
+%  Initial state matches KSROP-Mars's own input/input.opm default
+%  (400 km circular).
+%  Each Propagate command advances ElapsedSecs *from the current epoch*
+%  -- deltas below are period/4 (x4) then a full period (x2), reaching
+%  1/4,1/2,3/4,1,2,3 orbits (period = 7101.269 s).
+
+Create Spacecraft DefaultSC;
+GMAT DefaultSC.DateFormat = UTCGregorian;
+GMAT DefaultSC.Epoch = '10 Aug 2026 00:00:00.000';
+
+Create CoordinateSystem MarsMJ2000Eq;
+GMAT MarsMJ2000Eq.Origin = Mars;
+GMAT MarsMJ2000Eq.Axes = MJ2000Eq;
+
+GMAT DefaultSC.CoordinateSystem = MarsMJ2000Eq;
+GMAT DefaultSC.DisplayStateType = Cartesian;
+GMAT DefaultSC.X = 3796.190000000;
+GMAT DefaultSC.Y = 0.000000000;
+GMAT DefaultSC.Z = 0.000000000;
+GMAT DefaultSC.VX = 0.000000000;
+GMAT DefaultSC.VY = 0.000000000;
+GMAT DefaultSC.VZ = 3.358859227;
+
+Create ForceModel FMmars30;
+GMAT FMmars30.CentralBody = Mars;
+GMAT FMmars30.PrimaryBodies = {Mars};
+GMAT FMmars30.GravityField.Mars.Degree = 30;
+GMAT FMmars30.GravityField.Mars.Order = 30;
+GMAT FMmars30.GravityField.Mars.PotentialFile = 'E:\Softwares\gmat-win-R2026a\data\gravity\mars\Mars50c.cof';
+GMAT FMmars30.Drag = None;
+GMAT FMmars30.SRP = Off;
+
+Create Propagator Propmars30;
+GMAT Propmars30.FM = FMmars30;
+GMAT Propmars30.Type = RungeKutta89;
+GMAT Propmars30.InitialStepSize = 10;
+GMAT Propmars30.Accuracy = 1e-13;
+GMAT Propmars30.MaxStep = 60;
+
+Create ReportFile Repmars30;
+GMAT Repmars30.Filename = 'crosscheck_mars_deg30_gmat.txt';
+GMAT Repmars30.Precision = 16;
+GMAT Repmars30.WriteHeaders = true;
+
+BeginMissionSequence;
+
+Report Repmars30 DefaultSC.ElapsedSecs DefaultSC.MarsMJ2000Eq.X DefaultSC.MarsMJ2000Eq.Y DefaultSC.MarsMJ2000Eq.Z DefaultSC.MarsMJ2000Eq.VX DefaultSC.MarsMJ2000Eq.VY DefaultSC.MarsMJ2000Eq.VZ;
+Propagate Propmars30(DefaultSC) {DefaultSC.ElapsedSecs = 1775.317};
+Report Repmars30 DefaultSC.ElapsedSecs DefaultSC.MarsMJ2000Eq.X DefaultSC.MarsMJ2000Eq.Y DefaultSC.MarsMJ2000Eq.Z DefaultSC.MarsMJ2000Eq.VX DefaultSC.MarsMJ2000Eq.VY DefaultSC.MarsMJ2000Eq.VZ;
+Propagate Propmars30(DefaultSC) {DefaultSC.ElapsedSecs = 1775.317};
+Report Repmars30 DefaultSC.ElapsedSecs DefaultSC.MarsMJ2000Eq.X DefaultSC.MarsMJ2000Eq.Y DefaultSC.MarsMJ2000Eq.Z DefaultSC.MarsMJ2000Eq.VX DefaultSC.MarsMJ2000Eq.VY DefaultSC.MarsMJ2000Eq.VZ;
+Propagate Propmars30(DefaultSC) {DefaultSC.ElapsedSecs = 1775.317};
+Report Repmars30 DefaultSC.ElapsedSecs DefaultSC.MarsMJ2000Eq.X DefaultSC.MarsMJ2000Eq.Y DefaultSC.MarsMJ2000Eq.Z DefaultSC.MarsMJ2000Eq.VX DefaultSC.MarsMJ2000Eq.VY DefaultSC.MarsMJ2000Eq.VZ;
+Propagate Propmars30(DefaultSC) {DefaultSC.ElapsedSecs = 1775.317};
+Report Repmars30 DefaultSC.ElapsedSecs DefaultSC.MarsMJ2000Eq.X DefaultSC.MarsMJ2000Eq.Y DefaultSC.MarsMJ2000Eq.Z DefaultSC.MarsMJ2000Eq.VX DefaultSC.MarsMJ2000Eq.VY DefaultSC.MarsMJ2000Eq.VZ;
+Propagate Propmars30(DefaultSC) {DefaultSC.ElapsedSecs = 7101.269};
+Report Repmars30 DefaultSC.ElapsedSecs DefaultSC.MarsMJ2000Eq.X DefaultSC.MarsMJ2000Eq.Y DefaultSC.MarsMJ2000Eq.Z DefaultSC.MarsMJ2000Eq.VX DefaultSC.MarsMJ2000Eq.VY DefaultSC.MarsMJ2000Eq.VZ;
+Propagate Propmars30(DefaultSC) {DefaultSC.ElapsedSecs = 7101.269};
+Report Repmars30 DefaultSC.ElapsedSecs DefaultSC.MarsMJ2000Eq.X DefaultSC.MarsMJ2000Eq.Y DefaultSC.MarsMJ2000Eq.Z DefaultSC.MarsMJ2000Eq.VX DefaultSC.MarsMJ2000Eq.VY DefaultSC.MarsMJ2000Eq.VZ;

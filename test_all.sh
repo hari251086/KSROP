@@ -87,7 +87,8 @@ fi
 if [ -n "$DRIVER" ]; then
     if command -v python &>/dev/null || command -v python3 &>/dev/null; then
         PY=$(command -v python3 || command -v python)
-        for ptest in test_driver.py test_initial_conditions.py; do
+        for ptest in test_driver.py test_initial_conditions.py \
+                     test/test_xjr_validation.py; do
             if [ -f "$ptest" ]; then
                 echo ""
                 echo "  --- $ptest ---"

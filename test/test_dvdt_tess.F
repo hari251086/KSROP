@@ -33,9 +33,17 @@ c     -------------------------------------------------------
       dimension Cnm_rotp(0:nmax,0:nmax), Snm_rotp(0:nmax,0:nmax)
       dimension Cnm_rotm(0:nmax,0:nmax), Snm_rotm(0:nmax,0:nmax)
       dimension Cnm_zero(0:nmax,0:nmax), Snm_zero(0:nmax,0:nmax)
+      dimension Rid(3,3)
 
       npass = 0
       nfail = 0
+
+      do i = 1,3
+         do j = 1,3
+            Rid(i,j) = 0.d0
+         end do
+         Rid(i,i) = 1.d0
+      end do
 
       write(*,*) '=============================================='
       write(*,*) ' Time-dependent tesseral geopotential in w*'
@@ -99,11 +107,11 @@ c     ---------------------------------------------------------
          call rotate_tess_coeffs(nmax, Cnm, Snm, theta0_deg-h_deg,
      &                           Cnm_rotm, Snm_rotm)
 
-         call tess_legendre_force(u, 6378.1363d0, theta_dot, nmax,
+         call tess_legendre_force(u, 6378.1363d0, theta_dot, Rid, nmax,
      &      Cnm_rot0, Snm_rot0, q_leg, tau_leg, dvdt_leg, vp0)
-         call tess_legendre_force(u, 6378.1363d0, 0.d0, nmax,
+         call tess_legendre_force(u, 6378.1363d0, 0.d0, Rid, nmax,
      &      Cnm_rotp, Snm_rotp, q_leg, tau_leg, dum, vpp)
-         call tess_legendre_force(u, 6378.1363d0, 0.d0, nmax,
+         call tess_legendre_force(u, 6378.1363d0, 0.d0, Rid, nmax,
      &      Cnm_rotm, Snm_rotm, q_leg, tau_leg, dum, vpm)
 
 c        d(v_pert)/d(theta_deg) via central difference, converted to
@@ -128,7 +136,7 @@ c     ---------------------------------------------------------
       u(4) = 0.4d0
       call rotate_tess_coeffs(nmax, Cnm_zero, Snm_zero, 70.d0,
      &                        Cnm_rot0, Snm_rot0)
-      call tess_legendre_force(u, 6378.1363d0, theta_dot, nmax,
+      call tess_legendre_force(u, 6378.1363d0, theta_dot, Rid, nmax,
      &   Cnm_rot0, Snm_rot0, q_leg, tau_leg, dvdt_leg, vp0)
       call assert_d('ZT1 dvdt_leg is exactly zero (zonal-only)',
      &              dvdt_leg, 0.d0, 1.d-30, npass, nfail)

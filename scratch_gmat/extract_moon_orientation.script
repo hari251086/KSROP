@@ -1,0 +1,64 @@
+%General Mission Analysis Tool(GMAT) Script
+%  Same diagnostic as extract_mars_orientation.script, for the Moon:
+%  extract GMAT's ACTUAL lunar pole orientation (full IAU/libration
+%  model) at the KSROP-Lunar GMAT cross-validation test epoch, via
+%  three unit-vector spacecraft reported in both LunaMJ2000Eq and
+%  LunaFixed (BodyFixed) axes at the same instant.
+
+Create Spacecraft SC1;
+GMAT SC1.DateFormat = UTCGregorian;
+GMAT SC1.Epoch = '10 Aug 2026 00:00:00.000';
+
+Create Spacecraft SC2;
+GMAT SC2.DateFormat = UTCGregorian;
+GMAT SC2.Epoch = '10 Aug 2026 00:00:00.000';
+
+Create Spacecraft SC3;
+GMAT SC3.DateFormat = UTCGregorian;
+GMAT SC3.Epoch = '10 Aug 2026 00:00:00.000';
+
+Create CoordinateSystem LunaMJ2000Eq;
+GMAT LunaMJ2000Eq.Origin = Luna;
+GMAT LunaMJ2000Eq.Axes = MJ2000Eq;
+
+Create CoordinateSystem LunaFixedCS;
+GMAT LunaFixedCS.Origin = Luna;
+GMAT LunaFixedCS.Axes = BodyFixed;
+
+GMAT SC1.CoordinateSystem = LunaMJ2000Eq;
+GMAT SC1.DisplayStateType = Cartesian;
+GMAT SC1.X = 1.000000000;
+GMAT SC1.Y = 0.000000000;
+GMAT SC1.Z = 0.000000000;
+GMAT SC1.VX = 0.0;
+GMAT SC1.VY = 0.0;
+GMAT SC1.VZ = 0.0;
+
+GMAT SC2.CoordinateSystem = LunaMJ2000Eq;
+GMAT SC2.DisplayStateType = Cartesian;
+GMAT SC2.X = 0.000000000;
+GMAT SC2.Y = 1.000000000;
+GMAT SC2.Z = 0.000000000;
+GMAT SC2.VX = 0.0;
+GMAT SC2.VY = 0.0;
+GMAT SC2.VZ = 0.0;
+
+GMAT SC3.CoordinateSystem = LunaMJ2000Eq;
+GMAT SC3.DisplayStateType = Cartesian;
+GMAT SC3.X = 0.000000000;
+GMAT SC3.Y = 0.000000000;
+GMAT SC3.Z = 1.000000000;
+GMAT SC3.VX = 0.0;
+GMAT SC3.VY = 0.0;
+GMAT SC3.VZ = 0.0;
+
+Create ReportFile RepOrient;
+GMAT RepOrient.Filename = 'moon_orientation_gmat.txt';
+GMAT RepOrient.Precision = 16;
+GMAT RepOrient.WriteHeaders = true;
+
+BeginMissionSequence;
+
+Report RepOrient SC1.A1ModJulian SC1.LunaMJ2000Eq.X SC1.LunaMJ2000Eq.Y SC1.LunaMJ2000Eq.Z SC1.LunaFixedCS.X SC1.LunaFixedCS.Y SC1.LunaFixedCS.Z;
+Report RepOrient SC2.A1ModJulian SC2.LunaMJ2000Eq.X SC2.LunaMJ2000Eq.Y SC2.LunaMJ2000Eq.Z SC2.LunaFixedCS.X SC2.LunaFixedCS.Y SC2.LunaFixedCS.Z;
+Report RepOrient SC3.A1ModJulian SC3.LunaMJ2000Eq.X SC3.LunaMJ2000Eq.Y SC3.LunaMJ2000Eq.Z SC3.LunaFixedCS.X SC3.LunaFixedCS.Y SC3.LunaFixedCS.Z;
