@@ -127,6 +127,13 @@ Read from `input.dat` (via `driver_KS.F`) in this fixed order:
    modeled** — this is a confirmed, documented gap (see project memory
    `reference_orem_reentry_literature`, Sharma 1997a/Swinerd&Boulton 1983
    give the missing term, not yet implemented here).
+   (2026-08-10: the perigee-altitude/co-rotation/King-Hele-density math above
+   now lives in a shared, body-agnostic subroutine file,
+   `src/DragOblateCorotating.F`, so KSROP-Mars can reuse it unchanged rather
+   than forking it — mirrors how the geopotential force law was unified into
+   `tess_legendre_force` the day before. This repo's own space-weather
+   override and diurnal-bulge refinement stay local to `driver_KS.F`, passed
+   into the shared force subroutine as a plain density multiplier.)
 6. **SRP model**: cannonball (flat, fixed-area-facing-Sun approximation),
    $a_{SRP} = C_R\,(A/m)\,P_{SR}\,(AU/d_{sun})^2$ in the Sun-to-satellite
    direction, gated by a cylindrical or conical Earth-shadow test
@@ -292,7 +299,7 @@ relevant one level up, in `OREM`'s RSM step, which runs 9 independent
 aren't (run sequentially).
 
 ## 8. Validation & Accuracy
-659 total checks across 9 Fortran test programs and 3 Python integration
+677 total checks across 10 Fortran test programs and 3 Python integration
 scripts, run via `test_all.sh`
 (lint + all suites): `test_subrouts.F` (82, coordinate transforms/utility
 subroutines, incl. `gmst_deg`/`geo_coeff_tess22`/`tess22_force`),
@@ -303,11 +310,13 @@ SGP4/SDP4 + frame conversions), `test_tle2opm.F` (21, TLE-to-OPM pipeline),
 correctness including a hand-verified exospheric-temperature value),
 `test_cunningham.F` (26, general $(n,m)$ tesseral harmonics incl. the
 $m=0$ geopotential-unification cross-check, issue #30),
-`test_legendre_tess.F` (32, singularity-free general-$(n,m)$ closed
-form incl. a decisive exact-pole regression, 2026-08-09 — see below),
+`test_legendre_tess.F` (36, singularity-free general-$(n,m)$ closed
+form incl. a decisive exact-pole regression, 2026-08-09, and the
+Rtilt rotation-covariance checks, 2026-08-10 — see below),
 `test_dvdt_tess.F` (7, tesseral $dU/dt$
 energy-element term, `feature/tesseral-energy-time-dependence` branch —
-see below), plus `test_driver.py` (10),
+see below), `test_drag.F` (14, shared `DragOblateCorotating.F`
+subroutines, 2026-08-10 — see below), plus `test_driver.py` (10),
 `test_initial_conditions.py` (110, multi-orbit sweep), and
 `test/test_xjr_validation.py` (34, zonal geopotential cross-validated
 against Xavier James Raj's PhD thesis — see below) in Python. CI

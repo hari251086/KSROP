@@ -122,18 +122,17 @@ c     Drag: atmosphere tables and KS drag perturbation vectors
 c     IDRAG: integer flag (0=off, 1=on); implicit i-n
       integer IDRAG
 c     Drag model state (oblate, co-rotating exponential atmosphere
-c     referenced to perigee conditions -- same physical model and
-c     logic as KSJLSDNP2.F). The "_dg" quantities are the per-revolution
-c     reference elements/parameters (held fixed through the revolution);
-c     EA_dg (eccentric anomaly) and EC_dg (eccentricity) are refreshed
-c     once per converged integration step.
+c     referenced to perigee conditions -- src/DragOblateCorotating.F,
+c     shared with KSROP-Mars since 2026-08-10). The "_dg" quantities
+c     are the per-revolution reference elements/parameters (held
+c     fixed through the revolution); EA_dg (eccentric anomaly) and
+c     EC_dg (eccentricity) are refreshed once per converged
+c     integration step.
       double precision A_dg,EC_dg,AI_dg,SOMGA_dg,EA_dg
-      double precision SI_dg,CSI_dg,SIOMGA_dg,VIPP_dg,DE_dg
-      double precision RREQ_dg,SQ_dg,HSQ_dg
-      double precision RHOPI_dg,H_dg,BETA_dg,RPO_dg,VPO_dg
-      double precision F_dg,XX_dg,XXX_dg,C_dg
-      double precision SEA_dg,CEA_dg,TER_dg,TER2_dg
-      double precision CSEF_dg,SIEF_dg,FA_dg,exp_arg
+      double precision SI_dg,CSI_dg,HSQ_dg
+      double precision RHOPI_dg,H_dg,F_dg,XXX_dg,C_dg
+      double precision bulge_mult
+      logical drag_active
 c     SRP: cannonball SRP perturbation (ported from KSJLSDNP2.F)
       dimension p_srp(3), qsrp(4), r_srp(3)
       integer IPSR, ISHAD
@@ -425,21 +424,22 @@ c     Integration
 c     -----------------------------------------------------------
 c     Drag: per-revolution reference setup
 c     Oblate, co-rotating exponential atmosphere referenced to
-c     perigee conditions (same physical model as KSJLSDNP2.F).
-c
-c     MODEL: thesis eq. 5.2 (Sharma 1999):
-c       rho = rho_p * exp{-ae/H*(1-cosE)
-c             - eps*r_p*sin^2(I)/H*[sin^2(w+f)-sin^2(w)]}
-c     where H = scale height from ATM.DAT, eps = Earth
-c     flattening, f = true anomaly, E = eccentric anomaly.
+c     perigee conditions. Core force law (perigee altitude,
+c     co-rotation/oblateness terms) now lives in
+c     src/DragOblateCorotating.F -- extracted 2026-08-10 so
+c     KSROP-Mars can reuse the identical model rather than forking
+c     it; see that file's header for the full equations (thesis
+c     eq. 5.2, Sharma 1999). The epoch-resolved space-weather
+c     override and diurnal-bulge refinement below (OREM issues
+c     #26/#32) are Earth-specific and stay local to this driver --
+c     KSROP-Mars has no analog and simply skips straight to
+c     drag_atm_reference with an INTPOL-resolved density.
 c
 c     NOTE: the advanced model (thesis eq. 5.3) with density
 c     scale height variation (R_i coefficients i=1..8, from
 c     Sharma & Raj 2009/2010) is NOT implemented. The current
 c     model uses constant H per revolution. For the R_i model
 c     see thesis pp. 111-113 and Nair & Sharma (2003).
-c     The basic model is sufficient for re-entry prediction
-c     with < 5% RPE as demonstrated in the manuscript.
 c     The reference orbital elements and atmosphere/rotation
 c     parameters below are evaluated once per revolution from the
 c     osculating elements at the start of the revolution, and held
@@ -454,32 +454,19 @@ c     -----------------------------------------------------------
 c     Issue #24 (ported from OREM v1.18): the eccentric anomaly used
 c     by the drag density is read from the true state (pek(7),
 c     refreshed by the per-stage car2oe below), not advanced
-c     analytically. The old sweep DE_dg = (VIPP*pi - EA0)/istep
-c     half-rates the density phase whenever a revolution starts past
-c     EA=pi (VIPP=4 targets 4pi over one rev's steps), intermittently
-c     dephasing the density peak from the true perigee passage along
-c     long decay arcs -- a geometry-dependent error a fitted BN
-c     cannot absorb. Bit-identical on perigee-anchored windows;
-c     on OREM's re-entry arcs it moved RPE from -70..-97% to
-c     bracketing zero. Validated ~1% vs exact RK4 integration of the
-c     same model (OREM/scratch_gmat/drag_ref.py).
+c     analytically -- see drag_force_ks's EA_dg argument below.
+c     Bit-identical on perigee-anchored windows; on OREM's re-entry
+c     arcs this moved RPE from -70..-97% to bracketing zero.
+c     Validated ~1% vs exact RK4 integration of the same model
+c     (OREM/scratch_gmat/drag_ref.py).
 
-         SI_dg     = dsin(AI_dg)
-         CSI_dg    = dcos(AI_dg)
-         SIOMGA_dg = dsin(SOMGA_dg)
+         call drag_perigee_active(A_dg, EC_dg, AI_dg, SOMGA_dg,
+     &                             R_Earth, EPS_f,
+     &                             ALT_atm(1), ALT_atm(ndim_atm),
+     &                             HSQ_dg, SI_dg, CSI_dg, drag_active)
 
-c     Perigee altitude above the oblate Earth (drag is active for
-c     the revolution only when this is below 500 km)
-         RREQ_dg = R_Earth*1.d3*(1.d0 - SI_dg*SI_dg*SIOMGA_dg*SIOMGA_dg
-     &             *EPS_f)
-         SQ_dg  = A_dg*(1.d0 - EC_dg)
-         HSQ_dg = SQ_dg - RREQ_dg
-
-         if (HSQ_dg .ge. ALT_atm(1) .and.
-     &       HSQ_dg .le. ALT_atm(ndim_atm)) then
-c     Reference density/scale-height at perigee, the rotating-
-c     atmosphere correction factor F_dg, and the oblateness/
-c     eccentricity exponent terms C_dg, XXX_dg used each step.
+         if (drag_active) then
+c     Reference density/scale-height at perigee.
 c     Ported from OREM issue #26: when a space-weather history and
 c     2-D atmosphere table are loaded (auto-detected at startup),
 c     the reference is evaluated at the exospheric temperature for
@@ -497,7 +484,6 @@ c     legacy path below runs unchanged.
                call INTPOL(ALT_atm, SCH_atm, ndim_atm,
      &                     HSQ_dg, H_dg)
             end if
-            if (H_dg .le. 0.d0) H_dg = 1.d0
 
 c           Issue #32 Phase 5 follow-up (OREM): diurnal density
 c           bulge amplitude, only derivable when weather mode
@@ -527,79 +513,38 @@ c           refreshed every step.
                end if
             end if
 
-            BETA_dg = 1.d0/H_dg
-            RPO_dg  = SQ_dg
-            VPO_dg  = dsqrt(amue*1.d9*(2.d0/RPO_dg - 1.d0/A_dg))
-            F_dg    = (1.d0 - RPO_dg*WE_rot*FR_rot*CSI_dg/VPO_dg)**2
-            XX_dg   = A_dg*EC_dg
-            XXX_dg  = BETA_dg*XX_dg
-            C_dg    = EPS_f*BETA_dg*RPO_dg*SI_dg*SI_dg*0.5d0
+            call drag_atm_reference(A_dg, EC_dg, SI_dg, CSI_dg,
+     &                               RHOPI_dg, H_dg, WE_rot, FR_rot,
+     &                               amue, EPS_f, F_dg, XXX_dg, C_dg)
          end if
 
          do ki = 1,istep        !Steps
  60         continue
 
 c     -----------------------------------------------------------
-c     Atmospheric drag perturbation
-c     Local density = perigee-reference density (RHOPI_dg) times
-c     an exponential correction (TER_dg) for the satellite's true
-c     anomaly, orbital oblateness/eccentricity (C_dg, XXX_dg), and
-c     a co-rotating-atmosphere correction (F_dg) -- same physical
-c     model and logic as KSJLSDNP2.F.
-c     Compute drag acceleration p_drag(3) in km/s^2, then
-c     transform to KS space via the L(u) matrix: qdrag(4) = L(u)*p_drag
+c     Atmospheric drag perturbation (shared force law,
+c     src/DragOblateCorotating.F). Issue #24: density at the TRUE
+c     eccentric anomaly of the current (stage) state -- stage-
+c     accurate, covers both wings of the perigee density bump.
+c     bulge_mult carries KSROP's own Earth-specific diurnal-bulge
+c     refinement (OREM issue #32) -- geometric factor evaluated at
+c     the satellite's CURRENT stage position (unlike f_bulge, this
+c     genuinely varies fast within one revolution, since that's the
+c     whole point of a day/night bulge); f_bulge=0 (weather mode
+c     off, the common case) makes this an exact no-op.
 c     -----------------------------------------------------------
-            if (IDRAG .eq. 1 .and.
-     &          HSQ_dg .ge. ALT_atm(1) .and.
-     &          HSQ_dg .le. ALT_atm(ndim_atm)) then
-c              Issue #24: density at the TRUE eccentric anomaly of
-c              the current (stage) state -- stage-accurate, covers
-c              both wings of the perigee density bump.
-               EA_dg   = pek(7)*d2r
-               EC_dg   = pek(2)
-               SEA_dg  = dsin(EA_dg)
-               CEA_dg  = dcos(EA_dg)
-               TER_dg  = 1.d0 - EC_dg*CEA_dg
-               CSEF_dg = (CEA_dg - EC_dg)/TER_dg
-               SIEF_dg = SEA_dg*dsqrt(1.d0 - EC_dg*EC_dg)/TER_dg
-               FA_dg   = atan3(SIEF_dg,CSEF_dg)
-               TER2_dg = dcos(SOMGA_dg)**2
-     &                 - dcos(SOMGA_dg+FA_dg)**2
-               exp_arg = -2.d0*C_dg*TER2_dg
-     &                  - XXX_dg*(1.d0-CEA_dg)
-               if (exp_arg .gt. 500.d0 .or.
-     &             exp_arg .lt. -500.d0) then
-                  TER_dg = 0.d0
-               else
-                  TER_dg = dexp(exp_arg)
-               end if
-c              Issue #32 Phase 5 follow-up (OREM): diurnal density
-c              bulge -- geometric factor evaluated at the
-c              satellite's CURRENT stage position (unlike f_bulge,
-c              this genuinely varies fast within one revolution,
-c              since that's the whole point of a day/night bulge).
-c              f_bulge=0 (weather mode off, the common case) makes
-c              this an exact no-op regardless of cosphi_dg's value.
+            EA_dg = pek(7)*d2r
+            EC_dg = pek(2)
+            bulge_mult = 1.d0
+            if (f_bulge .ne. 0.d0) then
                cosphi_dg = 0.d0
-               if (f_bulge .ne. 0.d0)
-     &            call bulge_cosphi(x, ts, 37.d0, cosphi_dg)
-
-               DENS = -F_dg*RHOPI_dg*(1.d0 + f_bulge*cosphi_dg)
-     &              *TER_dg*V/(BN*2.d0)*1.d-7
-               do i = 1,3
-                  p_drag(i) = DENS * xd(i)
-               end do
-            else
-               do i = 1,3
-                  p_drag(i) = 0.d0
-               end do
+               call bulge_cosphi(x, ts, 37.d0, cosphi_dg)
+               bulge_mult = 1.d0 + f_bulge*cosphi_dg
             end if
-
-c     L(u) transformation: qdrag = L(u) * p_drag  (KS perturbation)
-            qdrag(1) =  u(1)*p_drag(1)+u(2)*p_drag(2)+u(3)*p_drag(3)
-            qdrag(2) = -u(2)*p_drag(1)+u(1)*p_drag(2)+u(4)*p_drag(3)
-            qdrag(3) = -u(3)*p_drag(1)-u(4)*p_drag(2)+u(1)*p_drag(3)
-            qdrag(4) =  u(4)*p_drag(1)-u(3)*p_drag(2)+u(2)*p_drag(3)
+            call drag_force_ks(u, xd, V, EC_dg, EA_dg, SOMGA_dg,
+     &                          F_dg, C_dg, XXX_dg, RHOPI_dg, BN,
+     &                          IDRAG.eq.1 .and. drag_active,
+     &                          bulge_mult, qdrag)
 
 c     -----------------------------------------------------------
 c     SRP: cannonball solar radiation pressure perturbation.

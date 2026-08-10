@@ -36,7 +36,7 @@ echo ""
 # --- Phase 2: Fortran tests ---
 echo "====== Phase 2: Unit & Regression Tests ======"
 
-TESTS="test_subrouts test_bugs test_tle test_tle2sv test_tle2opm test_sw test_cunningham"
+TESTS="test_subrouts test_bugs test_tle test_tle2sv test_tle2opm test_sw test_cunningham test_legendre_tess test_dvdt_tess test_drag"
 
 for t in $TESTS; do
     if [ -f "./${t}.exe" ]; then
