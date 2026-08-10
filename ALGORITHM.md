@@ -292,7 +292,8 @@ relevant one level up, in `OREM`'s RSM step, which runs 9 independent
 aren't (run sequentially).
 
 ## 8. Validation & Accuracy
-625 total checks across 9 Fortran test programs, run via `test_all.sh`
+659 total checks across 9 Fortran test programs and 3 Python integration
+scripts, run via `test_all.sh`
 (lint + all suites): `test_subrouts.F` (82, coordinate transforms/utility
 subroutines, incl. `gmst_deg`/`geo_coeff_tess22`/`tess22_force`),
 `test_tle.F` (147, TLE parsing), `test_tle2sv.F` (156,
@@ -306,8 +307,10 @@ $m=0$ geopotential-unification cross-check, issue #30),
 form incl. a decisive exact-pole regression, 2026-08-09 — see below),
 `test_dvdt_tess.F` (7, tesseral $dU/dt$
 energy-element term, `feature/tesseral-energy-time-dependence` branch —
-see below), plus `test_driver.py` (10) and
-`test_initial_conditions.py` (110, multi-orbit sweep) in Python. CI
+see below), plus `test_driver.py` (10),
+`test_initial_conditions.py` (110, multi-orbit sweep), and
+`test/test_xjr_validation.py` (34, zonal geopotential cross-validated
+against Xavier James Raj's PhD thesis — see below) in Python. CI
 (`ci.yml`) runs the full suite on every push/PR to `main`/`HS-dev` via
 `gfortran` on Ubuntu. Cross-validated against GMAT
 (project memory `project_ksrop_gmat_validation`): after fixing 6 real bugs
@@ -318,6 +321,40 @@ Sun-only third-body agreement is ~1.2 m against GMAT reference ephemerides,
 full-force (drag+oblateness+third-body) agreement is 1.9 km over 2 GTO
 revolutions — with the drag model's own inherent spread (not a KSROP bug)
 identified as the dominant remaining source of that residual.
+
+**Zonal geopotential vs. Xavier James Raj's PhD thesis (2026-08-10)**:
+a second, independent literature cross-check of the zonal ($m=0$)
+geopotential, distinct from the GMAT campaign above (different
+integrator, different gravity-model source, no GMAT/JPL kernel
+dependency). Two chapters of the thesis (`E:\Research\References\0\29.
+XJR_Thesis.pdf` on the user's machine — not shipped in this repo; the
+already-published numbers its tables report are reproduced as fixtures
+in `test/fixture_xjr_ch2_zonal.dat`/`fixture_xjr_ch3_zonal.dat`), both
+built on the same KS uniformly-regular canonical formalism KSROP
+itself uses, published their own RK4-Gill numerical results for the
+pure zonal Earth geopotential: Ch.2 ("...Oblateness", $J_2$..$J_{36}$,
+4 test cases, 100-revolution semi-major-axis/eccentricity), and Ch.3
+("...Flattening", GEM-T2 $C_{n,0}$, 3 cases, 22-hour
+$\Delta(a,e,i)$ at $J_{6,0}/J_{10,0}/J_{19,0}$). Reproducing both with
+KSROP's own driver (thesis's own initial conditions/coefficients,
+zonal-only) agrees to within a few$\times10^{-4}$ relative in
+semi-major axis, sub-percent in eccentricity, and $<0.03\%$ in
+inclination change across both chapters. A diagnostic sweep (sampling
+one case's trajectory every few revolutions instead of only at rev
+100) showed the KSROP-vs-thesis gap grows smoothly from ~4 m at rev 1
+to ~3.7 km at rev 100 — consistent with a genuine, physically-expected
+$J_2$ periodic oscillation in osculating $a$ (amplitude
+$\sim J_2 R_\oplus^2/a$, matching the ~6 km scale observed) sampled at
+a slightly different orbital phase after many revolutions, not a
+force-law defect. Chapter 3's case B was excluded from the permanent
+regression test: its initial velocity in the source PDF has an
+OCR-corrupted digit (`-3.1.2446613`) that could not be reliably
+resolved; cases A and C both reproduced the thesis's own stated
+$a/e/i$ to $<0.01\%$, confirming the transcription method itself.
+Permanent regression: `test/test_xjr_validation.py` (34 checks, tolerances
+set several times wider than the residuals actually observed, to absorb
+ifx-vs-gfortran RK4-Gill roundoff without masking an actual force-law
+regression).
 
 **(2,2) tesseral term (issue #29, 2026-08-08)**: the KS-element force law
 itself was verified exactly twice — symbolically against this repo's own
