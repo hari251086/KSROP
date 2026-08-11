@@ -663,10 +663,14 @@ production-scale smoke test is not optional once a recursion is meant
 to run up to `ntess_cap`.
 
 ## 9. Known Limitations
-- **KSROP-Lunar/KSROP-Mars likely still have a separate zonal code
-  path** that this repo's own geopotential unification (§5/§8,
-  `feature/tesseral-energy-time-dependence` branch) removed — not
-  investigated this session, separate follow-on work.
+- ~~KSROP-Lunar/KSROP-Mars likely still have a separate zonal code
+  path~~ — **resolved 2026-08-10**: both downstream repos completed the
+  same geopotential unification this repo did (§5/§8), removing their
+  own separate zonal `geo_coeff_body`/`c_j` pathways in favor of
+  `geo_coeff_tess_general`/`tess_legendre_force` as the sole geopotential
+  loader/force law — see each repo's own README §8 Version History
+  (2026-08-10 entry, "full degree/order-30 gravity fields, unified
+  geopotential").
 - **Geopotential degree is capped at `ntess_cap=72`, including zonal-
   only runs** (general $(n,m)$ support itself is not limited to (2,2) —
   see §5/§8, issue #30 and the 2026-08-09 unification). The cap exists
