@@ -38,7 +38,22 @@ c     -------------------------------------------------------
       dimension Xt(0:6), Yt(0:6)
       dimension Xx(0:6), Xy(0:6), Yx(0:6), Yy(0:6)
       dimension u(4), q_leg(4), q_ref(4)
-      dimension Cnm(0:6,0:6), Snm(0:6,0:6)
+      double precision, allocatable :: Cnm(:,:), Snm(:,:)
+c     Cnm/Snm are ALLOCATABLE, re-allocated to exactly (0:nmax,0:nmax)
+c     at every site below where nmax changes -- NOT a fixed-size
+c     array reused across different nmax values. tess_general_force/
+c     tess_legendre_force declare their own Cnm/Snm dummy arguments as
+c     explicit-shape Cnm(0:nmax,0:nmax); Fortran resolves that via
+c     column-major sequence association against the ACTUAL argument's
+c     linear memory, so if the actual array's leading dimension ever
+c     differed from the callee's nmax+1 (e.g. a fixed (0:6,0:6) array
+c     reused for nmax=2,3,4 calls), (n,m) indices would silently
+c     alias the WRONG elements -- caught 2026-08-11 via intermittent
+c     gfortran-only CI failures (ifx and fpm's own build happened not
+c     to expose it): case nmax=3 read uninitialized memory that
+c     resolved to NaN. driver_KS.F itself was never affected -- it
+c     allocates Cnm_tess(0:ntess_use,0:ntess_use) fresh at the exact
+c     size used every run.
       dimension Rid(3,3), Rrt(3,3)
       dimension u1v(4), up(4), um(4), usdum(4), qdum(4)
       dimension x0v(3), x1v(3), xd0v(3)
@@ -130,6 +145,8 @@ c     ---------------------------------------------------------
             u(4) = 0.5d0
          end if
 
+         if (allocated(Cnm)) deallocate(Cnm, Snm)
+         allocate(Cnm(0:nmax,0:nmax), Snm(0:nmax,0:nmax))
          do n = 0, nmax
             do m = 0, nmax
                Cnm(n,m) = 0.d0
@@ -191,6 +208,8 @@ c     r=4 -- a genuine on-axis point, not degenerate in u).
       u(3) = 1.d0
       u(4) = 1.d0
 
+      if (allocated(Cnm)) deallocate(Cnm, Snm)
+      allocate(Cnm(0:nmax,0:nmax), Snm(0:nmax,0:nmax))
       do n = 0, nmax
          do m = 0, nmax
             Cnm(n,m) = 0.d0
@@ -304,6 +323,8 @@ c     block's own comment).
       call car2ks(x1v, xd0v, u1v, usdum, w0)
 
       nmax = 4
+      if (allocated(Cnm)) deallocate(Cnm, Snm)
+      allocate(Cnm(0:nmax,0:nmax), Snm(0:nmax,0:nmax))
       do n = 0, nmax
          do m = 0, nmax
             Cnm(n,m) = 0.d0

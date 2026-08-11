@@ -64,7 +64,7 @@ for t in $TESTS; do
         else
             echo "  >> $t: $TOTAL tests, $FAILED FAILED"
             # Show failures
-            echo "$OUTPUT" | grep '\[FAIL\]'
+            echo "$OUTPUT" | grep -A1 '\[FAIL\]'
         fi
     else
         echo "  >> $t: could not parse output"
