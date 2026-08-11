@@ -5,13 +5,20 @@ KSROP (KS Regular Orbit Propagator) is a Fortran numerical integrator for
 Earth-satellite trajectories, using Kustaanheimo-Stiefel (KS) regularized
 elements instead of raw Cartesian state, integrated with a 4th-order
 Runge-Kutta-Gill (RKG4) scheme. It is the foundational propagator this
-project's other repos build on: `OREM` embeds KSROP's own source files
-(`Subrouts.F`, `TLEread.F`, `Legendre.F`, `propagate_ks.F`, which does not
-exist as a standalone file in KSROP itself — it was refactored out of
-`driver_KS.F` specifically for `OREM`'s callable-subroutine use — see §10)
-directly under `OREM\ksrop\`, and `KSRENT-PY` is an independent Python port
-of overlapping functionality. KSROP itself is a standalone driver
-(`driver_KS.F`) plus a TLE-to-OPM conversion tool (`tle2opm.F`).
+project's other repos build on: `OREM`, `KSROP-Lunar`, and `KSROP-Mars`
+each depend on this repo as a real fpm package (`git`+`tag` dependency in
+their own `fpm.toml`, e.g. `OREM`'s pinned `v2.2.0`), consuming KSROP's
+library sources (`Subrouts.F`, `TLEread.F`, `Legendre.F`, the general
+(n,m) tesseral force law, and, since v2.11.0, the shared drag
+subroutines) directly rather than hand-copying files — see §10. `OREM`
+additionally has its own `src/propagate_ks.F`, an OREM-local
+callable-subroutine refactor of this repo's `driver_KS.F` propagation
+loop (same physics, restructured as a subroutine rather than a
+standalone program with file I/O, so `OREM` can call it many times per
+zone without shelling out to a separate executable) — this file is
+OREM's own, not part of the KSROP package. `KSRENT-PY` is an independent
+Python port of overlapping functionality. KSROP itself is a standalone
+driver (`driver_KS.F`) plus a TLE-to-OPM conversion tool (`tle2opm.F`).
 
 ## 2. Problem Statement
 Numerically integrate a satellite's trajectory forward in time under a
@@ -127,6 +134,13 @@ Read from `input.dat` (via `driver_KS.F`) in this fixed order:
    modeled** — this is a confirmed, documented gap (see project memory
    `reference_orem_reentry_literature`, Sharma 1997a/Swinerd&Boulton 1983
    give the missing term, not yet implemented here).
+   (2026-08-10: the perigee-altitude/co-rotation/King-Hele-density math above
+   now lives in a shared, body-agnostic subroutine file,
+   `src/DragOblateCorotating.F`, so KSROP-Mars can reuse it unchanged rather
+   than forking it — mirrors how the geopotential force law was unified into
+   `tess_legendre_force` the day before. This repo's own space-weather
+   override and diurnal-bulge refinement stay local to `driver_KS.F`, passed
+   into the shared force subroutine as a plain density multiplier.)
 6. **SRP model**: cannonball (flat, fixed-area-facing-Sun approximation),
    $a_{SRP} = C_R\,(A/m)\,P_{SR}\,(AU/d_{sun})^2$ in the Sun-to-satellite
    direction, gated by a cylindrical or conical Earth-shadow test
@@ -292,7 +306,7 @@ relevant one level up, in `OREM`'s RSM step, which runs 9 independent
 aren't (run sequentially).
 
 ## 8. Validation & Accuracy
-659 total checks across 9 Fortran test programs and 3 Python integration
+677 total checks across 10 Fortran test programs and 3 Python integration
 scripts, run via `test_all.sh`
 (lint + all suites): `test_subrouts.F` (82, coordinate transforms/utility
 subroutines, incl. `gmst_deg`/`geo_coeff_tess22`/`tess22_force`),
@@ -303,11 +317,13 @@ SGP4/SDP4 + frame conversions), `test_tle2opm.F` (21, TLE-to-OPM pipeline),
 correctness including a hand-verified exospheric-temperature value),
 `test_cunningham.F` (26, general $(n,m)$ tesseral harmonics incl. the
 $m=0$ geopotential-unification cross-check, issue #30),
-`test_legendre_tess.F` (32, singularity-free general-$(n,m)$ closed
-form incl. a decisive exact-pole regression, 2026-08-09 — see below),
+`test_legendre_tess.F` (36, singularity-free general-$(n,m)$ closed
+form incl. a decisive exact-pole regression, 2026-08-09, and the
+Rtilt rotation-covariance checks, 2026-08-10 — see below),
 `test_dvdt_tess.F` (7, tesseral $dU/dt$
 energy-element term, `feature/tesseral-energy-time-dependence` branch —
-see below), plus `test_driver.py` (10),
+see below), `test_drag.F` (14, shared `DragOblateCorotating.F`
+subroutines, 2026-08-10 — see below), plus `test_driver.py` (10),
 `test_initial_conditions.py` (110, multi-orbit sweep), and
 `test/test_xjr_validation.py` (34, zonal geopotential cross-validated
 against Xavier James Raj's PhD thesis — see below) in Python. CI
@@ -706,13 +722,18 @@ to run up to `ntess_cap`.
 ## 10. Dependencies
 - **Standalone** — KSROP has no dependency on any other repo under
   `GitHub\`.
-- **Depended on by `OREM`**: `OREM\ksrop\` embeds direct copies of
-  `Subrouts.F`, `TLEread.F`, `Legendre.F`, and a refactored
-  callable-subroutine version of the propagation loop
-  (`propagate_ks.F`, factored out of this repo's `driver_KS.F` — same
-  physics, restructured as a subroutine rather than a standalone program
-  with file I/O, specifically so `OREM` could call it many times per zone
-  without shelling out to a separate executable).
+- **Depended on by `OREM`, `KSROP-Lunar`, and `KSROP-Mars`**, each via fpm's
+  git+tag dependency mechanism (`[dependencies] ksrop = { git = "...",
+  tag = "vX.Y.Z" }`) — real package resolution, not hand-copied files (that
+  was the pre-fpm-era pattern, historical only; see §1 and project memory
+  `project_ksrop_fpm_packaging`). Tags currently on record in each
+  consumer's own `fpm.toml`: `OREM` v2.2.0, `KSROP-Lunar` v2.10.0,
+  `KSROP-Mars` v2.11.0 (each consumer upgrades independently, so it is
+  normal for these to differ from the latest tag and from each other).
+  `KSROP-Lunar`/`KSROP-Mars` reuse this repo's general (n,m) tesseral force
+  law (`tess_general_force`/`geo_coeff_body`) and, since v2.11.0, the shared
+  `src/DragOblateCorotating.F` drag subroutines for their own central
+  bodies — see §5/§8/§9 and issues #26/#27.
 - **Related to `KSRENT-PY`**: an independent Python port covering
   overlapping functionality (KS transforms, TLE reading) — not a shared
   source, a separate reimplementation (see `KSRENT-PY\ALGORITHM.md`).

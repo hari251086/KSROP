@@ -13,7 +13,8 @@ FC      = gfortran
 FFLAGS  = -O2 -Wall
 
 SRC     = app/driver_KS.F src/Subrouts.F src/Legendre.F src/TLEread.F \
-          src/swx.F src/Cunningham.F src/LegendreTess.F
+          src/swx.F src/Cunningham.F src/LegendreTess.F \
+          src/DragOblateCorotating.F
 TARGET  = driver_KS
 
 TLE2OPM_SRC = app/tle2opm.F src/Subrouts.F src/TLEread.F src/Legendre.F
@@ -49,10 +50,14 @@ TEST_DVDT_TESS_SRC = test/test_dvdt_tess.F src/LegendreTess.F \
                       src/Cunningham.F src/Subrouts.F src/Legendre.F
 TEST_DVDT_TESS_BIN = test_dvdt_tess
 
+TEST_DRAG_SRC = test/test_drag.F src/DragOblateCorotating.F \
+                src/Subrouts.F src/Legendre.F
+TEST_DRAG_BIN = test_drag
+
 ALL_TEST_BINS = $(TEST_BIN) $(TEST_BUGS_BIN) $(TEST_TLE_BIN) \
                 $(TEST_TLE2SV_BIN) $(TEST_TLE2OPM_BIN) $(TEST_SW_BIN) \
                 $(TEST_CUNNINGHAM_BIN) $(TEST_LEGENDRE_TESS_BIN) \
-                $(TEST_DVDT_TESS_BIN)
+                $(TEST_DVDT_TESS_BIN) $(TEST_DRAG_BIN)
 
 .PHONY: all tools tests run test clean
 
@@ -94,6 +99,9 @@ $(TEST_LEGENDRE_TESS_BIN): $(TEST_LEGENDRE_TESS_SRC)
 
 $(TEST_DVDT_TESS_BIN): $(TEST_DVDT_TESS_SRC)
 	$(FC) $(FFLAGS) $(TEST_DVDT_TESS_SRC) -o $(TEST_DVDT_TESS_BIN)
+
+$(TEST_DRAG_BIN): $(TEST_DRAG_SRC)
+	$(FC) $(FFLAGS) $(TEST_DRAG_SRC) -o $(TEST_DRAG_BIN)
 
 run: $(TARGET)
 	./$(TARGET)
