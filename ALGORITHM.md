@@ -5,13 +5,20 @@ KSROP (KS Regular Orbit Propagator) is a Fortran numerical integrator for
 Earth-satellite trajectories, using Kustaanheimo-Stiefel (KS) regularized
 elements instead of raw Cartesian state, integrated with a 4th-order
 Runge-Kutta-Gill (RKG4) scheme. It is the foundational propagator this
-project's other repos build on: `OREM` embeds KSROP's own source files
-(`Subrouts.F`, `TLEread.F`, `Legendre.F`, `propagate_ks.F`, which does not
-exist as a standalone file in KSROP itself — it was refactored out of
-`driver_KS.F` specifically for `OREM`'s callable-subroutine use — see §10)
-directly under `OREM\ksrop\`, and `KSRENT-PY` is an independent Python port
-of overlapping functionality. KSROP itself is a standalone driver
-(`driver_KS.F`) plus a TLE-to-OPM conversion tool (`tle2opm.F`).
+project's other repos build on: `OREM`, `KSROP-Lunar`, and `KSROP-Mars`
+each depend on this repo as a real fpm package (`git`+`tag` dependency in
+their own `fpm.toml`, e.g. `OREM`'s pinned `v2.2.0`), consuming KSROP's
+library sources (`Subrouts.F`, `TLEread.F`, `Legendre.F`, the general
+(n,m) tesseral force law, and, since v2.11.0, the shared drag
+subroutines) directly rather than hand-copying files — see §10. `OREM`
+additionally has its own `src/propagate_ks.F`, an OREM-local
+callable-subroutine refactor of this repo's `driver_KS.F` propagation
+loop (same physics, restructured as a subroutine rather than a
+standalone program with file I/O, so `OREM` can call it many times per
+zone without shelling out to a separate executable) — this file is
+OREM's own, not part of the KSROP package. `KSRENT-PY` is an independent
+Python port of overlapping functionality. KSROP itself is a standalone
+driver (`driver_KS.F`) plus a TLE-to-OPM conversion tool (`tle2opm.F`).
 
 ## 2. Problem Statement
 Numerically integrate a satellite's trajectory forward in time under a
@@ -715,13 +722,18 @@ to run up to `ntess_cap`.
 ## 10. Dependencies
 - **Standalone** — KSROP has no dependency on any other repo under
   `GitHub\`.
-- **Depended on by `OREM`**: `OREM\ksrop\` embeds direct copies of
-  `Subrouts.F`, `TLEread.F`, `Legendre.F`, and a refactored
-  callable-subroutine version of the propagation loop
-  (`propagate_ks.F`, factored out of this repo's `driver_KS.F` — same
-  physics, restructured as a subroutine rather than a standalone program
-  with file I/O, specifically so `OREM` could call it many times per zone
-  without shelling out to a separate executable).
+- **Depended on by `OREM`, `KSROP-Lunar`, and `KSROP-Mars`**, each via fpm's
+  git+tag dependency mechanism (`[dependencies] ksrop = { git = "...",
+  tag = "vX.Y.Z" }`) — real package resolution, not hand-copied files (that
+  was the pre-fpm-era pattern, historical only; see §1 and project memory
+  `project_ksrop_fpm_packaging`). Tags currently on record in each
+  consumer's own `fpm.toml`: `OREM` v2.2.0, `KSROP-Lunar` v2.10.0,
+  `KSROP-Mars` v2.11.0 (each consumer upgrades independently, so it is
+  normal for these to differ from the latest tag and from each other).
+  `KSROP-Lunar`/`KSROP-Mars` reuse this repo's general (n,m) tesseral force
+  law (`tess_general_force`/`geo_coeff_body`) and, since v2.11.0, the shared
+  `src/DragOblateCorotating.F` drag subroutines for their own central
+  bodies — see §5/§8/§9 and issues #26/#27.
 - **Related to `KSRENT-PY`**: an independent Python port covering
   overlapping functionality (KS transforms, TLE reading) — not a shared
   source, a separate reimplementation (see `KSRENT-PY\ALGORITHM.md`).

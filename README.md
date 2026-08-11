@@ -13,7 +13,7 @@ Orbit propagation using **Kustaanheimo–Stiefel (KS) regular elements** with a 
 
 | Perturbation | Model | Notes |
 |---|---|---|
-| Earth oblateness (Jn) | EGM2008 | Configurable up to degree 2190 |
+| Earth oblateness (Jn) | EGM2008 | General (n,m) geopotential, capped at degree/order 72 (`ntess_cap`; see §12) |
 | Luni-solar gravity | Analytical ephemeris | Configurable Legendre degree |
 | Atmospheric drag | Oblate co-rotating exponential | Tabulated density (ATM.DAT), perigee-referenced |
 | Solar radiation pressure | Cannon-ball | Cylindrical or conical shadow models |
@@ -35,6 +35,8 @@ KSROP/
 │   │                                     from driver_KS.F (see LegendreTess.F)
 │   ├── LegendreTess.F                    General (n,m) tesseral harmonics, classical Legendre
 │   │                                     expansion (issue #30) -- THE active geopotential
+│   ├── DragOblateCorotating.F            Shared oblate/co-rotating drag subroutines (perigee
+│   │                                     check, atm reference, KS force), body-agnostic (2026-08-10)
 │   └── jr71_profile.F                    Jacchia-71 atmosphere profile (shared by gen_atm* tools)
 ├── app/
 │   ├── driver_KS.F                       Main propagator program
@@ -69,7 +71,9 @@ KSROP/
 │   ├── test_cunningham.F                 General tesseral harmonics tests (26 checks, issue #30)
 │   ├── test_legendre_tess.F              Singularity-free general (n,m) force tests (32 checks)
 │   ├── test_dvdt_tess.F                  Time-dependent tesseral dU/dt tests (7 checks)
+│   ├── test_drag.F                       Shared drag-model tests (14 checks, DragOblateCorotating.F)
 │   ├── test_xjr_validation.py            Zonal geopotential vs. XJR thesis Ch.2/3 (34 checks)
+│   ├── fixture_geo_coeff.dat              Gravity-coefficient fixture (geo_coeff_body tests)
 │   ├── fixture_xjr_ch2_zonal.dat          J2..J36 zonal coefficients (thesis Table 2.1)
 │   └── fixture_xjr_ch3_zonal.dat          GEM-T2 zonal coefficients (thesis Table 3.1A)
 ├── test_driver.py                       Integration test (10 checks)
@@ -132,7 +136,7 @@ a CCSDS OEM trajectory (`KSROP_<timestamp>.oem`) and a KS-elements debug dump
 ### Step 3: Verify with the test suite
 
 ```bash
-make test       # build everything + run test_all.sh (585 checks + 5 lint rules)
+make test       # build everything + run test_all.sh (677 checks + 5 lint rules)
 ```
 
 If this passes, your build is behaving identically to the one verified in CI (see
@@ -191,7 +195,7 @@ To depend on KSROP from another fpm project (e.g. OREM), add to that project's `
 
 ```toml
 [dependencies]
-ksrop = { git = "https://github.com/hari251086/KSROP", tag = "v2.1.0" }
+ksrop = { git = "https://github.com/hari251086/KSROP", tag = "v2.11.0" }  # pin to the tag you need; consumers currently on record: OREM v2.2.0, KSROP-Lunar v2.10.0, KSROP-Mars v2.11.0
 ```
 
 `fpm.toml` sets `[fortran] source-form = "fixed"` (fpm defaults `.F` to free-form, which breaks
@@ -314,7 +318,7 @@ PSR_srp                                ! Line 3: solar radiation pressure (N/m²
 | `AU` | 1.495978707×10⁸ | km |
 | `mu_Sun` | 1.32712440018×10¹¹ | km³/s² |
 | `mu_Moon` | 4.902801076×10³ | km³/s² |
-| `ngeo_deg` | 0–2190 | Geopotential degree (0 or 1 = point mass) |
+| `ngeo_deg` | 0–72 | Geopotential degree (0 or 1 = point mass; capped at `ntess_cap=72` regardless of a larger value here, since the unified general (n,m) path replaced the old degree-2190 zonal-only path — see §12) |
 | `nsun_deg` | 0–2190 | Solar gravity Legendre degree |
 | `nmoon_deg` | 0–2190 | Lunar gravity Legendre degree |
 | `PSR_srp` | 4.56×10⁻⁶ | Solar radiation pressure at 1 AU (N/m²) |
@@ -427,7 +431,7 @@ The propagator uses **KS regularisation** to remove the 1/r singularity. The 3D 
 |---|---|
 | `z(j+1)`, `z(j+5)` | State — conservative (geo + third-body) + drag + SRP |
 | `z(1)` | Time — geopotential + third-body + drag + SRP |
-| `z(10)` | Energy — non-conservative: dω/ds = −½(u̇·(q_drag+q_srp))/ω |
+| `z(10)` | Energy — non-conservative (drag+SRP) **plus** the geopotential's own `dU/dt` term (the general (n,m) tesseral field is body-fixed and rotates with Earth, so it is not static in the inertial frame; third-body is treated as static and excluded — see ALGORITHM.md §5) |
 
 Step size is scaled by Γ = ω/ω_Kep to maintain accuracy across eccentricities.
 
@@ -464,9 +468,13 @@ Step size is scaled by Γ = ω/ω_Kep to maintain accuracy across eccentricities
 | `cunningham_Vnm(nwork,x,y,z,r2,Vr,Vi)` | General complex solid spherical harmonics (Cunningham 1970 recursion), any degree/order (issue #30) |
 | `cunningham_dVnm(n,m,nwork,Vr,Vi,dxr,dxi,dyr,dyi,dzr,dzi)` | Cartesian derivatives of `V_{n,m}` (issue #30) |
 | `geo_coeff_tess_general(fname,nmax,Cnm,Snm)` | General (n,m) tesseral coefficient table loader, any degree/order (issue #30) |
-| `tess_general_force(u,R,nmax,Cnm,Snm,q_gen,tau_gen)` | General (n,m) KS-element force + time-element contribution, replacing `tess22_force`'s hardcoded (2,2)-only formula (issue #30) |
+| `tess_general_force(u,R,nmax,Cnm,Snm,q_gen,tau_gen)` | General (n,m) KS-element force + time-element contribution via Cunningham's Cartesian recursion; kept as a standing independent cross-check, no longer called from `driver_KS.F` (issue #30) |
+| `tess_legendre_force(...)` (`src/LegendreTess.F`) | **The sole active geopotential**: singularity-free classical-Legendre general (n,m) formulation (`G_general`/`XY_general` recursions), including the `Rtilt` body-pole-orientation rotation and the `dvdt_leg` energy-element term; drop-in interface-compatible with `tess_general_force` |
 | `rotate_tess_coeffs(nmax,Cnm,Snm,theta_deg,Cnm_rot,Snm_rot)` | Rotates every loaded (n,m) coefficient by its own `m·θ` GMST angle, generalizing the (2,2)-specific `A_tess`/`B_tess` trick (issue #30) |
 | `force_models(n_for,ngeo,s,amoon)` | Apply force model on/off flags |
+| `drag_perigee_active(...)` (`src/DragOblateCorotating.F`) | Perigee altitude above the (oblate) body + atmosphere-table range check, body-agnostic |
+| `drag_atm_reference(...)` (`src/DragOblateCorotating.F`) | Per-revolution co-rotation/oblateness reference terms from a resolved reference density/scale-height |
+| `drag_force_ks(...)` (`src/DragOblateCorotating.F`) | Per-step King-Hele density + KS-space drag perturbation; every body constant is an argument (2026-08-10, shared with KSROP-Mars) |
 | `shadfncyl(x1,x2,x3,xs,ys,zs)` | Cylindrical shadow factor ν ∈ [0,1] |
 | `shadfncone(x1,x2,x3,xs,ys,zs)` | Conical shadow factor with penumbra |
 | `INTPOL(XT,YT,M1,X1,Y1)` | Linear interpolation in atmosphere table |
@@ -555,6 +563,15 @@ EGM2008 streaming read: O(n²) lines for degree n (J2 = 3 lines, not 2.4M).
 ## 12. Known Issues
 
 - EGM2008 file (~231 MB) not included; set `ngeo_deg = 0` for point-mass gravity.
+- Geopotential degree/order is capped at `ntess_cap=72` (`src/LegendreTess.F`),
+  including zonal-only runs — the general (n,m) unification (2026-08-09)
+  replaced the former degree-2190 zonal-only path; see ALGORITHM.md §5/§9.
+- **Open issue #31 (P2)**: a reproducible memory-corruption bug (drag force
+  reads back as zero/NaN) when a real perigee falls inside the atmosphere
+  table with `IDRAG=1`, surfaced via KSROP-Mars wiring the shared
+  `src/DragOblateCorotating.F` subroutines (added v2.11.0) into its own
+  driver. Prime suspect is this repo's shared drag code even though only
+  reproduced downstream so far; not yet root-caused.
 - SRP is cannonball only; no tesseral harmonics or geometry-dependent variations.
 - `solarnpv`/`lunarpv` are analytic ephemeris series (Montenbruck & Gill
   low-precision, since 2026-07-12), not JPL DE405: ~0.10% (Sun) / ~0.11%
