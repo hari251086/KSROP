@@ -79,3 +79,6 @@ Thumbs.db
 *.netrc
 *_credentials.*
 secrets.*
+
+# Local-only Claude Code project notes (never committed)
+CLAUDE.md
