@@ -92,7 +92,9 @@ c     Output — parallel arrays, one element per TLE entry:
 c       names(i)    : satellite name (24 chars; blank if 2-line)
 c       catid(i)    : catalog ID string (5 chars, preserves alpha-
 c                     numeric IDs like 'T0003')
-c       norad(i)    : NORAD catalog number (-1 if alpha-numeric)
+c       norad(i)    : NORAD catalog number (Alpha-5 IDs decoded to
+c                     their numeric value; -1 only for a genuinely
+c                     non-numeric, pre-Alpha-5 lettered designator)
 c       epoch_yr(i) : epoch year (4-digit, expanded from 2-digit)
 c       epoch_day(i): epoch day of year + fractional day
 c       ndot(i)     : 1st derivative of mean motion (rev/day^2)
@@ -237,7 +239,9 @@ c     Parse a TLE line 1 string (69 characters).
 c
 c     Output
 c       catid  : catalog ID string (5 chars, as-is from columns 3-7)
-c       norad  : NORAD catalog number (-1 if alpha-numeric)
+c       norad  : NORAD catalog number (Alpha-5 IDs decoded to their
+c                numeric value; -1 only for a genuinely non-numeric,
+c                pre-Alpha-5 lettered designator)
 c       iyr4   : epoch year (4-digit)
 c       eday   : epoch day of year + fractional day
 c       dndot  : 1st deriv of mean motion / 2  (rev/day^2)
@@ -248,17 +252,46 @@ c     ============================================================
       implicit double precision (a-h, o-z)
       character*69 line
       character*5  catid
+      character*1  alpha5_lead
       integer norad, iyr4, iyr2, ierr
+      integer ialpha5_val, itens_place
 
       ierr = 0
 
 c     NORAD catalog number (columns 3-7): may be purely numeric
-c     (e.g. '47944') or alpha-numeric (e.g. 'T0003').  Return -1
-c     for non-numeric IDs.
+c     (e.g. '47944'), Alpha-5 (e.g. 'A0173' for catalog number 100173
+c     -- the leading digit of a >=100000 catalog number replaced by a
+c     letter once the catalog grew past 99999, CelesTrak/Space-Track
+c     spec: A-H,J-N,P-Z map to 10-33, skipping I and O to avoid
+c     confusion with 1 and 0), or genuinely alpha-numeric. Falls back
+c     to -1 for the latter, which includes 'T' specifically: Space-
+c     Track's real "Analyst Object" designators use a reserved
+c     'T####' pattern (uncorrelated/unassigned tracked objects, e.g.
+c     'T0003') that is syntactically indistinguishable from a real
+c     Alpha-5 'T' catalog number (270000-279999) but is NOT one --
+c     confirmed by a real 94597-entry catalog snapshot
+c     (input/example_multi.tle.txt) containing 234 'T####' entries
+c     and ZERO other letters, i.e. 'T' usage in real data today is
+c     exclusively the Analyst-object convention, not live Alpha-5
+c     (which has only reached the 'A' range so far, matching this
+c     issue's own real-world example). Excluding 'T' here is a
+c     deliberate, data-confirmed choice, not an oversight.
       catid = line(3:7)
       read(catid, '(I5)', err=15) norad
       goto 16
- 15   norad = -1
+ 15   continue
+      alpha5_lead = catid(1:1)
+      if ((alpha5_lead .ge. 'A' .and. alpha5_lead .le. 'Z') .and.
+     &    alpha5_lead .ne. 'I' .and. alpha5_lead .ne. 'O' .and.
+     &    alpha5_lead .ne. 'T') then
+         read(catid(2:5), '(I4)', err=15005) itens_place
+         ialpha5_val = ichar(alpha5_lead) - ichar('A') + 10
+         if (alpha5_lead .gt. 'I') ialpha5_val = ialpha5_val - 1
+         if (alpha5_lead .gt. 'O') ialpha5_val = ialpha5_val - 1
+         norad = ialpha5_val * 10000 + itens_place
+         goto 16
+      end if
+15005 norad = -1
  16   continue
 
 c     Epoch year (columns 19-20)

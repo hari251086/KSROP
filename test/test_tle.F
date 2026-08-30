@@ -256,7 +256,11 @@ c     T33: bstar from this entry (31149-3 -> 0.31149e-3)
       call assert_d('parse1 bstar = 3.1149e-4',
      &              bstar_a(1), 3.1149d-4, tol, npass, nfail)
 
-c     Alpha-numeric NORAD (T0003)
+c     Alpha-numeric NORAD (T0003) -- Space-Track's real "Analyst
+c     Object" designator convention, NOT Alpha-5 (see the header
+c     comment on tle_parse1's NORAD-parsing block for the full
+c     data-confirmed rationale: 'T' is deliberately excluded from
+c     Alpha-5 decoding here). Must still return -1.
       line1 = '1 T0003U          26169.78100846  .0000126'
      &     // '0  00000-0  20524-2 0  9995'
       call tle_parse1(line1, catid(1), norad(1), epoch_yr(1),
@@ -269,6 +273,30 @@ c     T34: alpha-numeric NORAD returns -1
 c     T35: catid preserves alpha string
       call assert_s('parse1 alpha catid = T0003',
      &              catid(1), 'T0003', npass, nfail)
+
+c     Alpha-5 NORAD (A0173) -- the exact example from the issue this
+c     fix addresses (real object, CZ-7A R/B, catalog number 100173).
+      line1 = '1 A0173U          26169.78100846  .0000126'
+     &     // '0  00000-0  20524-2 0  9995'
+      call tle_parse1(line1, catid(1), norad(1), epoch_yr(1),
+     &          epoch_day(1), ndot_a(1), nddot_a(1), bstar_a(1), ierr)
+
+c     T35a: Alpha-5 decode, A0173 -> 100173
+      call assert_i('parse1 Alpha-5 A0173 NORAD = 100173',
+     &              norad(1), 100173, npass, nfail)
+
+c     Genuinely non-numeric, non-Alpha-5 catalog field (non-digit in
+c     the trailing 4 characters -- fails both the plain-integer read
+c     and the Alpha-5 4-digit sub-read, so still correctly falls back
+c     to -1, preserving real "can't be decoded at all" coverage).
+      line1 = '1 A01X7U          26169.78100846  .0000126'
+     &     // '0  00000-0  20524-2 0  9995'
+      call tle_parse1(line1, catid(1), norad(1), epoch_yr(1),
+     &          epoch_day(1), ndot_a(1), nddot_a(1), bstar_a(1), ierr)
+
+c     T35b: genuinely non-decodable NORAD returns -1
+      call assert_i('parse1 non-decodable NORAD = -1',
+     &              norad(1), -1, npass, nfail)
 
 c     ============================================================
 c     tle_parse2: field extraction
