@@ -342,7 +342,7 @@ identified as the dominant remaining source of that residual.
 a second, independent literature cross-check of the zonal ($m=0$)
 geopotential, distinct from the GMAT campaign above (different
 integrator, different gravity-model source, no GMAT/JPL kernel
-dependency). Two chapters of the thesis (`E:\Research\References\0\29.
+dependency). Two chapters of the thesis (`<research-library>\References\0\29.
 XJR_Thesis.pdf` on the user's machine — not shipped in this repo; the
 already-published numbers its tables report are reproduced as fixtures
 in `test/fixture_xjr_ch2_zonal.dat`/`fixture_xjr_ch3_zonal.dat`), both

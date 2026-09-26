@@ -2,7 +2,7 @@
 """
 test_xjr_validation.py - Zonal geopotential cross-validation against
 Xavier James Raj's PhD thesis (KSROP issue #29's "second reference",
-E:\\Research\\References\\0\\29. XJR_Thesis.pdf -- not shipped in this
+<research-library>\\References\\0\\29. XJR_Thesis.pdf -- not shipped in this
 repo; only the already-published J_n / GEM-T2 C(n,0) numbers its
 tables report are reproduced below as fixtures).
 
