@@ -181,7 +181,6 @@ c     Get UTC timestamp for output filenames
 c     Input Files
       open (unit = 1, file = 'input/const_new.dat') !Constants
       open (unit = 2, file = 'input/input.dat')    !Sim params
-      open (unit = 6, file = 'input/ATM.DAT')        !Atmosphere density
       open (unit = 8, file = 'input/input.opm')    !OPM input
 
 c     Output files (unit 3 opened later with timestamped filename)
@@ -215,25 +214,12 @@ c     -----------------------------------------------------------
 c     Atmosphere table: ALT in km (built here), SCH/DEN from ATM.DAT
 c     Table covers 60 km to ~630 km. Converted to SI (m, kg/m3).
 c     -----------------------------------------------------------
-      ALT_atm(1) = 60.d0
-      do i = 2,141
-         ALT_atm(i) = ALT_atm(i-1) + 1.d0
-      end do
-      do i = 142,ndim_atm
-         ALT_atm(i) = ALT_atm(i-1) + 2.d0
-      end do
-
-      read(6,110) (SCH_atm(i), i=1,61)
-      read(6,110) (SCH_atm(i), i=62,ndim_atm)
-      read(6,111) (DEN_atm(i), i=1,61)
-      read(6,111) (DEN_atm(i), i=62,ndim_atm)
-      close(6)
-
-      do i = 1,ndim_atm
-         ALT_atm(i) = ALT_atm(i) * 1000.d0   ! km to m
-         SCH_atm(i) = SCH_atm(i) * 1000.d0   ! km to m
-         DEN_atm(i) = DEN_atm(i) * 1.0d10    ! file units to kg/m3
-      end do
+      call atm_load('input/ATM.DAT', ALT_atm, DEN_atm, SCH_atm,
+     &              ndim_atm, natm_rd, ierr_atm)
+      if (ierr_atm .ne. 0 .or. natm_rd .ne. ndim_atm) then
+         write(*,*) 'driver_KS: cannot read input/ATM.DAT'
+         stop 1
+      end if
 
 c     -----------------------------------------------------------
 c     Epoch-resolved space weather (ported from OREM issue #26):
@@ -831,8 +817,6 @@ c     START_TIME / STOP_TIME use the actual propagated orbital epochs.
 
 c     format specifiers
  101  format(10f20.9)           !KS-regular elements (regular.out)
- 110  format(8f10.3)            !ATM.DAT scale height
- 111  format(8e10.3)            !ATM.DAT density
 
  99   do i = 1,6
          close(i)

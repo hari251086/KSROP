@@ -75,7 +75,9 @@ c     --- split on commas into up to 31 tokens ---
             ip = 0
          else
             ip = ip + 1
-            tok(ntok)(ip:ip) = line(i:i)
+c           a field longer than the 40-character token is truncated
+c           instead of written past it
+            if (ip .le. len(tok(ntok))) tok(ntok)(ip:ip) = line(i:i)
          end if
       end do
  12   continue
@@ -160,13 +162,7 @@ c     ============================================================
       end do
       close(92)
 
-      alt2d(1) = 60.d0
-      do i = 2, 141
-         alt2d(i) = alt2d(i-1) + 1.d0
-      end do
-      do i = 142, NA2D
-         alt2d(i) = alt2d(i-1) + 2.d0
-      end do
+      call atm_alt_grid(alt2d, NA2D)
 
 c     scale to the legacy internal units (m, m, x1e10)
       do i = 1, NA2D
@@ -393,5 +389,70 @@ c     ============================================================
       cosphi = dsin(dec_sat)*dsin(dec_sun)
      &       + dcos(dec_sat)*dcos(dec_sun)*dcos(ra_sat - ra_bulge)
 
+      return
+      end
+
+c     ============================================================
+c     atm_alt_grid -- altitude grid (km) of the ATM.DAT / ATM2D.DAT
+c     tables written by gen_atm_jr71/gen_atm2d_jr71: 60-200 km in
+c     1 km steps (141 points), then 2 km steps (291 points reach
+c     500 km). The files carry only values, so this is the one place
+c     the grid is defined; it used to be rebuilt by hand in every
+c     reader (driver_KS, atm2d_load, and OREM's driver and tests).
+c     ============================================================
+      subroutine atm_alt_grid(alt, na)
+      implicit none
+      integer na
+      double precision alt(na)
+      integer i
+
+      if (na .lt. 1) return
+      alt(1) = 60.d0
+      do i = 2, na
+         if (i .le. 141) then
+            alt(i) = alt(i-1) + 1.d0
+         else
+            alt(i) = alt(i-1) + 2.d0
+         end if
+      end do
+      return
+      end
+
+c     ============================================================
+c     atm_load -- read the static ATM.DAT table (scale heights, then
+c     densities, 291 values each) in the internal units propagate_ks
+c     and driver_KS use: altitude and scale height in m, density
+c     x1e10. natm = number of table rows (291, or maxn if smaller);
+c     ierr = 1 if the file cannot be opened or read.
+c     ============================================================
+      subroutine atm_load(fname, alt, den, sch, maxn, natm, ierr)
+      implicit none
+      character*(*) fname
+      integer maxn, natm, ierr
+      double precision alt(maxn), den(maxn), sch(maxn)
+      integer i
+
+      ierr = 0
+      natm = min(291, maxn)
+      call atm_alt_grid(alt, natm)
+      open(unit=93, file=fname, status='old', err=900)
+      read(93,110,err=910,end=910) (sch(i), i=1,61)
+      read(93,110,err=910,end=910) (sch(i), i=62,natm)
+      read(93,111,err=910,end=910) (den(i), i=1,61)
+      read(93,111,err=910,end=910) (den(i), i=62,natm)
+      close(93)
+ 110  format(8f10.3)
+ 111  format(8e10.3)
+
+      do i = 1, natm
+         alt(i) = alt(i) * 1000.d0
+         sch(i) = sch(i) * 1000.d0
+         den(i) = den(i) * 1.0d10
+      end do
+      return
+
+ 910  close(93)
+ 900  ierr = 1
+      natm = 0
       return
       end

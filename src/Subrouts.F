@@ -675,13 +675,20 @@ c     For n=2 (J2 only): 3 lines.  For n=10: 63 lines.  For n=100: 5148.
 c
 c     File format per line:
 c       degree  order  Cnm  Snm  sigma_Cnm  sigma_Snm
+c
+c     Stops with an error if the file is missing or ends before degree
+c     n (v2.12.0). Before that, a missing file was silently created
+c     empty and a short one left the remaining c_j unset, so the
+c     zonal geopotential quietly dropped to zero (OREM ran without J2
+c     for this reason: its committed coefficient file was 0 bytes).
 c     ============================================================
       implicit double precision (a-h,o-z)
       dimension c_j(n)
       integer ideg, iord
       character*(*) fname
 
-      open (unit = 7, file = fname)
+      if (n .lt. 2) return
+      open (unit = 7, file = fname, status = 'old', err = 900)
 
       j = 2
  20   continue
@@ -695,7 +702,14 @@ c     ============================================================
  10   continue
 
       close(7)
+      if (j .le. n) then
+         write(*,'(A,A,A,I5,A,I5)') ' geo_coeff_body: ', trim(fname),
+     &      ' ends at degree ', j-1, ', need ', n
+         stop 1
+      end if
       return
+ 900  write(*,'(A,A)') ' geo_coeff_body: cannot open ', trim(fname)
+      stop 1
       end
 
 c     ============================================================
@@ -722,7 +736,7 @@ c     ============================================================
       character*(*) fname
       integer ideg, iord
 
-      open (unit = 7, file = fname)
+      open (unit = 7, file = fname, status = 'old', err = 900)
 
       c22 = 0.d0
       s22 = 0.d0
@@ -739,6 +753,8 @@ c     ============================================================
 
       close(7)
       return
+ 900  write(*,'(A,A)') ' geo_coeff_tess22: cannot open ', trim(fname)
+      stop 1
       end
 
 c     ============================================================

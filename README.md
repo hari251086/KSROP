@@ -50,8 +50,9 @@ KSROP/
 │   ├── input.dat                        Simulation parameters
 │   ├── tle2opm.cfg                      TLE-to-OPM configuration
 │   ├── KSROP_20250501T200802_47944.opm  Generated OPM (NORAD 47944, 2025-05-01)
-│   ├── ATM.DAT                          Atmosphere density table (60–630 km)
-│   ├── EGM2008_to2190_TideFree          Geopotential coefficients (~231 MB)
+│   ├── ATM.DAT                          Atmosphere density table (60–500 km)
+│   ├── EGM2008_to2190_TideFree          Geopotential coefficients (~231 MB, not in git)
+│   ├── EGM2008_to100_TideFree           Degree-100 extract of it (~0.5 MB, tracked)
 │   ├── example_47944.tle.txt            TLE data: 3,977 entries, NORAD 47944
 │   ├── example_multi.tle.txt            TLE data: 94,597 entries, multi-satellite
 │   └── cdm_sample.kvn                   CCSDS CDM sample (508.0-B-1 Annex)
@@ -98,9 +99,9 @@ step, follow the link to its reference section below.
   Fortran** (`ifx`, Windows/Linux). See [Building](#4-building).
 - **Python 3** (standard library only, no packages to install) -- only needed to run
   the integration tests, not to build or run the propagator itself.
-- Optional: the **EGM2008** geopotential coefficient file if you want oblateness
-  degrees above point-mass -- see the note under [Step 2](#step-2-run-a-propagation)
-  below. It is not bundled with this repository (~231 MB).
+- The **EGM2008** geopotential coefficients: a degree-100 extract is bundled as
+  `input/EGM2008_to100_TideFree` (~0.5 MB); the full file (~231 MB) is too large for
+  git -- see the note under [Step 2](#step-2-run-a-propagation) below.
 
 ### Step 1: Build
 
@@ -121,13 +122,20 @@ The tracked `input/input.opm` (initial state), `input/input.dat` (simulation
 parameters), and `input/const_new.dat` (physical constants) are read as-is, so this
 runs immediately with no editing required -- **except** that the tracked
 `input/const_new.dat` requests `ngeo_deg = 50` (degree-50 EGM2008 gravity), and the
-EGM2008 coefficient file itself is not part of this repository. Before your first
-run, either:
+driver reads `input/EGM2008_to2190_TideFree`, which is not in the repository (too
+large for git). Before your first run, either:
 
-- **Download EGM2008** and place it at `input/EGM2008_to2190_TideFree` (see
+- **Copy the bundled degree-100 extract** into place (enough for any `ngeo_deg` up to
+  100, which covers the driver's degree-72 cap):
+  `cp input/EGM2008_to100_TideFree input/EGM2008_to2190_TideFree` (CI does this), or
+- **Download the full EGM2008 file** to `input/EGM2008_to2190_TideFree` (see
   [Known Issues](#12-known-issues) for the expected format), or
 - **Edit `input/const_new.dat`** and set the second line's first value (`ngeo_deg`)
-  to `0` for point-mass gravity (fastest way to confirm the build works).
+  to `0` for point-mass gravity.
+
+Since v2.12.0 a missing coefficient file, or one that ends before the requested
+degree, stops the run with an error. Before, it was silently read as all zeros, i.e.
+the geopotential (J2 included) was switched off without any message.
 
 A successful run prints progress to the console and writes two files to `output/`:
 a CCSDS OEM trajectory (`KSROP_<timestamp>.oem`) and a KS-elements debug dump
@@ -648,3 +656,4 @@ EGM2008 streaming read: O(n²) lines for degree n (J2 = 3 lines, not 2.4M).
 | 2026-08-10 | **Body-pole-orientation rotation added to `tess_legendre_force`, found via GMAT cross-validation of KSROP-Lunar/KSROP-Mars**: those two repos' geopotential residuals against GMAT (13.3 km/0.73% Moon, 60.5 km/1.6% Mars) traced back to this repo's own force law — it never rotated the working (EME2000-parallel) frame's Z axis to a body's actual rotation pole before evaluating the potential, only the per-step prime-meridian (longitude) rotation existed. Silently correct for Earth (whose pole IS that Z axis by definition) but wrong for any other body. New `Rtilt(3,3)` parameter — the standard IAU body-fixed-frame construction `R1(90-dec0).R3(90+ra0)` — applied to position before evaluating the potential, un-rotated (`Rtilt^T`, verified symbolically: for `x'=Rx`, `grad V(x) = R^T grad V(x')`) on the gradient afterward. Identity for this repo's own `driver_KS.F` (`Rtilt_id`) — regression-verified bit-for-bit unchanged. New `RT1`-`RT4` rotation-covariance checks in `test_legendre_tess.F` (arbitrary non-identity rotation, finite-difference-checked gradient un-rotation), 32→36. Reduced the Moon/Mars residuals ~55%/~16%; a follow-on periodic (nutation/libration) pole correction in both downstream repos left the remaining residual flat, ruling out pole orientation as its dominant cause — see KSROP-Lunar/KSROP-Mars project history and KSROP issues #26/#27 for the full campaign. Tagged `v2.10.0`. |
 | 2026-08-10 | **Drag model extracted into a shared subroutine, `src/DragOblateCorotating.F`, so KSROP-Mars can add atmospheric drag without forking the force law**: the oblate, co-rotating exponential (King-Hele-style, thesis eq. 5.2) drag model was previously inline-only in `driver_KS.F`. Split into three body-agnostic subroutines — `drag_perigee_active` (perigee altitude above the oblate body + atmosphere-table range check), `drag_atm_reference` (per-revolution co-rotation/oblateness reference terms, given an already-resolved reference density/scale-height), `drag_force_ks` (per-step King-Hele density and the KS-space perturbation) — mirroring how the geopotential force law was unified into `tess_legendre_force` the day before. Every body constant (equatorial radius, flattening, rotation rate, ballistic coefficient) is an argument, nothing Earth-specific remains in the shared core. This repo's own epoch-resolved space-weather override and diurnal-density-bulge refinement (OREM issues #26/#32) — genuinely Earth-specific, no Mars analog — stay local to `driver_KS.F`, passed into `drag_force_ks` as a plain `bulge_mult` multiplier (1.0 = no bulge). New `test/test_drag.F` (14 checks) regression-tests the three subroutines against values independently computed in Python from the pre-extraction formulas, proving the refactor is behavior-preserving on top of the (already-passing) `test_initial_conditions.py` "+drag" integration regimes that exercise the refactored `driver_KS.F` end-to-end. 677/677 total (663 + 14 new). Tagged `v2.11.0`. |
 | 2026-08-29 | **Fixed: TLE reader couldn't decode Alpha-5 catalog numbers** (found via OREM-Watchlist issue #28 — `orem.exe` failing to match any object with NORAD ID >= 100000, e.g. CZ-7A R/B `100173`). `tle_parse1` (`src/TLEread.F`) previously fell straight to `norad=-1` whenever the 5-character SATNUM field wasn't a plain integer, which is exactly what a >=100000 catalog number looks like once Space-Track/CelesTrak's Alpha-5 scheme replaces its leading digit with a letter (e.g. `A0173` for `100173`: A-H,J-N,P-Z map to values 10-33, skipping I and O). Added the decode (`ialpha5_val*10000 + last-4-digits`) for that case. **Real ambiguity found and resolved carefully, not just implemented**: naively decoding *any* letter+4-digit field breaks Space-Track's separate, real "Analyst Object" convention, which reserves a `T####` pattern for uncorrelated/unassigned tracked objects (syntactically identical to a real Alpha-5 `T` catalog number, 270000-279999) — confirmed by grepping the repo's own 94597-entry real catalog snapshot (`input/example_multi.tle.txt`): 234 `T####` entries, zero other letters, i.e. `T` usage in real data today is exclusively Analyst objects (Alpha-5 has only reached the `A` range so far). `T` is therefore deliberately excluded from the decode alongside `I`/`O`, data-confirmed rather than assumed. Two new checks in `test/test_tle.F` (`T35a` Alpha-5 `A0173`->100173, `T35b` a genuinely non-decodable field with a non-digit trailing character), existing `T34`/`T35`/`T96`/`T108` (the `T0003`/`T####`-are-not-Alpha-5 cases) unchanged and still passing. TLE suite 149/149 (147+2 new); all other suites unaffected. Tagged `v2.11.2`. |
+| 2026-10-12 | **Gravity-coefficient loaders no longer fail silently; degree-100 EGM2008 extract bundled; one ATM table reader** (found by OREM's 2026-10-12 code review). `geo_coeff_body` opened its file without `status='old'`, so a missing file was created empty, and it never checked how far it read: a missing or short file left every zonal coefficient at zero, switching the geopotential (J2 included) off with no message. OREM ran that way since its first commit, because its committed `input/EGM2008_to2190_TideFree` was a 0-byte placeholder for the 242 MB file git cannot hold; KSROP's own CI had no coefficient file either. Now `geo_coeff_body` stops with an error if the file is missing or ends before degree n; `geo_coeff_tess22` and `geo_coeff_tess_general` stop if the file is missing, and `geo_coeff_tess_general` reports a file that ends below `nmax`. `geo_coeff_tess_general` also stops reading at the first row past `nmax` instead of streaming the whole 2.4-million-row file on every call (files are ordered by degree; checked for EGM2008, GRAIL and JGMRO120F). New tracked `input/EGM2008_to100_TideFree` (the 5,148 rows of degree <= 100, 0.5 MB); CI and the release workflow copy it to the full name when that is absent. New `atm_alt_grid`/`atm_load` (`src/swx.F`): the ATM table's altitude grid (not stored in the files) is defined once instead of being rebuilt by hand in `driver_KS`, `atm2d_load` and OREM; `driver_KS` reads `ATM.DAT` through `atm_load` (it used to open it on unit 6). `sw_load` no longer writes past a 40-character CSV field. New checks GC3b/GC3c (degree-100 file, J2) and AT1-AT3 (ATM reader). All suites pass; `test_driver.py` 10/10, `test_initial_conditions.py` 110/110, `test_xjr_validation.py` 34/34. Tagged `v2.12.0`. |
