@@ -33,7 +33,8 @@ c     --- declarations ---
       dimension x2(3), xd2(3), cov2(6,6)
       dimension tca_cal2(6), x1b(3), xd1b(3), cov1b(6,6)
       dimension x2b(3), xd2b(3), cov2b(6,6)
-      dimension cj4(4)
+      dimension cj4(4), cj100(100)
+      dimension altt(300), dent(300), scht(300)
       dimension ut(4), upt(4), umt(4), q22t(4)
       character*23 creation_str, tca_str
       integer npass, nfail, iall_ok, iq1, iq2, iq3, iq4
@@ -656,6 +657,37 @@ c     be skipped, not mistaken for the next zonal term)
 c     Fixture row "4 0  -0.162351800000000D-05 ..." -> c_j(4)
       call assert('GC3 c_j(4) from degree-4 zonal row',
      &            cj4(4), -dsqrt(9.d0)*(-0.1623518d-5),
+     &            eps10, npass, nfail)
+
+c     GC3b/GC3c: the committed degree-100 EGM2008 head (the full file
+c     is too large for git) loads to degree 100 -- J2 = 1.0826e-3 from
+c     its normalized C20 = -0.484165143790815e-3
+      call geo_coeff_body(100, cj100, 'input/EGM2008_to100_TideFree')
+      call assert('GC3b J2 from the degree-100 file', cj100(2),
+     &            -dsqrt(5.d0)*(-0.484165143790815d-3), eps10,
+     &            npass, nfail)
+      if (cj100(100) .ne. 0.d0 .and. dabs(cj100(100)) .lt. 1.d-6)
+     &   then
+         write(*,*) '  [PASS]  GC3c degree-100 term loaded'
+         npass = npass + 1
+      else
+         write(*,*) '  [FAIL]  GC3c degree-100 term loaded'
+         nfail = nfail + 1
+      end if
+
+c     AT1-AT3: shared ATM.DAT reader (atm_load/atm_alt_grid, v2.12.0)
+      call atm_load('input/ATM.DAT', altt, dent, scht, 300, natm_t,
+     &              ierr_t)
+      if (ierr_t .eq. 0 .and. natm_t .eq. 291) then
+         write(*,*) '  [PASS]  AT1 atm_load reads 291 rows'
+         npass = npass + 1
+      else
+         write(*,*) '  [FAIL]  AT1 atm_load reads 291 rows'
+         nfail = nfail + 1
+      end if
+      call assert('AT2 grid: 200 km at row 141', altt(141), 200.d3,
+     &            eps10, npass, nfail)
+      call assert('AT3 grid: 500 km at row 291', altt(291), 500.d3,
      &            eps10, npass, nfail)
 
 c     ==============================================================

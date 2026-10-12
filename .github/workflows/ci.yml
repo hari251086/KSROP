@@ -18,6 +18,9 @@ jobs:
       - name: Normalize line endings (CRLF -> LF)
         run: sed -i 's/\r$//' src/*.F app/*.F test/*.F Makefile *.sh
 
+      - name: Gravity coefficients (degree-100 head; the full EGM2008 file is too large for git)
+        run: cp -n input/EGM2008_to100_TideFree input/EGM2008_to2190_TideFree
+
       - name: Build propagator, tools, and test binaries
         run: make all tools tests
 
@@ -34,6 +37,9 @@ jobs:
 
       - name: Normalize line endings (CRLF -> LF)
         run: sed -i 's/\r$//' src/*.F app/*.F test/*.F Makefile *.sh
+
+      - name: Gravity coefficients (degree-100 head; the full EGM2008 file is too large for git)
+        run: cp -n input/EGM2008_to100_TideFree input/EGM2008_to2190_TideFree
 
       - name: Install fpm
         run: |

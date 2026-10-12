@@ -146,10 +146,18 @@ c     ============================================================
          end do
       end do
 
-      open (unit = 7, file = fname)
+c     v2.12.0: the file must exist (a missing one used to be created
+c     empty, silently zeroing the whole geopotential), and reading
+c     stops at the first row past nmax -- gravity files are ordered by
+c     degree, and the full EGM2008 file is 2.4 million rows. A file
+c     that ends below nmax is reported; the missing degrees stay 0.
+      maxdeg = 0
+      open (unit = 7, file = fname, status = 'old', err = 900)
 
  20   continue
          read(7,*,end=10) ideg, iord, cnmv, snmv, sg1, sg2
+         if (ideg .gt. nmax) goto 10
+         if (ideg .gt. maxdeg) maxdeg = ideg
          if (ideg .ge. 2 .and. ideg .le. nmax
      &       .and. iord .ge. 0 .and. iord .le. ideg) then
             ratio_fact = 1.d0
@@ -170,7 +178,14 @@ c     ============================================================
  10   continue
 
       close(7)
+      if (nmax .ge. 2 .and. maxdeg .lt. nmax)
+     &   write(*,'(A,A,A,I5,A,I5,A)') ' geo_coeff_tess_general: ',
+     &      trim(fname), ' ends at degree ', maxdeg, ' (asked ', nmax,
+     &      '); higher degrees set to 0'
       return
+ 900  write(*,'(A,A)') ' geo_coeff_tess_general: cannot open ',
+     &   trim(fname)
+      stop 1
       end
 
 c     ============================================================
