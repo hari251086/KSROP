@@ -20,7 +20,7 @@ TARGET  = driver_KS
 TLE2OPM_SRC = app/tle2opm.F src/Subrouts.F src/TLEread.F src/Legendre.F
 TLE2OPM_BIN = tle2opm
 
-TEST_SRC  = test/test_subrouts.F src/Subrouts.F src/Legendre.F
+TEST_SRC  = test/test_subrouts.F src/Subrouts.F src/Legendre.F src/swx.F
 TEST_BIN  = test_subrouts
 
 TEST_BUGS_SRC = test/test_bugs.F src/Subrouts.F src/Legendre.F
