@@ -5,7 +5,7 @@ Orbit propagation using **Kustaanheimo–Stiefel (KS) regular elements** with a 
 [![CI](https://github.com/hari251086/KSROP/actions/workflows/ci.yml/badge.svg)](https://github.com/hari251086/KSROP/actions/workflows/ci.yml)
 
 **Author:** Harishkumar Sellamuthu · hari251086@gmail.com  
-Copyright (c) 2018–2026 Harishkumar Sellamuthu, released under the MIT License
+Copyright (c) 2014–2026 Harishkumar Sellamuthu, released under the MIT License
 
 ---
 
