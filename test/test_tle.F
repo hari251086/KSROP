@@ -256,19 +256,16 @@ c     T33: bstar from this entry (31149-3 -> 0.31149e-3)
       call assert_d('parse1 bstar = 3.1149e-4',
      &              bstar_a(1), 3.1149d-4, tol, npass, nfail)
 
-c     Alpha-numeric NORAD (T0003) -- Space-Track's real "Analyst
-c     Object" designator convention, NOT Alpha-5 (see the header
-c     comment on tle_parse1's NORAD-parsing block for the full
-c     data-confirmed rationale: 'T' is deliberately excluded from
-c     Alpha-5 decoding here). Must still return -1.
+c     Space-Track analyst object (T0003): standard Alpha-5, T = 27
+c     (past both skipped letters I and O), so 270003 (KSROP #33).
       line1 = '1 T0003U          26169.78100846  .0000126'
      &     // '0  00000-0  20524-2 0  9995'
       call tle_parse1(line1, catid(1), norad(1), epoch_yr(1),
      &          epoch_day(1), ndot_a(1), nddot_a(1), bstar_a(1), ierr)
 
-c     T34: alpha-numeric NORAD returns -1
-      call assert_i('parse1 alpha NORAD = -1',
-     &              norad(1), -1, npass, nfail)
+c     T34: analyst object T0003 decodes to 270003
+      call assert_i('parse1 Alpha-5 T0003 NORAD = 270003',
+     &              norad(1), 270003, npass, nfail)
 
 c     T35: catid preserves alpha string
       call assert_s('parse1 alpha catid = T0003',
@@ -1224,9 +1221,9 @@ c     T95: first bstar
       call assert_d('multi first bstar = 3.7765e-4',
      &              bstar_a(1), 3.7765d-4, tol, npass, nfail)
 
-c     T96: last NORAD is alpha-numeric
-      call assert_i('multi last NORAD = -1 (alpha)',
-     &              norad(ntle), -1, npass, nfail)
+c     T96: last entry is analyst object T0449 -> 270449
+      call assert_i('multi last NORAD = 270449 (T0449)',
+     &              norad(ntle), 270449, npass, nfail)
 
 c     T97: last catid starts with T
       call assert_s('multi last catid(1:1) = T',
@@ -1328,18 +1325,18 @@ c     T107: count distinct numeric NORAD IDs > 1000
      &                 0, 1, npass, nfail)
       end if
 
-c     T108: count alpha-numeric entries > 0
+c     T108: all 234 T#### entries decode into 270000-279999 and no
+c     entry is left undecoded (-1)
       nalpha = 0
+      nundec = 0
       do i = 1, ntle
-         if (norad(i) .eq. -1) nalpha = nalpha + 1
+         if (catid(i)(1:1) .eq. 'T' .and. norad(i) .ge. 270000 .and.
+     &       norad(i) .le. 279999) nalpha = nalpha + 1
+         if (norad(i) .eq. -1) nundec = nundec + 1
       end do
-      if (nalpha .gt. 0) then
-         call assert_i('multi has alpha-numeric IDs',
-     &                 1, 1, npass, nfail)
-      else
-         call assert_i('multi has alpha-numeric IDs',
-     &                 0, 1, npass, nfail)
-      end if
+      if (nundec .gt. 0) nalpha = -nundec
+      call assert_i('multi 234 T#### decoded, none -1',
+     &              nalpha, 234, npass, nfail)
 
 c     T109: checksum every line in multi file
       open(unit=81, file='input/example_multi.tle.txt', status='old')

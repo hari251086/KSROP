@@ -263,27 +263,19 @@ c     (e.g. '47944'), Alpha-5 (e.g. 'A0173' for catalog number 100173
 c     -- the leading digit of a >=100000 catalog number replaced by a
 c     letter once the catalog grew past 99999, CelesTrak/Space-Track
 c     spec: A-H,J-N,P-Z map to 10-33, skipping I and O to avoid
-c     confusion with 1 and 0), or genuinely alpha-numeric. Falls back
-c     to -1 for the latter, which includes 'T' specifically: Space-
-c     Track's real "Analyst Object" designators use a reserved
-c     'T####' pattern (uncorrelated/unassigned tracked objects, e.g.
-c     'T0003') that is syntactically indistinguishable from a real
-c     Alpha-5 'T' catalog number (270000-279999) but is NOT one --
-c     confirmed by a real 94597-entry catalog snapshot
-c     (input/example_multi.tle.txt) containing 234 'T####' entries
-c     and ZERO other letters, i.e. 'T' usage in real data today is
-c     exclusively the Analyst-object convention, not live Alpha-5
-c     (which has only reached the 'A' range so far, matching this
-c     issue's own real-world example). Excluding 'T' here is a
-c     deliberate, data-confirmed choice, not an oversight.
+c     confusion with 1 and 0), or genuinely alpha-numeric (-1).
+c     'T####' (Space-Track analyst objects, e.g. 'T0298') decodes
+c     like any other letter: Space-Track numbers these objects
+c     270000-279999 (gp_history for NORAD_CAT_ID 270298 returns the
+c     'T0298' lines), so being an analyst object is a property of
+c     the object, not a different encoding (KSROP #33).
       catid = line(3:7)
       read(catid, '(I5)', err=15) norad
       goto 16
  15   continue
       alpha5_lead = catid(1:1)
       if ((alpha5_lead .ge. 'A' .and. alpha5_lead .le. 'Z') .and.
-     &    alpha5_lead .ne. 'I' .and. alpha5_lead .ne. 'O' .and.
-     &    alpha5_lead .ne. 'T') then
+     &    alpha5_lead .ne. 'I' .and. alpha5_lead .ne. 'O') then
          read(catid(2:5), '(I4)', err=15005) itens_place
          ialpha5_val = ichar(alpha5_lead) - ichar('A') + 10
          if (alpha5_lead .gt. 'I') ialpha5_val = ialpha5_val - 1
